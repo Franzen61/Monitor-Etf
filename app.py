@@ -136,4 +136,3 @@ try:
 except Exception as e:
     st.error(f"Errore di connessione LIVE: {e}")
     st.info("Verifica che il link di Google Sheets sia impostato su 'Chiunque abbia il link può visualizzare'.")
-
