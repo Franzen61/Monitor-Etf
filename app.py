@@ -4,86 +4,123 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-# 1. Configurazione Estetica
-st.set_page_config(page_title="Financial Terminal - LIVE", page_icon="📈", layout="wide")
+# Configurazione Pagina
+st.set_page_config(
+    page_title="Financial Terminal - LIVE",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# Stile Custom per look Bloomberg/Reuters
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
+    .stMetric {
+        background-color: #1e2130;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #30363d;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Caricamento Dati (Semplice e Diretto)
-@st.cache_data(ttl=300)
-def load_data():
+@st.cache_data(ttl=300) # Aggiorna i dati ogni 5 minuti
+def load_data_from_gsheets():
+    # Link del tuo Google Sheets (ID estratto dal tuo link)
     sheet_id = "15Z2njJ4c8ztxE97JTgrbaWAmRExojNEpxkWdKIACu0Q"
     base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet="
     
-    # Carichiamo i fogli
-    df_mon = pd.read_csv(base_url + "Monitor%20Etfs", skiprows=6 )
-    df_set = pd.read_csv(base_url + "SETTORI", skiprows=18)
-    df_mot = pd.read_csv(base_url + "Motore")
+    # Caricamento fogli necessari direttamente online
+    df_monitor = pd.read_csv(base_url + "Monitor%20Etfs", skiprows=6 )
+    df_settori = pd.read_csv(base_url + "SETTORI", skiprows=18)
+    df_motore = pd.read_csv(base_url + "Motore")
     
-    # Pulizia rapida numeri (virgola -> punto)
-    for df in [df_mon, df_set, df_mot]:
-        for col in df.columns:
-            if df[col].dtype == 'object':
-                df[col] = df[col].str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-    
-    return df_mon, df_set, df_mot
+    return df_monitor, df_settori, df_motore
 
 try:
-    df_mon, df_set, df_mot = load_data()
+    df_monitor, df_settori, df_motore = load_data_from_gsheets()
 
+    # Sidebar
     st.sidebar.title("📊 Terminale LIVE")
+    st.sidebar.success("Connesso a Google Sheets")
+    st.sidebar.info(f"Ultimo check: {datetime.now().strftime('%H:%M:%S')}")
+    
+    # Menu aggiornato senza "Analisi Fattori"
     menu = st.sidebar.radio("Navigazione", ["Monitor ETFs", "Analisi Settoriale", "Serie Storiche (Motore)"])
 
     if menu == "Monitor ETFs":
         st.title("🎯 Monitor ETFs - Segnali LIVE")
-        # Selezioniamo le colonne giuste
-        mon_display = df_mon.iloc[0:12, [0, 1, 8, 9, 10, 11, 12]].copy()
-        mon_display.columns = ['Ticker', 'Rar Day', 'Coerenza Trend', 'Classifica', 'Delta-RS', 'Situazione', 'Operatività']
         
-        def color_op(val):
-            v = str(val).upper()
-            if 'BUY' in v: return 'background-color: #004d00; color: white'
-            if 'EVITA' in v: return 'background-color: #4d0000; color: white'
-            if 'OSSERVA' in v: return 'background-color: #4d3300; color: white'
-            if 'MANTIENI' in v: return 'background-color: #002b4d; color: white'
+        # Pulizia dati Monitor
+        monitor_display = df_monitor.iloc[0:12, [0, 1, 8, 9, 10, 11, 12]].copy()
+        monitor_display.columns = ['Ticker', 'Rar Day', 'Coerenza Trend', 'Classifica', 'Delta-RS', 'Situazione', 'Operatività']
+        
+        # Conversione numerica sicura
+        monitor_display['Rar Day'] = pd.to_numeric(monitor_display['Rar Day'], errors='coerce')
+        monitor_display['Delta-RS'] = pd.to_numeric(monitor_display['Delta-RS'], errors='coerce')
+
+        # Metriche in alto
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Market Sentiment", "Rally Sano", "Bullish")
+        with col2:
+            st.metric("Top Sector", "XLE", "+0.53%")
+        with col3:
+            st.metric("Leader", "Energy", "XLE")
+        with col4:
+            st.metric("Laggard", "Utilities", "XLU")
+
+        # Tabella con formattazione
+        def color_operativita(val):
+            val_str = str(val).upper()
+            if 'BUY' in val_str: return 'background-color: #004d00; color: white'
+            if 'EVITA' in val_str: return 'background-color: #4d0000; color: white'
+            if 'OSSERVA' in val_str: return 'background-color: #4d3300; color: white'
+            if 'MANTIENI' in val_str: return 'background-color: #002b4d; color: white'
             return ''
 
-        st.dataframe(mon_display.style.applymap(color_op, subset=['Operatività']), use_container_width=True, height=450)
+        st.subheader("Classifica e Segnali in Tempo Reale")
+        st.dataframe(
+            monitor_display.style.applymap(color_operativita, subset=['Operatività'])
+            .format({'Rar Day': '{:.2f}', 'Delta-RS': '{:.4f}'}, na_rep='-'),
+            use_container_width=True,
+            height=450
+        )
 
     elif menu == "Analisi Settoriale":
         st.title("Sector Performance Analysis")
-        df_s = df_set.iloc[0:11, 0:10].copy()
-        df_s.columns = ['ticker', 'Nome', 'Prezzo', 'Giorno', 'Sett', 'Mese', 'Trim', 'Sem', 'Ytd', 'Ann']
+        df_s = df_settori.iloc[0:11, 0:14].copy()
+        df_s.columns = [c.strip() for c in df_s.columns]
         
-        # Grafico Performance Giornaliera
-        df_s['Giorno'] = pd.to_numeric(df_s['Giorno'], errors='coerce')
-        fig = px.bar(df_s, x='ticker', y='Giorno', color='Giorno', color_continuous_scale='RdYlGn', template="plotly_dark", title="Performance Giornaliera (%)")
+        fig = px.bar(df_s, x='ticker', y='Var. % giornaliera', 
+                     title="Performance Giornaliera per Settore",
+                     color='Var. % giornaliera',
+                     color_continuous_scale='RdYlGn',
+                     template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fig_ytd = px.bar(df_s, x='ticker', y='Var. % Ytd', title="Performance YTD", template="plotly_dark")
+            st.plotly_chart(fig_ytd, use_container_width=True)
+        with col2:
+            fig_ann = px.bar(df_s, x='ticker', y='Var. % annuale', title="Performance Annuale", template="plotly_dark")
+            st.plotly_chart(fig_ann, use_container_width=True)
 
     elif menu == "Serie Storiche (Motore)":
-        st.title("Motore - Analisi Comparativa (Base 100)")
-        df_mot['Date'] = pd.to_datetime(df_mot['Date'], errors='coerce')
-        df_mot = df_mot.dropna(subset=['Date']).sort_values('Date')
+        st.title("Motore - Analisi Serie Storiche")
+        exclude = ['Date', 'Close', 'Unnamed: 13', 'Unnamed: 25']
+        tickers = [c for c in df_motore.columns if c not in exclude and not c.startswith('Unnamed')]
         
-        tickers = [c for c in df_mot.columns if c not in ['Date', 'Close'] and not c.startswith('Unnamed')]
-        sel = st.multiselect("Seleziona Settori", tickers, default=tickers[:3])
-        
-        if sel:
+        selected_tickers = st.multiselect("Seleziona Settori da visualizzare", tickers, default=['XLK', 'XLE', 'XLF'])
+        if selected_tickers:
             fig_ts = go.Figure()
-            for t in sel:
-                # Convertiamo in numero e calcoliamo Base 100
-                vals = pd.to_numeric(df_mot[t], errors='coerce').dropna()
-                if not vals.empty:
-                    norm = (vals / vals.iloc[0]) * 100
-                    fig_ts.add_trace(go.Scatter(x=df_mot.loc[vals.index, 'Date'], y=norm, name=t, mode='lines'))
-            
-            fig_ts.update_layout(template="plotly_dark", hovermode="x unified", yaxis_title="Performance (Inizio = 100)")
+            for t in selected_tickers:
+                fig_ts.add_trace(go.Scatter(x=df_motore['Date'], y=df_motore[t], name=t, mode='lines'))
+            fig_ts.update_layout(title="Andamento Storico Settori", template="plotly_dark", xaxis_title="Data")
             st.plotly_chart(fig_ts, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Errore: {e}")
+    st.error(f"Errore di connessione LIVE: {e}")
+    st.info("Verifica che il link di Google Sheets sia impostato su 'Chiunque abbia il link può visualizzare'.")
