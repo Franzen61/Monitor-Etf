@@ -2,59 +2,36 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-st.set_page_config(page_title="ETF Sector Monitor", layout="wide")
+st.set_page_config(page_title="Monitor Strategico", layout="wide")
 
-st.title("📊 Monitor Settoriale Strategico")
-st.markdown("---")
-
+# URL del tuo foglio
 url = "https://docs.google.com/spreadsheets/d/15Z2njJ4c8ztxE97JTgrbaWAmRExojNEpxkWdKIACu0Q/edit?gid=42115566#gid=42115566"
-
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 try:
-    # 1. Leggiamo il foglio senza intestazioni per avere il controllo totale
-    df = conn.read(spreadsheet=url, header=None)
+    # Leggiamo tutto il foglio come testo puro
+    df = conn.read(spreadsheet=url, header=None).astype(str)
 
-    # 2. Estraiamo i dati basandoci sulle coordinate esatte del tuo foglio:
-    # Riga 5 a 16 (in Python indici 4 a 16)
-    # Colonna A (0), Colonna P (15), Colonna R (17), Colonna T (19)
+    # Lista dei tuoi Ticker target
+    tickers_target = ["XLK", "XLY", "XLC", "XLV", "XLP", "XLE", "XLF", "XLI", "XLB", "XLRE", "XLU", "SPY"]
     
-    subset = df.iloc[4:16, [0, 15, 17, 19]].copy()
+    # Cerchiamo le righe che contengono questi ticker nella prima colonna (A)
+    mask = df[0].isin(tickers_target)
+    filtered_df = df[mask].copy()
+
+    # Selezioniamo le colonne basandoci sulla posizione standard (A, P, R, T)
+    # Ma usiamo un filtro di sicurezza per evitare l'errore "out of bounds"
+    available_cols = len(filtered_df.columns)
     
-    # Rinominiamo le colonne per chiarezza
-    subset.columns = ['ETF', 'Situazione', 'Δ-RS (5d)', 'Operatività']
+    # Creiamo il dataframe finale prendendo solo quello che esiste
+    display_df = pd.DataFrame()
+    display_df['ETF'] = filtered_df[0]
+    if available_cols > 15: display_df['Situazione'] = filtered_df[15]
+    if available_cols > 17: display_df['Delta RS'] = filtered_df[17]
+    if available_cols > 19: display_df['Operatività'] = filtered_df[19]
 
-    # 3. Funzione Colori per l'operatività
-    def color_operativita(val):
-        v = str(val).upper()
-        if 'ACCUMULA' in v: color = '#2ecc71' # Verde
-        elif 'ALERT BUY' in v: color = '#3498db' # Blu
-        elif 'EVITA' in v: color = '#e74c3c' # Rosso
-        elif 'OSSERVA' in v: color = '#f1c40f' # Giallo
-        else: color = 'transparent'
-        return f'background-color: {color}; color: black; font-weight: bold'
-
-    # 4. Pulizia dati (trasformiamo i valori numerici in percentuale se necessario)
-    def format_delta(val):
-        try:
-            return f"{float(val):.2%}"
-        except:
-            return val
-
-    subset['Δ-RS (5d)'] = subset['Δ-RS (5d)'].apply(format_delta)
-
-    # 5. Visualizzazione
-    st.subheader("Segnali Operativi Settori")
-    
-    st.dataframe(
-        subset.style.applymap(color_operativita, subset=['Operatività']),
-        use_container_width=True,
-        hide_index=True,
-        height=455
-    )
-
-    st.caption("Dati estratti dalle colonne A, P, R, T del Financial Terminal")
+    # Stile semplice
+    st.table(display_df)
 
 except Exception as e:
-    st.error(f"Errore tecnico: {e}")
-    st.info("💡 Consiglio: Assicurati che il foglio Google non abbia colonne nascoste o eliminate tra la A e la T.")
+    st.error(f"Sistema in pausa. Errore: {e}")
