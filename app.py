@@ -15,9 +15,7 @@ st.set_page_config(
 # Stile Custom per look Bloomberg/Reuters
 st.markdown("""
     <style>
-    .main {
-        background-color: #0e1117;
-    }
+    .main { background-color: #0e1117; }
     .stMetric {
         background-color: #1e2130;
         padding: 15px;
@@ -29,10 +27,10 @@ st.markdown("""
 
 @st.cache_data(ttl=600)
 def load_data():
-    # Carichiamo il file Excel che caricherai su GitHub
+    # Nome esatto del file su GitHub
     file_path = 'Settori+Fattori & Mktcap (1).xlsx'
     
-    # Caricamento fogli (usiamo i nomi esatti del tuo file)
+    # Caricamento fogli
     df_monitor = pd.read_excel(file_path, sheet_name='Monitor Etfs', skiprows=6)
     df_settori = pd.read_excel(file_path, sheet_name='SETTORI', skiprows=18)
     df_motore = pd.read_excel(file_path, sheet_name='Motore')
@@ -56,6 +54,10 @@ try:
         monitor_display = df_monitor.iloc[0:12, [0, 1, 8, 9, 10, 11, 12]].copy()
         monitor_display.columns = ['Ticker', 'Rar Day', 'Coerenza Trend', 'Classifica', 'Delta-RS', 'Situazione', 'Operatività']
         
+        # Conversione numerica sicura
+        monitor_display['Rar Day'] = pd.to_numeric(monitor_display['Rar Day'], errors='coerce')
+        monitor_display['Delta-RS'] = pd.to_numeric(monitor_display['Delta-RS'], errors='coerce')
+
         # Metriche in alto
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -76,19 +78,13 @@ try:
             if 'MANTIENI' in val_str: return 'background-color: #002b4d; color: white'
             return ''
 
-                st.subheader("Classifica e Segnali")
-        
-        # Rendiamo i dati numerici per evitare errori di formattazione
-        monitor_display['Rar Day'] = pd.to_numeric(monitor_display['Rar Day'], errors='coerce')
-        monitor_display['Delta-RS'] = pd.to_numeric(monitor_display['Delta-RS'], errors='coerce')
-
+        st.subheader("Classifica e Segnali")
         st.dataframe(
             monitor_display.style.applymap(color_operativita, subset=['Operatività'])
             .format({'Rar Day': '{:.2f}', 'Delta-RS': '{:.4f}'}, na_rep='-'),
             use_container_width=True,
             height=450
         )
-
 
     elif menu == "Analisi Settoriale":
         st.title("Sector Performance Analysis")
@@ -128,5 +124,5 @@ try:
             st.plotly_chart(fig_ts, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Errore nel caricamento dei dati: {e}")
-    st.info("Assicurati di aver caricato il file Excel 'Settori+Fattori&Mktcap(1).xlsx' nello stesso repository.")
+    st.error(f"Errore: {e}")
+    st.info("Controlla che il file Excel sia caricato correttamente su GitHub.")
