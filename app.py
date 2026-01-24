@@ -30,7 +30,7 @@ st.markdown("""
 @st.cache_data(ttl=600)
 def load_data():
     # Carichiamo il file Excel che caricherai su GitHub
-    file_path = 'Settori+Fattori&Mktcap(1).xlsx'
+    file_path = 'Settori+Fattori & Mktcap (1).xlsx'
     
     # Caricamento fogli (usiamo i nomi esatti del tuo file)
     df_monitor = pd.read_excel(file_path, sheet_name='Monitor Etfs', skiprows=6)
