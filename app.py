@@ -76,13 +76,19 @@ try:
             if 'MANTIENI' in val_str: return 'background-color: #002b4d; color: white'
             return ''
 
-        st.subheader("Classifica e Segnali")
+                st.subheader("Classifica e Segnali")
+        
+        # Rendiamo i dati numerici per evitare errori di formattazione
+        monitor_display['Rar Day'] = pd.to_numeric(monitor_display['Rar Day'], errors='coerce')
+        monitor_display['Delta-RS'] = pd.to_numeric(monitor_display['Delta-RS'], errors='coerce')
+
         st.dataframe(
             monitor_display.style.applymap(color_operativita, subset=['Operatività'])
-            .format({'Rar Day': '{:.2f}', 'Delta-RS': '{:.4f}'}),
+            .format({'Rar Day': '{:.2f}', 'Delta-RS': '{:.4f}'}, na_rep='-'),
             use_container_width=True,
             height=450
         )
+
 
     elif menu == "Analisi Settoriale":
         st.title("Sector Performance Analysis")
