@@ -14,27 +14,29 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# Funzione di pulizia numeri (Spostata fuori per evitare errori di cache)
+def clean_val(val):
+    if pd.isna(val): return 0.0
+    s = str(val).replace('.', '').replace(',', '.').replace('%', '').strip()
+    try: return float(s)
+    except: return 0.0
+
 @st.cache_data(ttl=300)
 def load_live_data():
     sheet_id = "15Z2njJ4c8ztxE97JTgrbaWAmRExojNEpxkWdKIACu0Q"
     base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet="
     
-    def clean_val(val ):
-        if pd.isna(val): return 0.0
-        s = str(val).replace('.', '').replace(',', '.').replace('%', '').strip()
-        try: return float(s)
-        except: return 0.0
-
     try:
-        df_set = pd.read_csv(base_url + "SETTORI")
+        df_set = pd.read_csv(base_url + "SETTORI" )
         df_mot = pd.read_csv(base_url + "Motore")
         df_fat = pd.read_csv(base_url + "Fattori")
-        return df_set, df_mot, df_fat, clean_val
+        return df_set, df_mot, df_fat
     except Exception as e:
         st.error(f"Errore caricamento: {e}")
-        return None, None, None, clean_val
+        return None, None, None
 
-df_set, df_mot, df_fat, clean_val = load_live_data()
+# Esecuzione caricamento
+df_set, df_mot, df_fat = load_live_data()
 
 if df_set is not None:
     st.sidebar.title("📊 Terminale LIVE")
@@ -43,8 +45,8 @@ if df_set is not None:
     # --- MONITOR SETTORI ---
     if menu == "Monitor Settori":
         st.title("🎯 Monitor Settori - Bloomberg Style")
+        # Intervallo A1:M12 -> Colonne 0, 7, 8, 9, 10, 11
         df_m = df_set.iloc[0:12].copy()
-        # Mappatura colonne: A=0 (Ticker), H=7 (Momentum), I=8 (Rar Week), J=9 (Rar Month), K=10 (Situazione), L=11 (Operatività)
         df_display = df_m.iloc[:, [0, 7, 8, 9, 10, 11]].copy()
         df_display.columns = ['Ticker', 'Momentum', 'Rar Week', 'Rar Month', 'Situazione', 'Operatività']
         
@@ -88,6 +90,7 @@ if df_set is not None:
         # Rinomina B1 in SPY e correzione date
         df_mot.columns = ['Date', 'SPY'] + list(df_mot.columns[2:])
         df_mot['Date'] = pd.to_datetime(df_mot['Date'], errors='coerce')
+        # Filtriamo solo dal 2025
         df_mot = df_mot[df_mot['Date'] >= '2025-01-01'].sort_values('Date')
         
         tickers = [c for c in df_mot.columns if c != 'Date' and not c.startswith('Unnamed')]
@@ -106,3 +109,4 @@ if df_set is not None:
             st.plotly_chart(fig_ts, use_container_width=True)
 else:
     st.info("Connessione in corso...")
+
