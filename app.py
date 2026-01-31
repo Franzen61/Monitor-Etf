@@ -17,32 +17,21 @@ BENCHMARK = "SPY"
 ALL_TICKERS = SECTORS + [BENCHMARK]
 
 TF_DAYS = {
-    "1D": 1,
-    "1W": 5,
-    "1M": 21,
-    "3M": 63,
-    "6M": 126,
-    "1Y": 252,
-    "3Y": 756,
-    "5Y": 1260
+    "1D": 1, "1W": 5, "1M": 21,
+    "3M": 63, "6M": 126, "1Y": 252,
+    "3Y": 756, "5Y": 1260
 }
 
 RAR_TFS = ["1D", "1W", "1M", "3M", "6M", "1Y"]
 
 CT_WEIGHTS = {
-    "1D": 0.10,
-    "1W": 0.15,
-    "1M": 0.20,
-    "3M": 0.25,
-    "6M": 0.30
+    "1D": 0.10, "1W": 0.15,
+    "1M": 0.20, "3M": 0.25, "6M": 0.30
 }
 
 RA_WEIGHTS = {
-    "1Y": 0.15,
-    "6M": 0.25,
-    "3M": 0.30,
-    "1M": 0.20,
-    "1W": 0.10
+    "1Y": 0.15, "6M": 0.25,
+    "3M": 0.30, "1M": 0.20, "1W": 0.10
 }
 
 # =====================
@@ -63,50 +52,40 @@ prices = load_prices(ALL_TICKERS)
 # =====================
 # RETURNS
 # =====================
-returns = {
-    tf: prices.pct_change(days).iloc[-1]
-    for tf, days in TF_DAYS.items()
-}
+returns = {tf: prices.pct_change(d).iloc[-1] for tf, d in TF_DAYS.items()}
 returns_df = pd.DataFrame(returns)
 
 # =====================
 # RAR
 # =====================
 rar_df = pd.DataFrame(index=SECTORS)
-
 for tf in RAR_TFS:
-    rar_df[f"RAR_{tf}"] = (
-        returns_df.loc[SECTORS, tf] -
-        returns_df.loc[BENCHMARK, tf]
-    )
+    rar_df[f"RAR_{tf}"] = returns_df.loc[SECTORS, tf] - returns_df.loc[BENCHMARK, tf]
 
 # =====================
-# RA / MOMENTUM
+# RA MOMENTUM
 # =====================
 rar_df["Ra_Momentum"] = sum(
-    rar_df[f"RAR_{tf}"] * w
-    for tf, w in RA_WEIGHTS.items()
+    rar_df[f"RAR_{tf}"] * w for tf, w in RA_WEIGHTS.items()
 )
 
 # =====================
-# COERENZA TREND PESATA
+# COERENZA TREND
 # =====================
-def weighted_coherence(row):
+def coherence(row):
     score = sum(
         CT_WEIGHTS[tf] if row[f"RAR_{tf}"] > 0 else 0
         for tf in CT_WEIGHTS
     )
     return max(1, round(score * 5))
 
-rar_df["Coerenza_Trend"] = rar_df.apply(weighted_coherence, axis=1)
+rar_df["Coerenza_Trend"] = rar_df.apply(coherence, axis=1)
 
 # =====================
 # CLASSIFICA
 # =====================
 rar_df["Classifica"] = (
-    rar_df["Ra_Momentum"]
-    .rank(ascending=False, method="first")
-    .astype(int)
+    rar_df["Ra_Momentum"].rank(ascending=False, method="first").astype(int)
 )
 
 # =====================
@@ -118,7 +97,7 @@ rar_df["DELTA_RS_5D"] = (
 ).values
 
 # =====================
-# SITUAZIONE
+# SITUAZIONE & OPERATIVITÀ
 # =====================
 def situazione(row):
     if row["Ra_Momentum"] > 0:
@@ -127,9 +106,6 @@ def situazione(row):
 
 rar_df["Situazione"] = rar_df.apply(situazione, axis=1)
 
-# =====================
-# OPERATIVITÀ
-# =====================
 def operativita(row):
     if row["DELTA_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
         return "🔭 ALERT BUY"
@@ -142,7 +118,7 @@ def operativita(row):
 rar_df["Operatività"] = rar_df.apply(operativita, axis=1)
 
 # =====================
-# REGIME FILTER
+# REGIME
 # =====================
 spy_6m = returns_df.loc[BENCHMARK, "6M"]
 breadth = (rar_df["Ra_Momentum"] > 0).mean()
@@ -150,52 +126,61 @@ quality = (rar_df["Coerenza_Trend"] >= 4).mean()
 
 conditions = sum([spy_6m > 0, breadth >= 0.55, quality >= 0.40])
 
-if conditions == 3:
-    regime = "🟢 RISK ON"
-elif conditions == 2:
-    regime = "🟡 NEUTRAL"
-else:
-    regime = "🔴 RISK OFF"
-
-def operativita_final(row):
-    if regime == "🔴 RISK OFF" and row["Operatività"] in ["🔥 ACCUMULA", "🔭 ALERT BUY"]:
-        return "⛔ BLOCCATO (RISK OFF)"
-    return row["Operatività"]
-
-rar_df["Operatività_Final"] = rar_df.apply(operativita_final, axis=1)
+regime = "🟢 RISK ON" if conditions == 3 else "🟡 NEUTRAL" if conditions == 2 else "🔴 RISK OFF"
 
 # =====================
-# UI — TABS
+# UI TABS
 # =====================
-tab1, tab2 = st.tabs(["📊 Dashboard", "📈 Confronto Prezzi"])
+tab1, tab2 = st.tabs(["📊 Dashboard", "📈 Andamento Settoriale"])
 
-# -------- TAB 1
+# ---------- TAB 1
 with tab1:
-    st.title("📊 S&P 500 – Sector Relative Strength")
+    st.markdown(
+        """
+        <style>
+        .monitor {
+            background: linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+            border-radius:12px;
+            padding:14px;
+            text-align:center;
+            color:white;
+            font-size:14px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.markdown(f"### Regime di Mercato: **{regime}**")
 
     top3 = rar_df.sort_values("Ra_Momentum", ascending=False).head(3)
     cols = st.columns(3)
-    colors = ["#00c853", "#64dd17", "#aeea00"]
 
-    for col, (etf, row), color in zip(cols, top3.iterrows(), colors):
+    for col, (etf, row) in zip(cols, top3.iterrows()):
         col.markdown(
             f"""
-            <div style="background:{color};padding:20px;border-radius:12px;text-align:center;">
-                <h2>{etf}</h2>
-                <h4>{row['Situazione']}</h4>
-                <h3>{row['Ra_Momentum']:.2%}</h3>
+            <div class="monitor">
+                <strong>{etf}</strong><br>
+                {row['Situazione']}<br>
+                {row['Ra_Momentum']:.2%}
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    st.subheader("Classifica Settoriale")
+    # DAILY BAR
+    daily = returns_df.loc[SECTORS, "1D"].sort_values(ascending=False)
+    fig_bar = go.Figure(go.Bar(
+        x=daily.index, y=daily.values,
+        marker_color=["green" if x > 0 else "red" for x in daily.values]
+    ))
+    fig_bar.update_layout(height=250, title="Variazione Giornaliera %")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
     st.dataframe(
         rar_df[
             ["Ra_Momentum", "Coerenza_Trend", "Classifica",
-             "DELTA_RS_5D", "Situazione", "Operatività_Final"]
+             "DELTA_RS_5D", "Situazione", "Operatività"]
         ]
         .sort_values("Ra_Momentum", ascending=False)
         .style.format({
@@ -205,38 +190,42 @@ with tab1:
         use_container_width=True
     )
 
-# -------- TAB 2
+# ---------- TAB 2
 with tab2:
-    st.title("📈 ETF Settoriali vs SPY (Normalizzati)")
-
     tf_map = {
         "1W": 5, "1M": 21, "3M": 63,
         "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260
     }
 
     tf = st.radio("Timeframe", list(tf_map.keys()), horizontal=True)
-    days = tf_map[tf]
+    selected = st.multiselect(
+        "Seleziona ETF",
+        SECTORS,
+        default=SECTORS[:5]
+    )
 
-    data = prices[ALL_TICKERS].iloc[-days:]
+    days = tf_map[tf]
+    data = prices[selected + [BENCHMARK]].iloc[-days:]
     norm = data / data.iloc[0] * 100
 
     fig = go.Figure()
 
-    for etf in SECTORS:
+    for etf in selected:
         fig.add_trace(go.Scatter(
             x=norm.index, y=norm[etf],
-            mode="lines", name=etf, line=dict(width=1)
+            mode="lines", name=etf,
+            line=dict(width=2)
         ))
 
     fig.add_trace(go.Scatter(
         x=norm.index, y=norm["SPY"],
         mode="lines", name="SPY",
-        line=dict(width=4, color="black")
+        line=dict(width=4, color="white")
     ))
 
     fig.update_layout(
         template="plotly_dark",
-        yaxis_title="Indice Normalizzato (Base 100)",
+        yaxis_title="Base 100",
         height=650
     )
 
