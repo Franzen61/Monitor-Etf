@@ -32,8 +32,23 @@ WEIGHTS = {
 def load_data():
     end = datetime.today()
     start = end - timedelta(days=5 * 365)
-    data = yf.download(ALL_TICKERS, start=start, end=end)["Adj Close"]
-    return data.dropna()
+
+    raw = yf.download(
+        ALL_TICKERS,
+        start=start,
+        end=end,
+        auto_adjust=False,
+        progress=False
+    )
+
+    # Caso MultiIndex (più ticker)
+    if isinstance(raw.columns, pd.MultiIndex):
+        prices = raw["Adj Close"]
+    else:
+        prices = raw
+
+    return prices.dropna()
+
 
 prices = load_data()
 
