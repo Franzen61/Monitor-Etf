@@ -1,111 +1,200 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import numpy as np
+import yfinance as yf
 from datetime import datetime
 
-# 1. Configurazione Pagina
-st.set_page_config(page_title="Financial Terminal - LIVE", page_icon="📈", layout="wide")
+st.set_page_config(page_title="S&P500 Sector Relative Strength", layout="wide")
 
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-    </style>
-    """, unsafe_allow_html=True)
+# -------------------------
+# CONFIG
+# -------------------------
+SECTORS = [
+    "XLK", "XLY", "XLF", "XLC", "XLV", "XLP",
+    "XLI", "XLE", "XLB", "XLU", "XLRE"
+]
+BENCHMARK = "SPY"
+ALL_TICKERS = SECTORS + [BENCHMARK]
 
-# Funzione di pulizia universale
-def to_num(val):
-    if pd.isna(val): return 0.0
-    s = str(val).replace('.', '').replace(',', '.').replace('%', '').strip().upper()
-    if s in ['NONE', 'NAN', '', 'NONE.']: return 0.0
-    try: return float(s)
-    except: return 0.0
+TF_DAYS = {
+    "1D": 1,
+    "1W": 5,
+    "1M": 21,
+    "3M": 63,
+    "6M": 126,
+    "1Y": 252,
+    "3Y": 756,
+    "5Y": 1260
+}
 
-@st.cache_data(ttl=300)
-def load_live_data():
-    sheet_id = "15Z2njJ4c8ztxE97JTgrbaWAmRExojNEpxkWdKIACu0Q"
-    base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet="
-    try:
-        # Carichiamo i fogli senza intestazioni fisse per evitare errori di slittamento
-        df_set = pd.read_csv(base_url + "SETTORI", header=None )
-        df_mot = pd.read_csv(base_url + "Motore", header=None)
-        df_fat = pd.read_csv(base_url + "Fattori", header=None)
-        return df_set, df_mot, df_fat
-    except Exception as e:
-        st.error(f"Errore caricamento: {e}")
-        return None, None, None
+RAR_TFS = ["1D", "1W", "1M", "3M", "6M", "1Y"]
 
-df_set_raw, df_mot_raw, df_fat_raw = load_live_data()
+CT_WEIGHTS = {
+    "1D": 0.10,
+    "1W": 0.15,
+    "1M": 0.20,
+    "3M": 0.25,
+    "6M": 0.30
+}
 
-if df_set_raw is not None:
-    st.sidebar.title("📊 Terminale LIVE")
-    menu = st.sidebar.radio("Navigazione", ["Monitor Settori", "Analisi Fattori", "Serie Storiche (Motore)"])
+RA_WEIGHTS = {
+    "1Y": 0.15,
+    "6M": 0.25,
+    "3M": 0.30,
+    "1M": 0.20,
+    "1W": 0.10
+}
 
-    # --- MONITOR SETTORI ---
-    if menu == "Monitor Settori":
-        st.title("🎯 Monitor Settori - Bloomberg Style")
-        # Estraiamo i dati basandoci sulla posizione fisica (A=0, H=7, I=8, J=9, K=10, L=11)
-        # Saltiamo le prime righe se necessario (usiamo la riga 19 come intestazione se è lì che iniziano i dati)
-        df_m = df_set_raw.iloc[18:30].copy() # Intervallo A19:M30 (che corrisponde a A1:M12 del tuo monitor)
-        df_m.columns = ['Ticker', 'Rar Day', 'Rar Week', 'Rar Month', 'Rar Q', 'Rar 6M', 'Rar Y', 'Momentum', 'Coerenza', 'Classifica', 'Delta', 'Situazione', 'Operatività', 'Trend']
-        
-        df_display = df_m[['Ticker', 'Momentum', 'Coerenza', 'Classifica', 'Delta', 'Situazione', 'Operatività']].copy()
-        
-        # Pulizia NONE
-        for col in df_display.columns:
-            df_display[col] = df_display[col].apply(lambda x: "" if str(x).strip().upper() in ["NONE", "NAN", "NONE."] else x)
-        
-        # Monitor in alto
-        df_display['Mom_Num'] = df_display['Momentum'].apply(to_num)
-        top_3 = df_display.sort_values('Mom_Num', ascending=False).head(3)
-        cols = st.columns(3)
-        for i, (idx, row) in enumerate(top_3.iterrows()):
-            with cols[i]:
-                st.metric(f"Leader {i+1}", row['Ticker'], f"Mom: {row['Momentum']}")
+# -------------------------
+# DATA DOWNLOAD
+# -------------------------
+@st.cache_data
+def load_prices(tickers):
+    data = yf.download(
+        tickers,
+        period="5y",
+        auto_adjust=True,
+        progress=False
+    )["Close"]
+    return data.dropna()
 
-        st.subheader("Dashboard Operativa")
-        st.dataframe(df_display.drop(columns=['Mom_Num']), use_container_width=True)
+prices = load_prices(ALL_TICKERS)
 
-    # --- ANALISI FATTORI ---
-    elif menu == "Analisi Fattori":
-        st.title("Factor Analysis")
-        df_f = df_fat_raw.iloc[1:11].copy() # Saltiamo l'intestazione
-        df_f.columns = ['ticker', 'Fattori', 'Prezzo', 'Giorno', 'Sett', 'Mese', 'Trim', 'Sem', 'YTD', 'Ann', '2y', '3y', '5y', '10y']
-        
-        perf_cols = ['Giorno', 'Sett', 'Mese', 'Trim', 'Sem', 'YTD', 'Ann', '2y', '3y', '5y', '10y']
-        for col in perf_cols:
-            df_f[col] = df_f[col].apply(to_num)
+# -------------------------
+# RETURNS
+# -------------------------
+returns = {}
 
-        def highlight_max(s):
-            is_max = s == s.max()
-            return ['background-color: #004d00; color: #00ff00; font-weight: bold' if v else '' for v in is_max]
+for tf, days in TF_DAYS.items():
+    returns[tf] = prices.pct_change(days).iloc[-1]
 
-        st.dataframe(df_f.style.apply(highlight_max, subset=perf_cols).format("{:.2f}%", subset=perf_cols), use_container_width=True)
+returns_df = pd.DataFrame(returns)
 
-    # --- SERIE STORICHE (MOTORE) ---
-    elif menu == "Serie Storiche (Motore)":
-        st.title("Motore - Analisi Comparativa (Base 100)")
-        df_m = df_mot_raw.copy()
-        df_m.columns = df_m.iloc[0] # Usiamo la prima riga come nomi colonne
-        df_m = df_m.drop(0).rename(columns={'Close': 'SPY'})
-        
-        df_m['Date'] = pd.to_datetime(df_m['Date'], errors='coerce')
-        df_m = df_m[df_m['Date'] >= '2025-01-01'].sort_values('Date')
-        
-        tickers = [c for c in df_m.columns if c != 'Date' and not str(c).startswith('Unnamed')]
-        sel = st.multiselect("Seleziona Asset", tickers, default=['SPY'] if 'SPY' in tickers else tickers[:1])
-        
-        if sel:
-            fig_ts = go.Figure()
-            for t in sel:
-                y_vals = df_m[t].apply(to_num)
-                valid = y_vals[y_vals > 0]
-                if not valid.empty:
-                    norm = (valid / valid.iloc[0]) * 100
-                    fig_ts.add_trace(go.Scatter(x=df_m.loc[valid.index, 'Date'], y=norm, name=t, mode='lines'))
-            
-            fig_ts.update_layout(template="plotly_dark", hovermode="x unified", yaxis_title="Base 100")
-            st.plotly_chart(fig_ts, use_container_width=True)
+# -------------------------
+# RAR CALCULATION
+# -------------------------
+rar_df = pd.DataFrame(index=SECTORS)
+
+for tf in RAR_TFS:
+    rar_df[f"RAR_{tf}"] = (
+        returns_df.loc[SECTORS, tf] - returns_df.loc[BENCHMARK, tf]
+    )
+
+# -------------------------
+# RA / MOMENTUM
+# -------------------------
+ra_momentum = sum(
+    rar_df[f"RAR_{tf}"] * weight
+    for tf, weight in RA_WEIGHTS.items()
+)
+
+rar_df["Ra_Momentum"] = ra_momentum
+
+# -------------------------
+# COERENZA TREND PESATA
+# -------------------------
+def weighted_coherence(row):
+    score = sum(
+        CT_WEIGHTS[tf] if row[f"RAR_{tf}"] > 0 else 0
+        for tf in CT_WEIGHTS
+    )
+    return max(1, round(score * 5))
+
+rar_df["Coerenza_Trend"] = rar_df.apply(weighted_coherence, axis=1)
+
+# -------------------------
+# CLASSIFICA
+# -------------------------
+rar_df["Classifica"] = (
+    rar_df["Ra_Momentum"]
+    .rank(ascending=False, method="first")
+    .astype(int)
+)
+
+# -------------------------
+# DELTA RS 5D
+# -------------------------
+delta_rs = (
+    prices[SECTORS].pct_change(5).iloc[-1]
+    - prices[BENCHMARK].pct_change(5).iloc[-1]
+)
+rar_df["DELTA_RS_5D"] = delta_rs.values
+
+# -------------------------
+# SITUAZIONE
+# -------------------------
+def situazione(row):
+    if row["Ra_Momentum"] > 0:
+        return "LEADER" if row["Coerenza_Trend"] >= 4 else "IN RECUPERO"
+    return "DEBOLE"
+
+rar_df["Situazione"] = rar_df.apply(situazione, axis=1)
+
+# -------------------------
+# OPERATIVITÀ
+# -------------------------
+def operativita(row):
+    if row["DELTA_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
+        return "🔭 ALERT BUY"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
+        if row["DELTA_RS_5D"] > 0:
+            return "🔥 ACCUMULA"
+        return "📈 MANTIENI"
+    if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
+        return "👀 OSSERVA"
+    return "❌ EVITA"
+
+rar_df["Operatività"] = rar_df.apply(operativita, axis=1)
+
+# -------------------------
+# REGIME FILTER
+# -------------------------
+spy_6m_return = returns_df.loc[BENCHMARK, "6M"]
+
+breadth = (rar_df["Ra_Momentum"] > 0).mean()
+quality = (rar_df["Coerenza_Trend"] >= 4).mean()
+
+conditions = sum([
+    spy_6m_return > 0,
+    breadth >= 0.55,
+    quality >= 0.40
+])
+
+if conditions == 3:
+    regime = "🟢 RISK ON"
+elif conditions == 2:
+    regime = "🟡 NEUTRAL"
 else:
-    st.info("Connessione in corso...")
+    regime = "🔴 RISK OFF"
+
+# -------------------------
+# FINAL OPERATIVITY
+# -------------------------
+def operativita_final(row):
+    if regime == "🔴 RISK OFF" and row["Operatività"] in ["🔥 ACCUMULA", "🔭 ALERT BUY"]:
+        return "⛔ BLOCCATO (RISK OFF)"
+    return row["Operatività"]
+
+rar_df["Operatività_Final"] = rar_df.apply(operativita_final, axis=1)
+
+# -------------------------
+# STREAMLIT UI
+# -------------------------
+st.title("📊 S&P 500 – Sector Relative Strength Dashboard")
+
+st.markdown(f"### Regime di Mercato: **{regime}**")
+
+display_cols = [
+    "Ra_Momentum", "Coerenza_Trend", "Classifica",
+    "DELTA_RS_5D", "Situazione", "Operatività_Final"
+]
+
+st.dataframe(
+    rar_df[display_cols]
+    .sort_values("Classifica")
+    .style.format({
+        "Ra_Momentum": "{:.2%}",
+        "DELTA_RS_5D": "{:.2%}"
+    }),
+    use_container_width=True
+)
