@@ -214,7 +214,7 @@ with tab3:
 
     def style(row):
         if row.name in FACTOR_COMPARISON:
-            return ["background-color:#1e1e1a;color:#ccc"]*len(row)
+            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
 
     st.dataframe(
@@ -282,7 +282,7 @@ with tab3:
                 textfont=dict(color='white')
             ))
         
-        # Layout del grafico (CORRETTO)
+        # Layout del grafico (versione semplificata e corretta)
         fig2.update_layout(
             title="Confronto Performance Fattori",
             xaxis_title="Timeframe",
@@ -292,20 +292,23 @@ with tab3:
             plot_bgcolor="#000",
             font_color="white",
             height=500,
-            showlegend=True,
-            xaxis=dict(
-                tickfont=dict(size=14),
-                titlefont=dict(size=16)
-            ),
-            yaxis=dict(
-                tickfont=dict(size=14),
-                titlefont=dict(size=16),
-                gridcolor='#333'
-            ),
-            legend=dict(
-                font=dict(size=12)
-            )
+            showlegend=True
         )
+        
+        # Impostazioni separate per gli assi
+        fig2.update_xaxes(
+            tickfont=dict(size=14),
+            titlefont=dict(size=16)
+        )
+        
+        fig2.update_yaxes(
+            tickfont=dict(size=14),
+            titlefont=dict(size=16),
+            gridcolor='#333'
+        )
+        
+        # Impostazioni separate per la legenda
+        fig2.update_layout(legend=dict(font=dict(size=12)))
         
         st.plotly_chart(fig2, use_container_width=True)
         
