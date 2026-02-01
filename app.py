@@ -112,6 +112,20 @@ def situazione(row):
 
 df["Situazione"] = df.apply(situazione, axis=1)
 
+# FUNZIONE OPERATIVITÀ (AGGIUNTA)
+def operativita(row):
+    if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
+        return "🔭 ALERT BUY"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
+        return "🔥 ACCUMULA"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
+        return "📈 MANTIENI"
+    if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
+        return "👀 OSSERVA"
+    return "❌ EVITA"
+
+df["Operatività"] = df.apply(operativita, axis=1)
+
 # ========================
 # UI TABS
 # ========================
@@ -146,6 +160,7 @@ with tab1:
             <div class="leader-box">
                 <div class="leader-ticker">{t}</div>
                 <div class="leader-mom">Ra Momentum: {row.Ra_momentum:.2f}</div>
+                <div>Operatività: {row.Operatività}</div>
                 <div>{row.Situazione}</div>
             </div>
             """, unsafe_allow_html=True)
