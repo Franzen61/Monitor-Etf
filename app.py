@@ -221,28 +221,36 @@ with tab2:
 # TAB 3 — FATTORI
 # ========================
 with tab3:
-    factor_prices = load_prices(FACTOR_ETFS)
-    f = pd.DataFrame(index=FACTOR_ETFS)
+    factor_prices = load_data(FACTOR_ETFS)
 
-    f["Prezzo"] = factor_prices.iloc[-1].round(2)
-    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
-    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
-    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
-    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
-    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
-    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
-    f["YTD"] = factor_prices.apply(ret_ytd)
-    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
-    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+    df = pd.DataFrame(index=FACTOR_ETFS)
+
+    df["Prezzo"] = factor_prices.iloc[-1].round(2)
+
+    df["1D"]  = factor_prices.apply(lambda x: ret(x, 1))
+    df["1W"]  = factor_prices.apply(lambda x: ret(x, 5))
+    df["1M"]  = factor_prices.apply(lambda x: ret(x, 21))
+    df["3M"]  = factor_prices.apply(lambda x: ret(x, 63))
+    df["6M"]  = factor_prices.apply(lambda x: ret(x, 126))
+    df["1A"]  = factor_prices.apply(lambda x: ret(x, 252))
+    df["YTD"] = factor_prices.apply(ret_ytd)
+    df["3A"]  = factor_prices.apply(lambda x: ret(x, 756))
+    df["5A"]  = factor_prices.apply(lambda x: ret(x, 1260))
+
+    df = df.round(2)
 
     def style(row):
         if row.name in FACTOR_COMPARISON:
-            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
-        return ["background-color:#000;color:white"]*len(row)
+            return ["background-color:#1e1e1e;color:#cccccc"] * len(row)
+        return ["background-color:#000000;color:white"] * len(row)
 
     st.dataframe(
-        f.round(2).style
+        df.style
         .apply(style, axis=1)
-        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
+        .format({
+            "Prezzo": "{:.2f}",
+            **{c: "{:+.2f}%" for c in df.columns if c != "Prezzo"}
+        }),
         use_container_width=True
     )
+
