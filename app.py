@@ -58,15 +58,23 @@ def load_data():
         ALL_TICKERS,
         start=start,
         end=end,
-        progress=False
+        progress=False,
+        auto_adjust=False
     )
 
+    # --- GESTIONE ROBUSTA COLONNE ---
     if isinstance(raw.columns, pd.MultiIndex):
-        prices = raw["Adj Close"]
+        if "Adj Close" in raw.columns.levels[0]:
+            prices = raw["Adj Close"]
+        elif "Close" in raw.columns.levels[0]:
+            prices = raw["Close"]
+        else:
+            raise ValueError("Né 'Adj Close' né 'Close' trovati nei dati Yahoo")
     else:
         prices = raw
 
     return prices.dropna()
+
 
 prices = load_data()
 
