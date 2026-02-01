@@ -62,12 +62,12 @@ def load_data(tickers):
     end = datetime.today()
     start = end - timedelta(days=6 * 365)
 
-    raw = yf.download(
+    data = yf.download(
         tickers,
         start=start,
         end=end,
-        progress=False,
-        auto_adjust=False
+        auto_adjust=True,
+        progress=False
     )
 
     if isinstance(raw.columns, pd.MultiIndex):
