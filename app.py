@@ -44,52 +44,77 @@ WEIGHTS = {"1Y":0.15,"6M":0.25,"3M":0.30,"1M":0.20,"1W":0.10}
 # DATA LOADER (ADJUSTED)
 # ========================
 @st.cache_data
-def load_prices(tickers):
+def load_data(tickers):
     end = datetime.today()
-    start = end - timedelta(days=6*365)
+    start = end - timedelta(days=6 * 365)
 
-    data = yf.download(
+    raw = yf.download(
         tickers,
         start=start,
         end=end,
-        auto_adjust=True,
-        progress=False
+        progress=False,
+        auto_adjust=False
     )
 
-    if isinstance(data.columns, pd.MultiIndex):
-        data = data["Close"]
+    if isinstance(raw.columns, pd.MultiIndex):
+        if "Adj Close" in raw.columns.levels[0]:
+            prices = raw["Adj Close"]
+        elif "Close" in raw.columns.levels[0]:
+            prices = raw["Close"]
+        else:
+            raise ValueError("Né Adj Close né Close trovati")
+    else:
+        prices = raw
 
-    return data.dropna(how="all")
+    return prices.dropna(how="all")
 
-# ========================
-# RETURN FUNCTIONS
-# ========================
-def ret(data, days):
+prices = load_data(ALL_TICKERS)
+
+# ------------------------
+# SAFE RETURNS
+# ------------------------
+def safe_pct_change(data, days):
     if len(data) <= days:
         return np.nan
     return (data.iloc[-1] / data.iloc[-days-1] - 1) * 100
 
-def ret_ytd(data):
+def safe_ytd(data):
+    if data.empty:
+        return np.nan
     ytd = data[data.index.year == datetime.today().year]
     if len(ytd) < 2:
         return np.nan
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
-# ========================
-# LOAD DATA
-# ========================
-prices = load_prices(ALL_TICKERS)
-
+# ------------------------
+# RETURNS TABLE
+# ------------------------
 returns = pd.DataFrame({
-    "1D": prices.apply(lambda x: ret(x,1)),
-    "1W": prices.apply(lambda x: ret(x,5)),
-    "1M": prices.apply(lambda x: ret(x,21)),
-    "3M": prices.apply(lambda x: ret(x,63)),
-    "6M": prices.apply(lambda x: ret(x,126)),
-    "1Y": prices.apply(lambda x: ret(x,252)),
+    "1D": prices.apply(lambda x: safe_pct_change(x, 1)),
+    "1W": prices.apply(lambda x: safe_pct_change(x, 5)),
+    "1M": prices.apply(lambda x: safe_pct_change(x, 21)),
+    "3M": prices.apply(lambda x: safe_pct_change(x, 63)),
+    "6M": prices.apply(lambda x: safe_pct_change(x, 126)),
+    "1Y": prices.apply(lambda x: safe_pct_change(x, 252)),
+    "3Y": prices.apply(lambda x: safe_pct_change(x, 756)),
+    "5Y": prices.apply(lambda x: safe_pct_change(x, 1260)),
 })
 
 rar = returns.sub(returns.loc[BENCHMARK])
+
+# ------------------------
+# COERENZA TREND
+# ------------------------
+def coerenza_trend(row):
+    score = sum([
+        row["1D"] > 0,
+        row["1W"] > 0,
+        row["1M"] > 0,
+        row["3M"] > 0,
+        row["6M"] > 0
+    ])
+    return max(score, 1)
+
 df = rar.loc[SECTORS].copy()
 
 df["Ra_momentum"] = (
