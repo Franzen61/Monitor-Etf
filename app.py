@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # ------------------------
-# CONFIG & STYLE
+# CONFIG & STYLE (Bloomberg Dark)
 # ------------------------
 st.set_page_config(layout="wide", page_title="Financial Terminal - Bloomberg Style")
 
@@ -17,14 +17,14 @@ st.markdown("""
         background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
         border: 1px solid #333;
         border-radius: 8px;
-        padding: 12px;
-        margin-bottom: 10px;
+        padding: 15px;
+        margin-bottom: 12px;
         background-image: radial-gradient(#333 1px, transparent 1px);
-        background-size: 15px 15px; /* Effetto griglia terminale */
+        background-size: 10px 10px; /* Effetto griglia terminale */
     }
-    .leader-ticker { color: #ff9900; font-size: 1.2em; font-weight: bold; }
-    .leader-mom { color: #00ff00; font-size: 0.9em; }
-    .leader-op { color: #ffffff; font-size: 0.9em; font-weight: bold; }
+    .leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }
+    .leader-mom { color: #00ff00; font-size: 1em; font-family: 'Courier New', Courier, monospace; }
+    .leader-op { color: #ffffff; font-size: 1em; font-weight: bold; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -96,8 +96,9 @@ with tab1:
             marker_color=['#ff4b4b' if x < 0 else '#00ff00' for x in daily.values]
         ))
         fig_bar.update_layout(
-            height=400, title="Variazione % Giornaliera",
-            template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+            height=450, title="Variazione % Giornaliera",
+            template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            yaxis=dict(gridcolor='#333'), xaxis=dict(gridcolor='#333')
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -107,11 +108,9 @@ with tab1:
         for ticker, row in leaders.iterrows():
             st.markdown(f"""
                 <div class="leader-box">
-                    <span class="leader-ticker">{ticker}</span>  
-
-                    <span class="leader-mom">Momentum: {row.Ra_momentum:.2f}</span>  
-
-                    <span class="leader-op">{row.Operatività}</span>
+                    <div class="leader-ticker">{ticker}</div>
+                    <div class="leader-mom">Momentum: {row.Ra_momentum:+.2f}</div>
+                    <div class="leader-op">{row.Operatività}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -127,24 +126,25 @@ with tab2:
     
     days_map = {"1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252}
     
-    # Calcolo Base 0
+    # Calcolo Base 0 (Variazione Percentuale Netta)
     plot_data = prices.iloc[-days_map[tf]:]
-    plot_data = (plot_data / plot_data.iloc[0] - 1) * 100 # Trasformazione in Base 0
+    plot_data = (plot_data / plot_data.iloc[0] - 1) * 100 
     
     fig = go.Figure()
     for etf in selected:
         fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data[etf], name=etf, line=dict(width=2)))
     
-    # SPY GIALLO FLUO E SPESSO
+    # SPY GIALLO FLUO E MOLTO SPESSO
     fig.add_trace(go.Scatter(
         x=plot_data.index, y=plot_data[BENCHMARK], 
-        name="SPY", line=dict(width=5, color="#CCFF00")
+        name="SPY (Benchmark)", line=dict(width=5, color="#CCFF00")
     ))
     
     fig.update_layout(
-        height=600, template="plotly_dark",
-        yaxis_title="Variazione %",
+        height=650, template="plotly_dark",
+        yaxis_title="Variazione % (Base 0)",
         hovermode="x unified",
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        yaxis=dict(gridcolor='#333', zerolinecolor='#666'), xaxis=dict(gridcolor='#333')
     )
     st.plotly_chart(fig, use_container_width=True)
