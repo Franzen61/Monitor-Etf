@@ -44,111 +44,73 @@ WEIGHTS = {"1Y":0.15,"6M":0.25,"3M":0.30,"1M":0.20,"1W":0.10}
 # DATA LOADER (ADJUSTED)
 # ========================
 @st.cache_data
-def load_data(tickers):
+def load_prices(tickers):
     end = datetime.today()
-    start = end - timedelta(days=6 * 365)
+    start = end - timedelta(days=6*365)
 
-    raw = yf.download(
+    data = yf.download(
         tickers,
         start=start,
         end=end,
-        progress=False,
-        auto_adjust=False
+        auto_adjust=True,
+        progress=False
     )
 
-    if isinstance(raw.columns, pd.MultiIndex):
-        if "Adj Close" in raw.columns.levels[0]:
-            prices = raw["Adj Close"]
-        elif "Close" in raw.columns.levels[0]:
-            prices = raw["Close"]
-        else:
-            raise ValueError("Né Adj Close né Close trovati")
-    else:
-        prices = raw
+    if isinstance(data.columns, pd.MultiIndex):
+        data = data["Close"]
 
-    return prices.dropna(how="all")
+    return data.dropna(how="all")
 
-prices = load_data(ALL_TICKERS)
-
-# ------------------------
-# SAFE RETURNS
-# ------------------------
-def safe_pct_change(data, days):
+# ========================
+# RETURN FUNCTIONS
+# ========================
+def ret(data, days):
     if len(data) <= days:
         return np.nan
     return (data.iloc[-1] / data.iloc[-days-1] - 1) * 100
 
-def safe_ytd(data):
-    if data.empty:
-        return np.nan
+def ret_ytd(data):
     ytd = data[data.index.year == datetime.today().year]
     if len(ytd) < 2:
         return np.nan
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
-# ------------------------
-# RETURNS TABLE
-# ------------------------
+# ========================
+# LOAD DATA
+# ========================
+prices = load_prices(ALL_TICKERS)
+
 returns = pd.DataFrame({
-    "1D": prices.apply(lambda x: safe_pct_change(x, 1)),
-    "1W": prices.apply(lambda x: safe_pct_change(x, 5)),
-    "1M": prices.apply(lambda x: safe_pct_change(x, 21)),
-    "3M": prices.apply(lambda x: safe_pct_change(x, 63)),
-    "6M": prices.apply(lambda x: safe_pct_change(x, 126)),
-    "1Y": prices.apply(lambda x: safe_pct_change(x, 252)),
-    "3Y": prices.apply(lambda x: safe_pct_change(x, 756)),
-    "5Y": prices.apply(lambda x: safe_pct_change(x, 1260)),
+    "1D": prices.apply(lambda x: ret(x,1)),
+    "1W": prices.apply(lambda x: ret(x,5)),
+    "1M": prices.apply(lambda x: ret(x,21)),
+    "3M": prices.apply(lambda x: ret(x,63)),
+    "6M": prices.apply(lambda x: ret(x,126)),
+    "1Y": prices.apply(lambda x: ret(x,252)),
 })
 
 rar = returns.sub(returns.loc[BENCHMARK])
-
-# ------------------------
-# COERENZA TREND
-# ------------------------
-def coerenza_trend(row):
-    score = sum([
-        row["1D"] > 0,
-        row["1W"] > 0,
-        row["1M"] > 0,
-        row["3M"] > 0,
-        row["6M"] > 0
-    ])
-    return max(score, 1)
-
 df = rar.loc[SECTORS].copy()
 
 df["Ra_momentum"] = (
-    rar["1Y"] * WEIGHTS["1Y"] +
-    rar["6M"] * WEIGHTS["6M"] +
-    rar["3M"] * WEIGHTS["3M"] +
-    rar["1M"] * WEIGHTS["1M"] +
-    rar["1W"] * WEIGHTS["1W"]
+    rar["1Y"]*WEIGHTS["1Y"] +
+    rar["6M"]*WEIGHTS["6M"] +
+    rar["3M"]*WEIGHTS["3M"] +
+    rar["1M"]*WEIGHTS["1M"] +
+    rar["1W"]*WEIGHTS["1W"]
 )
 
-df["Coerenza_Trend"] = rar.apply(coerenza_trend, axis=1).loc[SECTORS]
-df["Delta_RS_5D"] = rar["1W"].loc[SECTORS]
-
+df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
+df["Delta_RS_5D"] = df["1W"]
 df = df.sort_values("Ra_momentum", ascending=False)
-df["Classifica"] = range(1, len(df) + 1)
+df["Classifica"] = range(1, len(df)+1)
 
 def situazione(row):
-    if row["Ra_momentum"] > 0:
-        return "LEADER" if row["Coerenza_Trend"] >= 4 else "IN RECUPERO"
+    if row.Ra_momentum > 0:
+        return "LEADER" if row.Coerenza_Trend >= 4 else "IN RECUPERO"
     return "DEBOLE"
 
-def operativita(row):
-    if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
-        return "🔭 ALERT BUY"
-    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
-        return "🔥 ACCUMULA"
-    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
-        return "📈 MANTIENI"
-    if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
-        return "👀 OSSERVA"
-    return "❌ EVITA"
-
 df["Situazione"] = df.apply(situazione, axis=1)
-df["Operatività"] = df.apply(operativita, axis=1)
 
 # ========================
 # UI TABS
@@ -221,36 +183,28 @@ with tab2:
 # TAB 3 — FATTORI
 # ========================
 with tab3:
-    factor_prices = load_data(FACTOR_ETFS)
+    factor_prices = load_prices(FACTOR_ETFS)
+    f = pd.DataFrame(index=FACTOR_ETFS)
 
-    df = pd.DataFrame(index=FACTOR_ETFS)
-
-    df["Prezzo"] = factor_prices.iloc[-1].round(2)
-
-    df["1D"]  = factor_prices.apply(lambda x: ret(x, 1))
-    df["1W"]  = factor_prices.apply(lambda x: ret(x, 5))
-    df["1M"]  = factor_prices.apply(lambda x: ret(x, 21))
-    df["3M"]  = factor_prices.apply(lambda x: ret(x, 63))
-    df["6M"]  = factor_prices.apply(lambda x: ret(x, 126))
-    df["1A"]  = factor_prices.apply(lambda x: ret(x, 252))
-    df["YTD"] = factor_prices.apply(ret_ytd)
-    df["3A"]  = factor_prices.apply(lambda x: ret(x, 756))
-    df["5A"]  = factor_prices.apply(lambda x: ret(x, 1260))
-
-    df = df.round(2)
+    f["Prezzo"] = factor_prices.iloc[-1].round(2)
+    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
+    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
+    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
+    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
+    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
+    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+    f["YTD"] = factor_prices.apply(ret_ytd)
+    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
+    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
 
     def style(row):
         if row.name in FACTOR_COMPARISON:
-            return ["background-color:#1e1e1e;color:#cccccc"] * len(row)
-        return ["background-color:#000000;color:white"] * len(row)
+            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
+        return ["background-color:#000;color:white"]*len(row)
 
     st.dataframe(
-        df.style
+        f.round(2).style
         .apply(style, axis=1)
-        .format({
-            "Prezzo": "{:.2f}",
-            **{c: "{:+.2f}%" for c in df.columns if c != "Prezzo"}
-        }),
+        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
         use_container_width=True
     )
-
