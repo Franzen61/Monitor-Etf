@@ -35,20 +35,16 @@ SECTORS = [
     "XLK", "XLY", "XLF", "XLC", "XLV",
     "XLP", "XLI", "XLE", "XLB", "XLU", "XLRE"
 ]
+
 BENCHMARK = "SPY"
 ALL_TICKERS = SECTORS + [BENCHMARK]
 
-# ETF FATTORIALI
 FACTOR_ETFS = [
-    "MVOL.MI",
-    "IWQU.MI",
-    "IWMO.MI",
-    "IWVL.MI",
-    "ZPRV.DE",
-    "SWDA",
-    "IQSA"
+    "MVOL.MI", "IWQU.MI", "IWMO.MI", "IWVL.MI",
+    "ZPRV.DE", "SWDA", "IQSA"
 ]
-FACTOR_BENCHMARKS = ["SWDA", "IQSA"]
+
+FACTOR_COMPARISON = ["SWDA", "IQSA"]
 
 WEIGHTS = {
     "1Y": 0.15,
@@ -64,7 +60,7 @@ WEIGHTS = {
 @st.cache_data
 def load_data(tickers):
     end = datetime.today()
-    start = end - timedelta(days=5 * 365)
+    start = end - timedelta(days=6 * 365)
 
     raw = yf.download(
         tickers,
@@ -80,35 +76,44 @@ def load_data(tickers):
         elif "Close" in raw.columns.levels[0]:
             prices = raw["Close"]
         else:
-            raise ValueError("Né 'Adj Close' né 'Close' trovati nei dati Yahoo")
+            raise ValueError("Né Adj Close né Close trovati")
     else:
         prices = raw
 
-    return prices.dropna()
+    return prices.dropna(how="all")
 
 prices = load_data(ALL_TICKERS)
-factor_prices = load_data(FACTOR_ETFS)
 
 # ------------------------
-# RETURNS SETTORI
+# SAFE RETURNS
 # ------------------------
-def pct_change(data, days):
-    return data.pct_change(days).iloc[-1] * 100
+def safe_pct_change(data, days):
+    if len(data) <= days:
+        return np.nan
+    return (data.iloc[-1] / data.iloc[-days-1] - 1) * 100
 
+def safe_ytd(data):
+    if data.empty:
+        return np.nan
+    ytd = data[data.index.year == datetime.today().year]
+    if len(ytd) < 2:
+        return np.nan
+    return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
+
+# ------------------------
+# RETURNS TABLE
+# ------------------------
 returns = pd.DataFrame({
-    "1D": pct_change(prices, 1),
-    "1W": pct_change(prices, 5),
-    "1M": pct_change(prices, 21),
-    "3M": pct_change(prices, 63),
-    "6M": pct_change(prices, 126),
-    "1Y": pct_change(prices, 252),
-    "3Y": pct_change(prices, 756),
-    "5Y": pct_change(prices, 1260),
+    "1D": prices.apply(lambda x: safe_pct_change(x, 1)),
+    "1W": prices.apply(lambda x: safe_pct_change(x, 5)),
+    "1M": prices.apply(lambda x: safe_pct_change(x, 21)),
+    "3M": prices.apply(lambda x: safe_pct_change(x, 63)),
+    "6M": prices.apply(lambda x: safe_pct_change(x, 126)),
+    "1Y": prices.apply(lambda x: safe_pct_change(x, 252)),
+    "3Y": prices.apply(lambda x: safe_pct_change(x, 756)),
+    "5Y": prices.apply(lambda x: safe_pct_change(x, 1260)),
 })
 
-# ------------------------
-# RAR
-# ------------------------
 rar = returns.sub(returns.loc[BENCHMARK])
 
 # ------------------------
@@ -145,8 +150,6 @@ def situazione(row):
         return "LEADER" if row["Coerenza_Trend"] >= 4 else "IN RECUPERO"
     return "DEBOLE"
 
-df["Situazione"] = df.apply(situazione, axis=1)
-
 def operativita(row):
     if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
         return "🔭 ALERT BUY"
@@ -158,15 +161,16 @@ def operativita(row):
         return "👀 OSSERVA"
     return "❌ EVITA"
 
+df["Situazione"] = df.apply(situazione, axis=1)
 df["Operatività"] = df.apply(operativita, axis=1)
 
 # ------------------------
-# UI TABS
+# UI
 # ------------------------
 tab1, tab2, tab3 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
-    "📐 Fattori"
+    "📊 Fattori"
 ])
 
 # ========================
@@ -206,28 +210,28 @@ with tab1:
 # TAB 2
 # ========================
 with tab2:
-    st.subheader("Andamento Settoriale")
-
     selected = st.multiselect("Seleziona ETF", SECTORS, default=SECTORS)
     tf = st.selectbox("Timeframe", ["1W", "1M", "3M", "6M", "1Y", "3Y", "5Y"])
 
     days_map = {
         "1W": 5, "1M": 21, "3M": 63,
-        "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260
+        "6M": 126, "1Y": 252,
+        "3Y": 756, "5Y": 1260
     }
 
-    slice_ = prices.iloc[-days_map[tf]:]
-    norm = (slice_ / slice_.iloc[0] - 1) * 100
+    slice_prices = prices.iloc[-days_map[tf]:]
+    norm = (slice_prices / slice_prices.iloc[0] - 1) * 100
 
     fig = go.Figure()
     for etf in selected:
-        fig.add_trace(go.Scatter(x=norm.index, y=norm[etf], name=etf, line=dict(width=2.5)))
+        fig.add_trace(go.Scatter(
+            x=norm.index, y=norm[etf],
+            name=etf, line=dict(width=2.5)
+        ))
 
     fig.add_trace(go.Scatter(
-        x=norm.index,
-        y=norm[BENCHMARK],
-        name="SPY",
-        line=dict(width=5, color="#00FF00")
+        x=norm.index, y=norm[BENCHMARK],
+        name="SPY", line=dict(width=5, color="#00FF00")
     ))
 
     fig.update_layout(
@@ -244,35 +248,27 @@ with tab2:
 # TAB 3 — FATTORI
 # ========================
 with tab3:
-    st.subheader("Performance ETF Fattoriali")
+    factor_prices = load_data(FACTOR_ETFS)
 
-    factor_df = pd.DataFrame({
-        "1D": pct_change(factor_prices, 1),
-        "1W": pct_change(factor_prices, 5),
-        "1M": pct_change(factor_prices, 21),
-        "3M": pct_change(factor_prices, 63),
-        "6M": pct_change(factor_prices, 126),
-        "1Y": pct_change(factor_prices, 252),
-        "YTD": (factor_prices.iloc[-1] /
-                factor_prices[factor_prices.index.year == datetime.today().year].iloc[0] - 1) * 100,
-        "3Y": pct_change(factor_prices, 756),
-        "5Y": pct_change(factor_prices, 1260),
-    }).round(2)
+    factor_returns = pd.DataFrame(index=FACTOR_ETFS)
+    factor_returns["1D"]  = factor_prices.apply(lambda x: safe_pct_change(x, 1))
+    factor_returns["1W"]  = factor_prices.apply(lambda x: safe_pct_change(x, 5))
+    factor_returns["1M"]  = factor_prices.apply(lambda x: safe_pct_change(x, 21))
+    factor_returns["3M"]  = factor_prices.apply(lambda x: safe_pct_change(x, 63))
+    factor_returns["6M"]  = factor_prices.apply(lambda x: safe_pct_change(x, 126))
+    factor_returns["1A"]  = factor_prices.apply(lambda x: safe_pct_change(x, 252))
+    factor_returns["YTD"] = factor_prices.apply(safe_ytd)
+    factor_returns["3A"]  = factor_prices.apply(lambda x: safe_pct_change(x, 756))
+    factor_returns["5A"]  = factor_prices.apply(lambda x: safe_pct_change(x, 1260))
 
-    def highlight_rows(row):
-        if row.name in FACTOR_BENCHMARKS:
-            return ["background-color: #1f1f1f"] * len(row)
-        return [""] * len(row)
+    factor_returns = factor_returns.round(2)
 
-    styled = (
-        factor_df
-        .style
-        .apply(highlight_rows, axis=1)
-        .set_properties(**{
-            "color": "white",
-            "background-color": "#000000",
-            "border-color": "#333"
-        })
+    def style_rows(row):
+        if row.name in FACTOR_COMPARISON:
+            return ["background-color: #1e1e1e; color: #cccccc"] * len(row)
+        return ["background-color: #000000; color: white"] * len(row)
+
+    st.dataframe(
+        factor_returns.style.apply(style_rows, axis=1),
+        use_container_width=True
     )
-
-    st.dataframe(styled, use_container_width=True)
