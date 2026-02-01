@@ -93,24 +93,37 @@ rar = returns.sub(returns.loc[BENCHMARK])
 df = rar.loc[SECTORS].copy()
 
 df["Ra_momentum"] = (
-    rar["1Y"]*WEIGHTS["1Y"] +
-    rar["6M"]*WEIGHTS["6M"] +
-    rar["3M"]*WEIGHTS["3M"] +
-    rar["1M"]*WEIGHTS["1M"] +
-    rar["1W"]*WEIGHTS["1W"]
+    rar["1Y"] * WEIGHTS["1Y"] +
+    rar["6M"] * WEIGHTS["6M"] +
+    rar["3M"] * WEIGHTS["3M"] +
+    rar["1M"] * WEIGHTS["1M"] +
+    rar["1W"] * WEIGHTS["1W"]
 )
 
-df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
-df["Delta_RS_5D"] = df["1W"]
+df["Coerenza_Trend"] = rar.apply(coerenza_trend, axis=1).loc[SECTORS]
+df["Delta_RS_5D"] = rar["1W"].loc[SECTORS]
+
 df = df.sort_values("Ra_momentum", ascending=False)
-df["Classifica"] = range(1, len(df)+1)
+df["Classifica"] = range(1, len(df) + 1)
 
 def situazione(row):
-    if row.Ra_momentum > 0:
-        return "LEADER" if row.Coerenza_Trend >= 4 else "IN RECUPERO"
+    if row["Ra_momentum"] > 0:
+        return "LEADER" if row["Coerenza_Trend"] >= 4 else "IN RECUPERO"
     return "DEBOLE"
 
+def operativita(row):
+    if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
+        return "🔭 ALERT BUY"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
+        return "🔥 ACCUMULA"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
+        return "📈 MANTIENI"
+    if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
+        return "👀 OSSERVA"
+    return "❌ EVITA"
+
 df["Situazione"] = df.apply(situazione, axis=1)
+df["Operatività"] = df.apply(operativita, axis=1)
 
 # ========================
 # UI TABS
