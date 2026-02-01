@@ -223,3 +223,101 @@ with tab3:
         .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
         use_container_width=True
     )
+    
+    # NUOVO GRAFICO A COLONNE PER I FATTORI
+    st.divider()
+    st.subheader("📊 Confronto Grafico Fattori")
+    
+    # Selettori per i ticker e timeframe
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_factors = st.multiselect(
+            "Seleziona Fattori", 
+            FACTOR_ETFS, 
+            default=FACTOR_COMPARISON
+        )
+    
+    with col2:
+        selected_timeframes = st.multiselect(
+            "Seleziona Timeframe",
+            ["1W", "1M", "3M", "6M"],
+            default=["1W", "1M", "3M", "6M"]
+        )
+    
+    if selected_factors and selected_timeframes:
+        # Crea dataframe per il grafico
+        chart_data = f.loc[selected_factors, selected_timeframes].T
+        
+        # Crea il grafico a barre
+        fig = go.Figure()
+        
+        # Colori per i ticker
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+        
+        # Aggiungi barre per ogni ticker
+        for i, ticker in enumerate(selected_factors):
+            # Ottieni il colore (cicla se ci sono più ticker che colori)
+            color_idx = i % len(colors)
+            
+            # Crea array di colori per questo ticker
+            ticker_colors = []
+            for timeframe in selected_timeframes:
+                # Controlla se questo valore è il massimo per questo timeframe
+                max_val = chart_data.loc[timeframe].max()
+                current_val = chart_data.loc[timeframe, ticker]
+                
+                # Se è il massimo (entro una tolleranza piccola per floating point)
+                if abs(current_val - max_val) < 0.0001:
+                    ticker_colors.append('#00FF00')  # Verde fluo
+                else:
+                    ticker_colors.append(colors[color_idx])
+            
+            fig.add_trace(go.Bar(
+                name=ticker,
+                x=selected_timeframes,
+                y=chart_data[ticker].values,
+                marker_color=ticker_colors,
+                text=chart_data[ticker].round(2).astype(str) + '%',
+                textposition='outside',
+                textfont=dict(color='white')
+            ))
+        
+        # Layout del grafico
+        fig.update_layout(
+            title="Confronto Performance Fattori",
+            xaxis_title="Timeframe",
+            yaxis_title="Rendimento %",
+            barmode='group',
+            paper_bgcolor="#000",
+            plot_bgcolor="#000",
+            font_color="white",
+            height=500,
+            showlegend=True,
+            xaxis=dict(
+                tickfont=dict(size=14),
+                titlefont=dict(size=16)
+            ),
+            yaxis=dict(
+                tickfont=dict(size=14),
+                titlefont=dict(size=16),
+                gridcolor='#333'
+            ),
+            legend=dict(
+                font=dict(size=12)
+            )
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Legenda colori
+        st.markdown("""
+        <div style="background-color: #1a1a1a; padding: 10px; border-radius: 5px; margin-top: 10px;">
+        <small>
+        <strong>Legenda:</strong><br>
+        • <span style="color:#00FF00">Colonna verde fluo</span>: Valore massimo per quel timeframe<br>
+        • Le barre mostrano il rendimento percentuale cumulativo per ogni timeframe
+        </small>
+        </div>
+        """, unsafe_allow_html=True)
+    elif not selected_factors:
+        st.warning("Seleziona almeno un fattore per visualizzare il grafico.")
