@@ -214,7 +214,7 @@ with tab3:
 
     def style(row):
         if row.name in FACTOR_COMPARISON:
-            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
+            return ["background-color:#1e1e1a;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
 
     st.dataframe(
@@ -249,7 +249,7 @@ with tab3:
         chart_data = f.loc[selected_factors, selected_timeframes].T
         
         # Crea il grafico a barre
-        fig = go.Figure()
+        fig2 = go.Figure()
         
         # Colori per i ticker
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
@@ -272,7 +272,7 @@ with tab3:
                 else:
                     ticker_colors.append(colors[color_idx])
             
-            fig.add_trace(go.Bar(
+            fig2.add_trace(go.Bar(
                 name=ticker,
                 x=selected_timeframes,
                 y=chart_data[ticker].values,
@@ -282,8 +282,8 @@ with tab3:
                 textfont=dict(color='white')
             ))
         
-        # Layout del grafico
-        fig.update_layout(
+        # Layout del grafico (CORRETTO)
+        fig2.update_layout(
             title="Confronto Performance Fattori",
             xaxis_title="Timeframe",
             yaxis_title="Rendimento %",
@@ -307,7 +307,7 @@ with tab3:
             )
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True)
         
         # Legenda colori
         st.markdown("""
