@@ -101,4 +101,110 @@ df["Ra_momentum"] = (
 )
 
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
-df["Delta_RS_5D"] = df["]()
+df["Delta_RS_5D"] = df["1W"]
+df = df.sort_values("Ra_momentum", ascending=False)
+df["Classifica"] = range(1, len(df)+1)
+
+def situazione(row):
+    if row.Ra_momentum > 0:
+        return "LEADER" if row.Coerenza_Trend >= 4 else "IN RECUPERO"
+    return "DEBOLE"
+
+df["Situazione"] = df.apply(situazione, axis=1)
+
+# ========================
+# UI TABS
+# ========================
+tab1, tab2, tab3 = st.tabs([
+    "📊 Dashboard Settoriale",
+    "📈 Andamento Settoriale",
+    "📊 Fattori"
+])
+
+# ========================
+# TAB 1 — DASHBOARD
+# ========================
+with tab1:
+    col1, col2 = st.columns([1.2,1])
+
+    with col1:
+        fig = go.Figure()
+        for t in ALL_TICKERS:
+            fig.add_bar(x=[t], y=[returns.loc[t,"1D"]])
+        fig.update_layout(
+            height=300,
+            paper_bgcolor="#000",
+            plot_bgcolor="#000",
+            font_color="white",
+            title="Variazione % Giornaliera"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        for t,row in df.head(3).iterrows():
+            st.markdown(f"""
+            <div class="leader-box">
+                <div class="leader-ticker">{t}</div>
+                <div class="leader-mom">Ra Momentum: {row.Ra_momentum:.2f}</div>
+                <div>{row.Situazione}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.dataframe(df.round(2), use_container_width=True)
+
+# ========================
+# TAB 2 — ANDAMENTO
+# ========================
+with tab2:
+    selected = st.multiselect("ETF", SECTORS, default=SECTORS)
+    tf = st.selectbox("Timeframe", ["1W","1M","3M","6M","1Y","3Y","5Y"])
+
+    days = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
+    slice_ = prices.iloc[-days:]
+    norm = (slice_ / slice_.iloc[0] - 1) * 100
+
+    fig = go.Figure()
+    for t in selected:
+        fig.add_trace(go.Scatter(x=norm.index, y=norm[t], name=t, line=dict(width=2)))
+    fig.add_trace(go.Scatter(
+        x=norm.index, y=norm[BENCHMARK],
+        name="SPY", line=dict(width=4, color="#00FF00")
+    ))
+
+    fig.update_layout(
+        paper_bgcolor="#000",
+        plot_bgcolor="#000",
+        font_color="white",
+        yaxis_title="Variazione %"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# ========================
+# TAB 3 — FATTORI
+# ========================
+with tab3:
+    factor_prices = load_prices(FACTOR_ETFS)
+    f = pd.DataFrame(index=FACTOR_ETFS)
+
+    f["Prezzo"] = factor_prices.iloc[-1].round(2)
+    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
+    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
+    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
+    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
+    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
+    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+    f["YTD"] = factor_prices.apply(ret_ytd)
+    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
+    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+
+    def style(row):
+        if row.name in FACTOR_COMPARISON:
+            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
+        return ["background-color:#000;color:white"]*len(row)
+
+    st.dataframe(
+        f.round(2).style
+        .apply(style, axis=1)
+        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
+        use_container_width=True
+    )
