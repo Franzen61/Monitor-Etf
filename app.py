@@ -38,6 +38,18 @@ SECTORS = [
 BENCHMARK = "SPY"
 ALL_TICKERS = SECTORS + [BENCHMARK]
 
+# ETF FATTORIALI
+FACTOR_ETFS = [
+    "MVOL.MI",
+    "IWQU.MI",
+    "IWMO.MI",
+    "IWVL.MI",
+    "ZPRV.DE",
+    "SWDA",
+    "IQSA"
+]
+FACTOR_BENCHMARKS = ["SWDA", "IQSA"]
+
 WEIGHTS = {
     "1Y": 0.15,
     "6M": 0.25,
@@ -50,19 +62,18 @@ WEIGHTS = {
 # DATA DOWNLOAD (ROBUSTO)
 # ------------------------
 @st.cache_data
-def load_data():
+def load_data(tickers):
     end = datetime.today()
     start = end - timedelta(days=5 * 365)
 
     raw = yf.download(
-        ALL_TICKERS,
+        tickers,
         start=start,
         end=end,
         progress=False,
         auto_adjust=False
     )
 
-    # --- GESTIONE ROBUSTA COLONNE ---
     if isinstance(raw.columns, pd.MultiIndex):
         if "Adj Close" in raw.columns.levels[0]:
             prices = raw["Adj Close"]
@@ -75,24 +86,24 @@ def load_data():
 
     return prices.dropna()
 
-
-prices = load_data()
+prices = load_data(ALL_TICKERS)
+factor_prices = load_data(FACTOR_ETFS)
 
 # ------------------------
-# RETURNS
+# RETURNS SETTORI
 # ------------------------
-def pct_change(days):
-    return prices.pct_change(days).iloc[-1] * 100
+def pct_change(data, days):
+    return data.pct_change(days).iloc[-1] * 100
 
 returns = pd.DataFrame({
-    "1D": pct_change(1),
-    "1W": pct_change(5),
-    "1M": pct_change(21),
-    "3M": pct_change(63),
-    "6M": pct_change(126),
-    "1Y": pct_change(252),
-    "3Y": pct_change(756),
-    "5Y": pct_change(1260),
+    "1D": pct_change(prices, 1),
+    "1W": pct_change(prices, 5),
+    "1M": pct_change(prices, 21),
+    "3M": pct_change(prices, 63),
+    "6M": pct_change(prices, 126),
+    "1Y": pct_change(prices, 252),
+    "3Y": pct_change(prices, 756),
+    "5Y": pct_change(prices, 1260),
 })
 
 # ------------------------
@@ -101,7 +112,7 @@ returns = pd.DataFrame({
 rar = returns.sub(returns.loc[BENCHMARK])
 
 # ------------------------
-# COERENZA TREND (PESATA)
+# COERENZA TREND
 # ------------------------
 def coerenza_trend(row):
     score = sum([
@@ -113,9 +124,6 @@ def coerenza_trend(row):
     ])
     return max(score, 1)
 
-# ------------------------
-# DATAFRAME FINALE
-# ------------------------
 df = rar.loc[SECTORS].copy()
 
 df["Ra_momentum"] = (
@@ -153,9 +161,13 @@ def operativita(row):
 df["Operatività"] = df.apply(operativita, axis=1)
 
 # ------------------------
-# UI
+# UI TABS
 # ------------------------
-tab1, tab2 = st.tabs(["📊 Dashboard Settoriale", "📈 Andamento Settoriale"])
+tab1, tab2, tab3 = st.tabs([
+    "📊 Dashboard Settoriale",
+    "📈 Andamento Settoriale",
+    "📐 Fattori"
+])
 
 # ========================
 # TAB 1
@@ -163,14 +175,11 @@ tab1, tab2 = st.tabs(["📊 Dashboard Settoriale", "📈 Andamento Settoriale"])
 with tab1:
     col_left, col_right = st.columns([1.3, 1])
 
-    # ---- BAR CHART DAILY ----
     with col_left:
         daily = returns.loc[ALL_TICKERS, "1D"]
-
         fig_bar = go.Figure()
         for t in ALL_TICKERS:
-            fig_bar.add_bar(x=[t], y=[daily[t]], name=t)
-
+            fig_bar.add_bar(x=[t], y=[daily[t]])
         fig_bar.update_layout(
             height=300,
             title="Variazione % Giornaliera",
@@ -181,7 +190,6 @@ with tab1:
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ---- LEADER BOX ----
     with col_right:
         for ticker, row in df.head(3).iterrows():
             st.markdown(f"""
@@ -200,40 +208,21 @@ with tab1:
 with tab2:
     st.subheader("Andamento Settoriale")
 
-    selected = st.multiselect(
-        "Seleziona ETF",
-        SECTORS,
-        default=SECTORS
-    )
-
+    selected = st.multiselect("Seleziona ETF", SECTORS, default=SECTORS)
     tf = st.selectbox("Timeframe", ["1W", "1M", "3M", "6M", "1Y", "3Y", "5Y"])
 
     days_map = {
-        "1W": 5,
-        "1M": 21,
-        "3M": 63,
-        "6M": 126,
-        "1Y": 252,
-        "3Y": 756,
-        "5Y": 1260
+        "1W": 5, "1M": 21, "3M": 63,
+        "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260
     }
 
-    prices_slice = prices.iloc[-days_map[tf]:]
-
-    # ORIGINE = 0 (VARIAZIONE %)
-    norm = (prices_slice / prices_slice.iloc[0] - 1) * 100
+    slice_ = prices.iloc[-days_map[tf]:]
+    norm = (slice_ / slice_.iloc[0] - 1) * 100
 
     fig = go.Figure()
-
     for etf in selected:
-        fig.add_trace(go.Scatter(
-            x=norm.index,
-            y=norm[etf],
-            name=etf,
-            line=dict(width=2.5)
-        ))
+        fig.add_trace(go.Scatter(x=norm.index, y=norm[etf], name=etf, line=dict(width=2.5)))
 
-    # SPY — VERDE FLUO
     fig.add_trace(go.Scatter(
         x=norm.index,
         y=norm[BENCHMARK],
@@ -250,3 +239,40 @@ with tab2:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+# ========================
+# TAB 3 — FATTORI
+# ========================
+with tab3:
+    st.subheader("Performance ETF Fattoriali")
+
+    factor_df = pd.DataFrame({
+        "1D": pct_change(factor_prices, 1),
+        "1W": pct_change(factor_prices, 5),
+        "1M": pct_change(factor_prices, 21),
+        "3M": pct_change(factor_prices, 63),
+        "6M": pct_change(factor_prices, 126),
+        "1Y": pct_change(factor_prices, 252),
+        "YTD": (factor_prices.iloc[-1] /
+                factor_prices[factor_prices.index.year == datetime.today().year].iloc[0] - 1) * 100,
+        "3Y": pct_change(factor_prices, 756),
+        "5Y": pct_change(factor_prices, 1260),
+    }).round(2)
+
+    def highlight_rows(row):
+        if row.name in FACTOR_BENCHMARKS:
+            return ["background-color: #1f1f1f"] * len(row)
+        return [""] * len(row)
+
+    styled = (
+        factor_df
+        .style
+        .apply(highlight_rows, axis=1)
+        .set_properties(**{
+            "color": "white",
+            "background-color": "#000000",
+            "border-color": "#333"
+        })
+    )
+
+    st.dataframe(styled, use_container_width=True)
