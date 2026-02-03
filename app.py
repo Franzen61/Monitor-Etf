@@ -179,7 +179,7 @@ with tab1:
             font_color="white",
             title="Variazione % Giornaliera"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with col2:
         for t,row in df.head(3).iterrows():
@@ -192,7 +192,7 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
-    st.dataframe(df.round(2), use_container_width=True)
+    st.dataframe(df.round(2), width='stretch')
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -219,7 +219,7 @@ with tab2:
         font_color="white",
         yaxis_title="Variazione %"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # ========================
 # TAB 3 — FATTORI
@@ -260,7 +260,7 @@ with tab3:
         .apply(style, axis=1)
         .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
         .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
-        use_container_width=True
+        width='stretch'
     )
 
 # ========================
@@ -323,7 +323,13 @@ with tab4:
     # ROTATION SCORE — SPARKLINE 12 MESI (INTERVENTO 2)
     # ========================
     rotation_series = compute_rotation_score_series(prices)
-    rotation_12m = rotation_series.last("365D")
+    
+    # CORREZIONE: sostituzione del metodo deprecato .last("365D")
+    if not rotation_series.empty:
+        cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
+        rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
+    else:
+        rotation_12m = rotation_series
 
     fig_rs = go.Figure()
 
@@ -350,7 +356,7 @@ with tab4:
         xaxis_title=""
     )
 
-    st.plotly_chart(fig_rs, use_container_width=True)
+    st.plotly_chart(fig_rs, width='stretch')
 
     # ========================
     # DIDASCALIA DINAMICA
