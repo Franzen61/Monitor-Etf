@@ -1,358 +1,318 @@
 import streamlit as st
 import pandas as pd
-import yfinance as yf
-from datetime import datetime, timedelta
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import numpy as np
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import schedule
-import time
-from threading import Thread
+import yfinance as yf
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
-# CONFIGURAZIONE
-st.set_page_config(page_title="Monitor ETF", layout="wide")
+# ========================
+# CONFIG & STYLE
+# ========================
+st.set_page_config(layout="wide", page_title="Financial Terminal")
 
-# DEFINIZIONI
-BENCHMARK = 'SWDA.MI'
-ETF_LIST = {
-    "SWDA.MI": "MSCI World",
-    "EIMI.MI": "Emerging Markets",
-    "IQQH.MI": "NASDAQ 100",
-    "CAC40.PA": "Francia CAC40",
-    "EXSA.MI": "Euro Stoxx 50",
-    "QDVS.MI": "S&P500 Value",
-    "QDVX.MI": "Euro Stoxx Value",
-    "IUSN.MI": "MSCI World Small Cap",
-    "SGLD.MI": "Oro Fisico",
-    "FTSEMIB.MI": "Italia FTSE MIB",
+st.markdown("""
+<style>
+.main { background-color: #000000; color: #ffffff; }
+.leader-box {
+    background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 12px;
 }
-FACTOR_LIST = {
-    "QUALITY": ["QDVS.MI", "QDVX.MI", "IQQH.MI"],
-    "VALUE": ["QDVS.MI", "QDVX.MI"],
-    "MOMENTUM": ["IQQH.MI", "CAC40.PA"],
-    "SIZE": ["IUSN.MI"],
-    "VOLATILITY": ["SGLD.MI", "EIMI.MI"],
+.leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }
+.leader-mom { color: #00ff00; font-family: monospace; }
+.rotation-box {
+    text-align:center;
+    padding:40px;
+    border-radius:12px;
+    font-size:32px;
+    font-weight:bold;
 }
-CYCLICAL = ["IQQH.MI", "CAC40.PA", "FTSEMIB.MI", "EIMI.MI"]
-DEFENSIVE = ["SGLD.MI", "EXSA.MI", "QDVS.MI"]
-ALL_ETF = list(ETF_LIST.keys())
+</style>
+""", unsafe_allow_html=True)
 
-# FUNZIONI DI CALCOLO
-def fetch_prices(tickers, period="2y"):
-    data = yf.download(tickers, period=period, progress=False)['Adj Close']
-    return data
+# ========================
+# TICKERS
+# ========================
+SECTORS = ["XLK","XLY","XLF","XLC","XLV","XLP","XLI","XLE","XLB","XLU","XLRE"]
+BENCHMARK = "SPY"
+ALL_TICKERS = SECTORS + [BENCHMARK]
 
-def calculate_returns(prices, periods):
-    returns = {}
-    for name, days in periods.items():
-        returns[name] = prices.pct_change(days) * 100
-    return returns
+CYCLICAL = ["XLK","XLY","XLF","XLI","XLB","XLE"]
+DEFENSIVE = ["XLV","XLP","XLU","XLRE"]
 
-def calculate_rsi(prices, window=14):
-    delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+FACTOR_ETFS = [
+    "MVOL.MI","IWQU.MI","IWMO.MI","IWVL.MI",
+    "IUSN.DE","SWDA.MI","IQSA.MI"
+]
+FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 
-def calculate_ema(prices, window=200):
-    return prices.ewm(span=window, adjust=False).mean()
+WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
-def compute_rotation_score_series(prices):
-    """Calcola lo storico del Rotation Score"""
-    ret_1m = prices.pct_change(21)
-    ret_3m = prices.pct_change(63)
-    ret_6m = prices.pct_change(126)
+# ========================
+# DATA LOADER
+# ========================
+@st.cache_data
+def load_prices(tickers):
+    end = datetime.today()
+    start = end - timedelta(days=6*365)
 
-    rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
-    rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
-    rar_6m = ret_6m.sub(ret_6m[BENCHMARK], axis=0)
+    data = yf.download(
+        tickers,
+        start=start,
+        end=end,
+        auto_adjust=True,
+        progress=False
+    )
 
-    rar_mean = (rar_1m + rar_3m + rar_6m) / 3
+    if isinstance(data.columns, pd.MultiIndex):
+        data = data["Close"]
 
-    cyc = rar_mean[CYCLICAL].mean(axis=1)
-    def_ = rar_mean[DEFENSIVE].mean(axis=1)
+    return data.dropna(how="all")
 
-    rotation_score = (cyc - def_) * 100
-    return rotation_score.dropna()
+# ========================
+# RETURN FUNCTIONS
+# ========================
+def ret(data, days):
+    if len(data) <= days:
+        return np.nan
+    return (data.iloc[-1] / data.iloc[-days-1] - 1) * 100
 
+def ret_ytd(data):
+    ytd = data[data.index.year == datetime.today().year]
+    if len(ytd) < 2:
+        return np.nan
+    return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
+
+# ========================
 # LOAD DATA
-@st.cache_data(ttl=3600)
-def load_data():
-    prices = fetch_prices(ALL_ETF)
-    returns = calculate_returns(prices, {
-        "1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252
-    })
-    rsi = calculate_rsi(prices)
-    ema = calculate_ema(prices)
-    return prices, returns, rsi, ema
+# ========================
+prices = load_prices(ALL_TICKERS)
 
-prices, returns, rsi, ema = load_data()
+returns = pd.DataFrame({
+    "1D": prices.apply(lambda x: ret(x,1)),
+    "1W": prices.apply(lambda x: ret(x,5)),
+    "1M": prices.apply(lambda x: ret(x,21)),
+    "3M": prices.apply(lambda x: ret(x,63)),
+    "6M": prices.apply(lambda x: ret(x,126)),
+})
 
-# INTERFACCIA
-st.title("📊 Monitor ETF - Dashboard")
-st.markdown("---")
+rar = returns.sub(returns.loc[BENCHMARK])
+df = rar.loc[SECTORS].copy()
 
-# TAB 1: PANORAMICA
-tab1, tab2, tab3, tab4 = st.tabs(["📈 Panoramica", "📊 ETF Singoli", "🎯 Fattori", "🔄 Rotazione"])
+df["Ra_momentum"] = (
+    df["1M"]*WEIGHTS["1M"] +
+    df["3M"]*WEIGHTS["3M"] +
+    df["6M"]*WEIGHTS["6M"]
+)
 
+df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
+df["Delta_RS_5D"] = df["1W"]
+df = df.sort_values("Ra_momentum", ascending=False)
+df["Classifica"] = range(1, len(df)+1)
+
+def situazione(row):
+    if row.Ra_momentum > 0:
+        return "LEADER" if row.Coerenza_Trend >= 4 else "IN RECUPERO"
+    return "DEBOLE"
+
+df["Situazione"] = df.apply(situazione, axis=1)
+
+def operativita(row):
+    if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
+        return "🔭 ALERT BUY"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
+        return "🔥 ACCUMULA"
+    if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
+        return "📈 MANTIENI"
+    if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
+        return "👀 OSSERVA"
+    return "❌ EVITA"
+
+df["Operatività"] = df.apply(operativita, axis=1)
+
+# ========================
+# UI TABS
+# ========================
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Dashboard Settoriale",
+    "📈 Andamento Settoriale",
+    "📊 Fattori",
+    "🔄 Rotazione Settoriale"
+])
+
+# ========================
+# TAB 1 — DASHBOARD
+# ========================
 with tab1:
-    col1, col2 = st.columns([2, 1])
-    
+    col1, col2 = st.columns([1.2,1])
+
     with col1:
-        st.subheader("Andamento Premi/Ribassi")
         fig = go.Figure()
-        for etf in ALL_ETF[:5]:
-            fig.add_trace(go.Scatter(x=prices.index, y=prices[etf], name=ETF_LIST[etf],
-                                    line=dict(width=2)))
-        fig.update_layout(height=400, template="plotly_dark")
+        for t in ALL_TICKERS:
+            fig.add_bar(x=[t], y=[returns.loc[t,"1D"]])
+        fig.update_layout(
+            height=300,
+            paper_bgcolor="#000",
+            plot_bgcolor="#000",
+            font_color="white",
+            title="Variazione % Giornaliera"
+        )
         st.plotly_chart(fig, use_container_width=True)
-    
+
     with col2:
-        st.subheader("RSI Attuale")
-        latest_rsi = rsi.iloc[-1]
-        for etf in ["IQQH.MI", "SWDA.MI", "EIMI.MI"]:
-            val = latest_rsi[etf]
-            color = "red" if val > 70 else "green" if val < 30 else "gray"
-            st.metric(f"{ETF_LIST[etf]}", f"{val:.1f}", delta_color="off")
+        for t,row in df.head(3).iterrows():
+            st.markdown(f"""
+            <div class="leader-box">
+                <div class="leader-ticker">{t}</div>
+                <div class="leader-mom">Ra Momentum: {row.Ra_momentum:.2f}</div>
+                <div>Operatività: {row.Operatività}</div>
+                <div>{row.Situazione}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
+    st.dataframe(df.round(2), use_container_width=True)
+
+# ========================
+# TAB 2 — ANDAMENTO
+# ========================
 with tab2:
-    selected_etf = st.selectbox("Seleziona ETF", list(ETF_LIST.keys()),
-                               format_func=lambda x: f"{x} - {ETF_LIST[x]}")
-    
-    if selected_etf:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            current_price = prices[selected_etf].iloc[-1]
-            prev_price = prices[selected_etf].iloc[-2]
-            change_pct = (current_price - prev_price) / prev_price * 100
-            st.metric("Prezzo Attuale", f"€{current_price:.2f}",
-                     f"{change_pct:+.2f}%")
-        
-        with col2:
-            rsi_val = rsi[selected_etf].iloc[-1]
-            st.metric("RSI (14)", f"{rsi_val:.1f}")
-        
-        with col3:
-            ema_val = ema[selected_etf].iloc[-1]
-            above_ema = current_price > ema_val
-            st.metric("EMA 200", f"€{ema_val:.2f}",
-                     "Sopra" if above_ema else "Sotto")
-        
-        # Grafico prezzo
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                           vertical_spacing=0.05, row_heights=[0.7, 0.3])
-        
-        fig.add_trace(go.Scatter(x=prices.index, y=prices[selected_etf],
-                                name="Prezzo", line=dict(color="white")),
-                     row=1, col=1)
-        fig.add_trace(go.Scatter(x=ema.index, y=ema[selected_etf],
-                                name="EMA 200", line=dict(color="orange", dash="dash")),
-                     row=1, col=1)
-        
-        fig.add_trace(go.Scatter(x=rsi.index, y=rsi[selected_etf],
-                                name="RSI", line=dict(color="cyan"),
-                                fill="tozeroy"),
-                     row=2, col=1)
-        fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-        fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-        
-        fig.update_layout(height=600, template="plotly_dark", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+    selected = st.multiselect("ETF", SECTORS, default=SECTORS)
+    tf = st.selectbox("Timeframe", ["1W","1M","3M","6M","1Y","3Y","5Y"])
 
+    days = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
+    slice_ = prices.iloc[-days:]
+    norm = (slice_ / slice_.iloc[0] - 1) * 100
+
+    fig = go.Figure()
+    for t in selected:
+        fig.add_trace(go.Scatter(x=norm.index, y=norm[t], name=t))
+    fig.add_trace(go.Scatter(
+        x=norm.index, y=norm[BENCHMARK],
+        name="SPY", line=dict(width=4, color="#00FF00")
+    ))
+
+    fig.update_layout(
+        paper_bgcolor="#000",
+        plot_bgcolor="#000",
+        font_color="white",
+        yaxis_title="Variazione %"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# ========================
+# TAB 3 — FATTORI
+# ========================
 with tab3:
-    st.subheader("Performance per Fattore")
-    
-    # Calcola performance medie per fattore
-    factor_perf = {}
-    for factor, etfs in FACTOR_LIST.items():
-        perf = {}
-        for tf in ["1D", "1W", "1M", "3M", "6M", "1Y"]:
-            perf[tf] = returns[tf][etfs].mean(axis=1).iloc[-1]
-        factor_perf[factor] = perf
-    
-    # Crea DataFrame
-    f = pd.DataFrame(factor_perf).T
-    f = f[["1D", "1W", "1M", "3M", "6M", "1Y"]]
-    
-    # Aggiungi benchmark
-    bench_row = {}
-    for tf in ["1D", "1W", "1M", "3M", "6M", "1Y"]:
-        bench_row[tf] = returns[tf][BENCHMARK].iloc[-1]
-    f.loc["BENCH"] = bench_row
-    
-    # Style function originale
+    factor_prices = load_prices(FACTOR_ETFS)
+    f = pd.DataFrame(index=FACTOR_ETFS)
+
+    f["Prezzo"] = factor_prices.iloc[-1].round(2)
+    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
+    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
+    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
+    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
+    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
+    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+    f["YTD"] = factor_prices.apply(ret_ytd)
+    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
+    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+
     def style(row):
-        colors = []
-        for v in row:
-            if v > 0:
-                colors.append("color:#00FF00")
-            elif v < 0:
-                colors.append("color:#FF0000")
-            else:
-                colors.append("color:#FFFFFF")
-        return colors
-    
-    # Funzione per evidenziare il massimo - INTERVENTO 1
-    def highlight_max_column(series):
-        """Evidenzia il valore massimo in ogni colonna"""
-        is_max = series == series.max()
-        return ['background-color: #003300; color: #00FF00; font-weight: bold' 
-                if v else '' for v in is_max]
-    
-    # Applica gli stili
-    styled_df = f.round(2).style
-    
-    # Applica il colore rosso/verde per i valori
-    styled_df = styled_df.apply(style, axis=1)
-    
-    # Applica l'evidenziazione del massimo per ogni colonna
-    for col in f.columns:
-        styled_df = styled_df.apply(highlight_max_column, subset=[col])
-    
-    # Visualizza il dataframe
+        if row.name in FACTOR_COMPARISON:
+            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
+        return ["background-color:#000;color:white"]*len(row)
+
     st.dataframe(
-        styled_df.format("{:+.2f}%"),
+        f.round(2).style
+        .apply(style, axis=1)
+        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
         use_container_width=True
     )
 
+# ========================
+# TAB 4 — ROTAZIONE SETTORIALE
+# ========================
 with tab4:
-    st.subheader("Rotazione Ciclica/Defensiva")
-    
-    # Calcola Rotation Score corrente
-    def compute_rotation_score(prices):
-        ret_1m = prices.pct_change(21).iloc[-1]
-        ret_3m = prices.pct_change(63).iloc[-1]
-        ret_6m = prices.pct_change(126).iloc[-1]
-        
-        rar_1m = ret_1m - ret_1m[BENCHMARK]
-        rar_3m = ret_3m - ret_3m[BENCHMARK]
-        rar_6m = ret_6m - ret_6m[BENCHMARK]
-        
-        rar_mean = (rar_1m + rar_3m + rar_6m) / 3
-        
-        cyc = rar_mean[CYCLICAL].mean()
-        def_ = rar_mean[DEFENSIVE].mean()
-        
-        rotation_score = (cyc - def_) * 100
-        return rotation_score
-    
-    rotation = compute_rotation_score(prices)
-    
-    # Main box
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if rotation > 1.5:
-            status = "🟢 RISK ON"
-            color = "green"
-        elif rotation < -1.5:
-            status = "🔴 RISK OFF"
-            color = "red"
-        else:
-            status = "⚪ NEUTRAL"
-            color = "gray"
-        
-        st.markdown(f"""
-        <div style='text-align:center; padding:20px; border:2px solid {color};
-                    border-radius:10px; background-color:#000000;'>
-            <h3 style='color:{color}; margin:0;'>Rotation Score: {rotation:.2f}</h3>
-            <h2 style='color:{color}; margin:10px 0;'>{status}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # SPARKLINE STORICO - INTERVENTO 2
-    st.markdown("---")
-    st.subheader("Andamento Storico (12 mesi)")
-    
-    # Calcola lo storico del Rotation Score
-    rotation_series = compute_rotation_score_series(prices)
-    
-    # Prendi gli ultimi 12 mesi
-    rotation_12m = rotation_series.last("365D")
-    
-    if len(rotation_12m) > 0:
-        # Crea il grafico sparkline
-        fig_rs = go.Figure()
-        
-        # Aggiungi la linea principale
-        fig_rs.add_trace(go.Scatter(
-            x=rotation_12m.index,
-            y=rotation_12m.values,
-            mode='lines',
-            line=dict(color='#DDDDDD', width=2),
-            fill='tozeroy',
-            fillcolor='rgba(221, 221, 221, 0.1)',
-            name='Rotation Score'
-        ))
-        
-        # Aggiungi le linee di soglia
-        fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#006600", 
-                        annotation_text="Risk On", annotation_position="bottom right")
-        fig_rs.add_hline(y=0, line_dash="dash", line_color="#666666",
-                        annotation_text="Neutral", annotation_position="bottom right")
-        fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#660000",
-                        annotation_text="Risk Off", annotation_position="bottom right")
-        
-        # Layout minimalista
-        fig_rs.update_layout(
-            height=200,
-            margin=dict(l=20, r=20, t=30, b=20),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(
-                showgrid=False,
-                showticklabels=True,
-                tickformat="%b %Y"
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(100,100,100,0.2)',
-                zeroline=True,
-                zerolinecolor='rgba(100,100,100,0.5)'
-            ),
-            showlegend=False,
-            hovermode="x unified"
-        )
-        
-        # Nascondi bordi e rendi minimal
-        fig_rs.update_xaxes(showline=False, linewidth=0)
-        fig_rs.update_yaxes(showline=False, linewidth=0)
-        
-        st.plotly_chart(fig_rs, use_container_width=True, config={'displayModeBar': False})
+
+    CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
+    DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
+
+    # --- RAR medio su timeframe guida ---
+    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
+
+    cyc_score = rar_focus.loc[CYCLICALS]
+    def_score = rar_focus.loc[DEFENSIVES]
+
+    # --- Breadth ---
+    cyc_breadth = (cyc_score > 0).sum()
+    def_breadth = (def_score > 0).sum()
+
+    cyc_pct = cyc_breadth / len(CYCLICALS) * 100
+    def_pct = def_breadth / len(DEFENSIVES) * 100
+
+    # --- Rotation Score ---
+    rotation_score = cyc_score.mean() - def_score.mean()
+
+    # ========================
+    # REGIME LOGIC
+    # ========================
+    if rotation_score > 1.5 and cyc_pct >= 65:
+        regime = "🟢 ROTATION: RISK ON"
+        bg = "#003300"
+        comment = "Risk On maturo, non euforico"
+    elif rotation_score < -1.5 and def_pct >= 65:
+        regime = "🔴 ROTATION: RISK OFF"
+        bg = "#330000"
+        comment = "Fase difensiva dominante"
     else:
-        st.info("Dati insufficienti per visualizzare lo storico 12 mesi")
-    
-    # Didascalia dinamica
-    st.markdown("---")
-    if rotation > 1.5:
-        st.info("✅ **Cicliche in outperformance** - Considera aumento esposizione azionaria")
-    elif rotation < -1.5:
-        st.warning("⚠️ **Difensive in outperformance** - Considera aumento liquidità/obbligazioni")
-    else:
-        st.info("⚪ **Mercato in fase neutrale** - Mantieni asset allocation di base")
+        regime = "🟡 ROTATION: NEUTRAL"
+        bg = "#333300"
+        comment = "Rotazione poco direzionale / transizione"
 
-# SIDEBAR
-with st.sidebar:
-    st.header("Impostazioni")
-    update_freq = st.selectbox("Frequenza aggiornamento", ["Ogni ora", "Ogni 2 ore", "Ogni 6 ore"])
-    
-    st.header("Ultimo aggiornamento")
-    st.write(f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    
-    if st.button("Aggiorna ora"):
-        st.cache_data.clear()
-        st.rerun()
+    # ========================
+    # MAIN BOX
+    # ========================
+    st.markdown(f"""
+    <div style="
+        background:{bg};
+        padding:40px;
+        border-radius:12px;
+        text-align:center;
+        margin-bottom:25px;
+    ">
+        <h1>{regime}</h1>
+        <h2>Rotation Score: {rotation_score:.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-# NOTIFICHE (solo backend)
-def check_alerts():
-    # Implementazione semplificata
-    pass
+    # ========================
+    # DIDASCALIA DINAMICA
+    # ========================
+    st.markdown(f"""
+    <div style="
+        background:#0d0d0d;
+        padding:25px;
+        border-radius:10px;
+        font-size:1.05em;
+        line-height:1.6;
+    ">
 
-# Footer
-st.markdown("---")
-st.markdown("*Dati da Yahoo Finance | Aggiornamento ogni ora*")
+    <b>Motivo della rotazione</b><br>
+    La leadership relativa tra settori ciclici e difensivi su timeframe
+    1M–3M–6M definisce il regime di rischio corrente.
+
+    <br><br>
+
+    <b>Breadth settoriale</b><br>
+    Cyclicals in leadership: <b>{cyc_breadth} / {len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
+    Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+
+    <br><br>
+
+    <b>Lettura del Rotation Score</b><br>
+    {rotation_score:.2f} → <b>{comment}</b>
+
+    </div>
+    """, unsafe_allow_html=True)
