@@ -235,24 +235,85 @@ with tab3:
 # TAB 4 — ROTAZIONE SETTORIALE
 # ========================
 with tab4:
-    cyc = df.loc[CYCLICAL]["Ra_momentum"].mean()
-    defn = df.loc[DEFENSIVE]["Ra_momentum"].mean()
-    rotation_score = cyc - defn
 
-    if rotation_score > 0.5:
-        label = "🟢 ROTATION: RISK ON"
-        color = "#003300"
-    elif rotation_score < -0.5:
-        label = "🔴 ROTATION: RISK OFF"
-        color = "#330000"
+    CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
+    DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
+
+    # --- RAR medio su timeframe guida ---
+    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
+
+    cyc_score = rar_focus.loc[CYCLICALS]
+    def_score = rar_focus.loc[DEFENSIVES]
+
+    # --- Breadth ---
+    cyc_breadth = (cyc_score > 0).sum()
+    def_breadth = (def_score > 0).sum()
+
+    cyc_pct = cyc_breadth / len(CYCLICALS) * 100
+    def_pct = def_breadth / len(DEFENSIVES) * 100
+
+    # --- Rotation Score ---
+    rotation_score = cyc_score.mean() - def_score.mean()
+
+    # ========================
+    # REGIME LOGIC
+    # ========================
+    if rotation_score > 1.5 and cyc_pct >= 65:
+        regime = "🟢 ROTATION: RISK ON"
+        bg = "#003300"
+        comment = "Risk On maturo, non euforico"
+    elif rotation_score < -1.5 and def_pct >= 65:
+        regime = "🔴 ROTATION: RISK OFF"
+        bg = "#330000"
+        comment = "Fase difensiva dominante"
     else:
-        label = "🟡 ROTATION: NEUTRAL"
-        color = "#333300"
+        regime = "🟡 ROTATION: NEUTRAL"
+        bg = "#333300"
+        comment = "Rotazione poco direzionale / transizione"
 
-    st.markdown(
-        f"<div class='rotation-box' style='background:{color}'>"
-        f"{label}<br><br>"
-        f"Rotation Score: {rotation_score:.2f}"
-        f"</div>",
-        unsafe_allow_html=True
-    )
+    # ========================
+    # MAIN BOX
+    # ========================
+    st.markdown(f"""
+    <div style="
+        background:{bg};
+        padding:40px;
+        border-radius:12px;
+        text-align:center;
+        margin-bottom:25px;
+    ">
+        <h1>{regime}</h1>
+        <h2>Rotation Score: {rotation_score:.2f}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ========================
+    # DIDASCALIA DINAMICA
+    # ========================
+    st.markdown(f"""
+    <div style="
+        background:#0d0d0d;
+        padding:25px;
+        border-radius:10px;
+        font-size:1.05em;
+        line-height:1.6;
+    ">
+
+    <b>Motivo della rotazione</b><br>
+    La leadership relativa tra settori ciclici e difensivi su timeframe
+    1M–3M–6M definisce il regime di rischio corrente.
+
+    <br><br>
+
+    <b>Breadth settoriale</b><br>
+    Cyclicals in leadership: <b>{cyc_breadth} / {len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
+    Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+
+    <br><br>
+
+    <b>Lettura del Rotation Score</b><br>
+    {rotation_score:.2f} → <b>{comment}</b>
+
+    </div>
+    """, unsafe_allow_html=True)
+
