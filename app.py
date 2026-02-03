@@ -63,17 +63,8 @@ def calculate_rsi(prices, window=14):
 def calculate_ema(prices, window=200):
     return prices.ewm(span=window, adjust=False).mean()
 
-# FUNZIONE HIGHLIGHT MAX (INTERVENTO 1)
-def highlight_max(s):
-    max_val = s.max()
-    return [
-        "background-color:#003300;color:#00FF00;font-weight:bold"
-        if v == max_val else ""
-        for v in s
-    ]
-
-# FUNZIONE ROTATION SCORE SERIES (INTERVENTO 2)
 def compute_rotation_score_series(prices):
+    """Calcola lo storico del Rotation Score"""
     ret_1m = prices.pct_change(21)
     ret_3m = prices.pct_change(63)
     ret_6m = prices.pct_change(126)
@@ -207,13 +198,26 @@ with tab3:
                 colors.append("color:#FFFFFF")
         return colors
     
-    # MODIFICA INTERVENTO 1 APPLICATA
+    # Funzione per evidenziare il massimo - INTERVENTO 1
+    def highlight_max_column(series):
+        """Evidenzia il valore massimo in ogni colonna"""
+        is_max = series == series.max()
+        return ['background-color: #003300; color: #00FF00; font-weight: bold' 
+                if v else '' for v in is_max]
+    
+    # Applica gli stili
+    styled_df = f.round(2).style
+    
+    # Applica il colore rosso/verde per i valori
+    styled_df = styled_df.apply(style, axis=1)
+    
+    # Applica l'evidenziazione del massimo per ogni colonna
+    for col in f.columns:
+        styled_df = styled_df.apply(highlight_max_column, subset=[col])
+    
+    # Visualizza il dataframe
     st.dataframe(
-        f.round(2)
-        .style
-        .apply(style, axis=1)
-        .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
-        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
+        styled_df.format("{:+.2f}%"),
         use_container_width=True
     )
 
@@ -261,41 +265,70 @@ with tab4:
         </div>
         """, unsafe_allow_html=True)
     
-    # INTERVENTO 2 APPLICATO - Sparkline 12 mesi
-    # ========================
-    # ROTATION SCORE — SPARKLINE 12 MESI
-    # ========================
+    # SPARKLINE STORICO - INTERVENTO 2
+    st.markdown("---")
+    st.subheader("Andamento Storico (12 mesi)")
+    
+    # Calcola lo storico del Rotation Score
     rotation_series = compute_rotation_score_series(prices)
+    
+    # Prendi gli ultimi 12 mesi
     rotation_12m = rotation_series.last("365D")
     
-    fig_rs = go.Figure()
+    if len(rotation_12m) > 0:
+        # Crea il grafico sparkline
+        fig_rs = go.Figure()
+        
+        # Aggiungi la linea principale
+        fig_rs.add_trace(go.Scatter(
+            x=rotation_12m.index,
+            y=rotation_12m.values,
+            mode='lines',
+            line=dict(color='#DDDDDD', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(221, 221, 221, 0.1)',
+            name='Rotation Score'
+        ))
+        
+        # Aggiungi le linee di soglia
+        fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#006600", 
+                        annotation_text="Risk On", annotation_position="bottom right")
+        fig_rs.add_hline(y=0, line_dash="dash", line_color="#666666",
+                        annotation_text="Neutral", annotation_position="bottom right")
+        fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#660000",
+                        annotation_text="Risk Off", annotation_position="bottom right")
+        
+        # Layout minimalista
+        fig_rs.update_layout(
+            height=200,
+            margin=dict(l=20, r=20, t=30, b=20),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(
+                showgrid=False,
+                showticklabels=True,
+                tickformat="%b %Y"
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(100,100,100,0.2)',
+                zeroline=True,
+                zerolinecolor='rgba(100,100,100,0.5)'
+            ),
+            showlegend=False,
+            hovermode="x unified"
+        )
+        
+        # Nascondi bordi e rendi minimal
+        fig_rs.update_xaxes(showline=False, linewidth=0)
+        fig_rs.update_yaxes(showline=False, linewidth=0)
+        
+        st.plotly_chart(fig_rs, use_container_width=True, config={'displayModeBar': False})
+    else:
+        st.info("Dati insufficienti per visualizzare lo storico 12 mesi")
     
-    fig_rs.add_trace(go.Scatter(
-        x=rotation_12m.index,
-        y=rotation_12m,
-        mode="lines",
-        line=dict(color="#DDDDDD", width=2),
-        name="Rotation Score"
-    ))
-    
-    fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#006600")
-    fig_rs.add_hline(y=0.0, line_dash="dot", line_color="#666666")
-    fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#660000")
-    
-    fig_rs.update_layout(
-        height=140,
-        margin=dict(l=20, r=20, t=10, b=10),
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        font_color="white",
-        showlegend=False,
-        yaxis_title="",
-        xaxis_title=""
-    )
-    
-    st.plotly_chart(fig_rs, use_container_width=True)
-    
-    # Didascalia dinamica originale
+    # Didascalia dinamica
+    st.markdown("---")
     if rotation > 1.5:
         st.info("✅ **Cicliche in outperformance** - Considera aumento esposizione azionaria")
     elif rotation < -1.5:
