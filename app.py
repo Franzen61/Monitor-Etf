@@ -22,6 +22,13 @@ st.markdown("""
 }
 .leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }
 .leader-mom { color: #00ff00; font-family: monospace; }
+.rotation-box {
+    text-align:center;
+    padding:40px;
+    border-radius:12px;
+    font-size:32px;
+    font-weight:bold;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -32,16 +39,19 @@ SECTORS = ["XLK","XLY","XLF","XLC","XLV","XLP","XLI","XLE","XLB","XLU","XLRE"]
 BENCHMARK = "SPY"
 ALL_TICKERS = SECTORS + [BENCHMARK]
 
+CYCLICAL = ["XLK","XLY","XLF","XLI","XLB","XLE"]
+DEFENSIVE = ["XLV","XLP","XLU","XLRE"]
+
 FACTOR_ETFS = [
     "MVOL.MI","IWQU.MI","IWMO.MI","IWVL.MI",
     "IUSN.DE","SWDA.MI","IQSA.MI"
 ]
 FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 
-WEIGHTS = {"1Y":0.15,"6M":0.25,"3M":0.30,"1M":0.20,"1W":0.10}
+WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
 # ========================
-# DATA LOADER (ADJUSTED)
+# DATA LOADER
 # ========================
 @st.cache_data
 def load_prices(tickers):
@@ -86,18 +96,15 @@ returns = pd.DataFrame({
     "1M": prices.apply(lambda x: ret(x,21)),
     "3M": prices.apply(lambda x: ret(x,63)),
     "6M": prices.apply(lambda x: ret(x,126)),
-    "1Y": prices.apply(lambda x: ret(x,252)),
 })
 
 rar = returns.sub(returns.loc[BENCHMARK])
 df = rar.loc[SECTORS].copy()
 
 df["Ra_momentum"] = (
-    rar["1Y"]*WEIGHTS["1Y"] +
-    rar["6M"]*WEIGHTS["6M"] +
-    rar["3M"]*WEIGHTS["3M"] +
-    rar["1M"]*WEIGHTS["1M"] +
-    rar["1W"]*WEIGHTS["1W"]
+    df["1M"]*WEIGHTS["1M"] +
+    df["3M"]*WEIGHTS["3M"] +
+    df["6M"]*WEIGHTS["6M"]
 )
 
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
@@ -112,7 +119,6 @@ def situazione(row):
 
 df["Situazione"] = df.apply(situazione, axis=1)
 
-# FUNZIONE OPERATIVITÀ (AGGIUNTA)
 def operativita(row):
     if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "IN RECUPERO":
         return "🔭 ALERT BUY"
@@ -129,10 +135,11 @@ df["Operatività"] = df.apply(operativita, axis=1)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
-    "📊 Fattori"
+    "📊 Fattori",
+    "🔄 Rotazione Settoriale"
 ])
 
 # ========================
@@ -180,7 +187,7 @@ with tab2:
 
     fig = go.Figure()
     for t in selected:
-        fig.add_trace(go.Scatter(x=norm.index, y=norm[t], name=t, line=dict(width=2)))
+        fig.add_trace(go.Scatter(x=norm.index, y=norm[t], name=t))
     fig.add_trace(go.Scatter(
         x=norm.index, y=norm[BENCHMARK],
         name="SPY", line=dict(width=4, color="#00FF00")
@@ -222,4 +229,30 @@ with tab3:
         .apply(style, axis=1)
         .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
         use_container_width=True
+    )
+
+# ========================
+# TAB 4 — ROTAZIONE SETTORIALE
+# ========================
+with tab4:
+    cyc = df.loc[CYCLICAL]["Ra_momentum"].mean()
+    defn = df.loc[DEFENSIVE]["Ra_momentum"].mean()
+    rotation_score = cyc - defn
+
+    if rotation_score > 0.5:
+        label = "🟢 ROTATION: RISK ON"
+        color = "#003300"
+    elif rotation_score < -0.5:
+        label = "🔴 ROTATION: RISK OFF"
+        color = "#330000"
+    else:
+        label = "🟡 ROTATION: NEUTRAL"
+        color = "#333300"
+
+    st.markdown(
+        f"<div class='rotation-box' style='background:{color}'>"
+        f"{label}<br><br>"
+        f"Rotation Score: {rotation_score:.2f}"
+        f"</div>",
+        unsafe_allow_html=True
     )
