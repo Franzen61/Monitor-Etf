@@ -86,6 +86,26 @@ def ret_ytd(data):
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
 # ========================
+# FUNZIONE PER SPARKLINE ROTATION SCORE
+# ========================
+def compute_rotation_score_series(prices):
+    ret_1m = prices.pct_change(21)
+    ret_3m = prices.pct_change(63)
+    ret_6m = prices.pct_change(126)
+
+    rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
+    rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
+    rar_6m = ret_6m.sub(ret_6m[BENCHMARK], axis=0)
+
+    rar_mean = (rar_1m + rar_3m + rar_6m) / 3
+
+    cyc = rar_mean[CYCLICAL].mean(axis=1)
+    def_ = rar_mean[DEFENSIVE].mean(axis=1)
+
+    rotation_score = (cyc - def_) * 100
+    return rotation_score.dropna()
+
+# ========================
 # LOAD DATA
 # ========================
 prices = load_prices(ALL_TICKERS)
@@ -223,10 +243,22 @@ with tab3:
         if row.name in FACTOR_COMPARISON:
             return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
-
+    
+    # INTERVENTO 1: Aggiungi funzione highlight_max
+    def highlight_max(s):
+        max_val = s.max()
+        return [
+            "background-color:#003300;color:#00FF00;font-weight:bold"
+            if v == max_val else ""
+            for v in s
+        ]
+    
+    # INTERVENTO 1: Modifica il blocco finale
     st.dataframe(
-        f.round(2).style
+        f.round(2)
+        .style
         .apply(style, axis=1)
+        .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
         .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
         use_container_width=True
     )
@@ -288,6 +320,39 @@ with tab4:
     """, unsafe_allow_html=True)
 
     # ========================
+    # ROTATION SCORE — SPARKLINE 12 MESI (INTERVENTO 2)
+    # ========================
+    rotation_series = compute_rotation_score_series(prices)
+    rotation_12m = rotation_series.last("365D")
+
+    fig_rs = go.Figure()
+
+    fig_rs.add_trace(go.Scatter(
+        x=rotation_12m.index,
+        y=rotation_12m,
+        mode="lines",
+        line=dict(color="#DDDDDD", width=2),
+        name="Rotation Score"
+    ))
+
+    fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#006600")
+    fig_rs.add_hline(y=0.0, line_dash="dot", line_color="#666666")
+    fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#660000")
+
+    fig_rs.update_layout(
+        height=140,
+        margin=dict(l=20, r=20, t=10, b=10),
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font_color="white",
+        showlegend=False,
+        yaxis_title="",
+        xaxis_title=""
+    )
+
+    st.plotly_chart(fig_rs, use_container_width=True)
+
+    # ========================
     # DIDASCALIA DINAMICA
     # ========================
     st.markdown(f"""
@@ -310,7 +375,7 @@ with tab4:
     Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
 
     <br><br>
-
+ 
     <b>Lettura del Rotation Score</b><br>
     {rotation_score:.2f} → <b>{comment}</b>
 
