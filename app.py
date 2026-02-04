@@ -104,14 +104,34 @@ def ret_business_days(data, business_days):
     
     return (end_price / start_price - 1) * 100
 
+def ret_ytd(data):
+    """
+    Calcola il rendimento dall'inizio dell'anno (Year-To-Date).
+    Utilizza il primo prezzo disponibile dell'anno corrente.
+    """
+    current_year = datetime.today().year
+    ytd_prices = data[data.index.year == current_year]
+    
+    if len(ytd_prices) < 2:
+        return np.nan
+    
+    start_price = ytd_prices.iloc[0]
+    end_price = ytd_prices.iloc[-1]
+    
+    return (end_price / start_price - 1) * 100
+
 # ========================
-# FUNZIONE PER SPARKLINE ROTATION SCORE - MODIFICATA per RSR
+# FUNZIONE PER SPARKLINE ROTATION SCORE - AGGIORNATA per giorni di borsa
 # ========================
 def compute_rotation_score_series(prices):
-    # Calcola i rendimenti percentuali (in forma decimale, es. 0.05)
-    ret_1m = prices.pct_change(21)
-    ret_3m = prices.pct_change(63)
-    ret_6m = prices.pct_change(126)
+    """
+    Calcola la serie storica del rotation score utilizzando giorni di borsa.
+    """
+    # Calcola i rendimenti percentuali su finestre mobili (in forma decimale)
+    # pct_change con periodi di giorni di borsa
+    ret_1m = prices.pct_change(21)   # 21 giorni di borsa = ~1 mese
+    ret_3m = prices.pct_change(63)   # 63 giorni di borsa = ~3 mesi
+    ret_6m = prices.pct_change(126)  # 126 giorni di borsa = ~6 mesi
     
     # Calcola RSR invece di RAR
     rsr_1m = ((1 + ret_1m) / (1 + ret_1m[BENCHMARK]) - 1)
@@ -131,12 +151,13 @@ def compute_rotation_score_series(prices):
 # ========================
 prices = load_prices(ALL_TICKERS)
 
+# Calcola i rendimenti assoluti usando GIORNI DI BORSA
 returns = pd.DataFrame({
-    "1D": prices.apply(lambda x: ret(x,1)),
-    "1W": prices.apply(lambda x: ret(x,5)),
-    "1M": prices.apply(lambda x: ret(x,21)),
-    "3M": prices.apply(lambda x: ret(x,63)),
-    "6M": prices.apply(lambda x: ret(x,126)),
+    "1D": prices.apply(lambda x: ret_business_days(x, 1)),
+    "1W": prices.apply(lambda x: ret_business_days(x, 5)),    # 5 giorni di borsa
+    "1M": prices.apply(lambda x: ret_business_days(x, 21)),   # 21 giorni di borsa (1 mese)
+    "3M": prices.apply(lambda x: ret_business_days(x, 63)),   # 63 giorni di borsa (3 mesi)
+    "6M": prices.apply(lambda x: ret_business_days(x, 126)),  # 126 giorni di borsa (6 mesi)
 })
 
 # ========================
@@ -161,15 +182,26 @@ df["Ra_momentum"] = (
 )
 
 # ========================
-# CALCOLO DELTA_RS_5D (variazione del rapporto ETF/SPY negli ultimi 5 giorni)
+# CALCOLO DELTA_RS_5D (variazione del rapporto ETF/SPY negli ultimi 5 giorni di borsa)
 # ========================
 # Calcola il rapporto di forza giornaliero: prezzo ETF / prezzo SPY
 rs_ratio = prices[SECTORS].div(prices[BENCHMARK], axis=0)
 
-# Calcola la variazione % di questo rapporto tra oggi e 5 giorni fa
-# (-6 perché -1 è oggi, -6 è 5 giorni lavorativi prima)
+# Calcola la variazione % di questo rapporto tra oggi e 5 giorni di borsa fa
+# Trova la data di 5 giorni di borsa indietro
 if len(rs_ratio) >= 6:
-    df["Delta_RS_5D"] = (rs_ratio.iloc[-1] / rs_ratio.iloc[-6] - 1) * 100
+    end_date = rs_ratio.index[-1]
+    start_date = end_date - pd.offsets.BDay(5)
+    
+    # Trova l'indice più vicino a start_date
+    past_indices = rs_ratio.index[rs_ratio.index <= start_date]
+    if len(past_indices) > 0:
+        start_idx = past_indices[-1]
+        # Trova la posizione di start_idx nell'indice
+        start_pos = rs_ratio.index.get_loc(start_idx)
+        df["Delta_RS_5D"] = (rs_ratio.iloc[-1] / rs_ratio.iloc[start_pos] - 1) * 100
+    else:
+        df["Delta_RS_5D"] = np.nan
 else:
     df["Delta_RS_5D"] = np.nan  # Non ci sono dati sufficienti
 
@@ -225,7 +257,7 @@ with tab1:
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font_color="white",
-            title="Variazione % Giornaliera"
+            title="Variazione % Giornaliera (Assoluta)"
         )
         st.plotly_chart(fig, width='stretch')
 
@@ -240,7 +272,22 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
-    st.dataframe(df.round(2), width='stretch')
+    # Rinomina le colonne per chiarezza
+    df_display = df.rename(columns={
+        "1D": "RSR_1D",
+        "1W": "RSR_1W", 
+        "1M": "RSR_1M",
+        "3M": "RSR_3M",
+        "6M": "RSR_6M"
+    })
+    
+    # Riordina le colonne per una lettura più intuitiva
+    colonne_ordinate = ['RSR_1D', 'RSR_1W', 'RSR_1M', 'RSR_3M', 'RSR_6M',
+                        'Ra_momentum', 'Delta_RS_5D', 'Coerenza_Trend',
+                        'Classifica', 'Situazione', 'Operatività']
+    df_display = df_display[colonne_ordinate]
+    
+    st.dataframe(df_display.round(2), width='stretch')
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -277,15 +324,15 @@ with tab3:
     f = pd.DataFrame(index=FACTOR_ETFS)
 
     f["Prezzo"] = factor_prices.iloc[-1].round(2)
-    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
-    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
-    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
-    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
-    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
-    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+    f["1D"]  = factor_prices.apply(lambda x: ret_business_days(x, 1))
+    f["1W"]  = factor_prices.apply(lambda x: ret_business_days(x, 5))
+    f["1M"]  = factor_prices.apply(lambda x: ret_business_days(x, 21))
+    f["3M"]  = factor_prices.apply(lambda x: ret_business_days(x, 63))
+    f["6M"]  = factor_prices.apply(lambda x: ret_business_days(x, 126))
+    f["1A"]  = factor_prices.apply(lambda x: ret_business_days(x, 252))
     f["YTD"] = factor_prices.apply(ret_ytd)
-    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
-    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+    f["3A"]  = factor_prices.apply(lambda x: ret_business_days(x, 756))
+    f["5A"]  = factor_prices.apply(lambda x: ret_business_days(x, 1260))
 
     def style(row):
         if row.name in FACTOR_COMPARISON:
@@ -432,3 +479,24 @@ with tab4:
 
     </div>
     """, unsafe_allow_html=True)
+
+# ========================
+# DEBUG SECTION (opzionale)
+# ========================
+with st.sidebar:
+    st.subheader("🔍 Debug Calcoli")
+    if st.checkbox("Mostra dati di debug"):
+        st.write("**Ultime 10 date nel dataset:**")
+        st.write(prices.index[-10:].strftime('%Y-%m-%d %A').to_list())
+        
+        selected_ticker = st.selectbox("Seleziona ETF per debug:", SECTORS[:3])
+        
+        st.write(f"**Rendimenti per {selected_ticker}:**")
+        for periodo, giorni in [("1D",1), ("1W",5), ("1M",21), ("3M",63), ("6M",126)]:
+            rend = returns.loc[selected_ticker, periodo]
+            st.write(f"{periodo}: {rend:.2f}% (su {giorni} giorni borsa)")
+        
+        st.write(f"**RSR per {selected_ticker}:**")
+        for periodo in ["1D", "1W", "1M", "3M", "6M"]:
+            rsr_val = df.loc[selected_ticker, periodo]
+            st.write(f"{periodo}: {rsr_val:.2f}%")
