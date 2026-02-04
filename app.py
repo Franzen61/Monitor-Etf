@@ -359,31 +359,30 @@ with tab4:
     st.plotly_chart(fig_rs, width='stretch')
 
     # ========================
-    # DIDASCALIA DINAMICA
+    # DIDASCALIA TECNICA
     # ========================
     st.markdown(f"""
-    <div style="
-        background:#0d0d0d;
-        padding:25px;
-        border-radius:10px;
-        font-size:1.05em;
-        line-height:1.6;
-    ">
+    <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.6;">
 
-    <b>Motivo della rotazione</b><br>
-    La leadership relativa tra settori ciclici e difensivi su timeframe
-    1M–3M–6M definisce il regime di rischio corrente.
+    <b>Interpretazione quantitativa</b><br>
+    Il Rotation Score misura, in punti percentuali, la differenza di performance relativa
+    media tra settori ciclici e difensivi sui timeframe 1M–3M–6M.
+    Valori &gt; +1.5 indicano sovraperformance dei ciclici (regime Risk On),
+    valori &lt; −1.5 leadership difensiva (Risk Off),
+    mentre l’area compresa tra −1.5 e +1.5 segnala una fase di rotazione neutrale o di transizione.
 
     <br><br>
 
     <b>Breadth settoriale</b><br>
-    Cyclicals in leadership: <b>{cyc_breadth} / {len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
-    Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+    Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
+    Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
 
     <br><br>
- 
-    <b>Lettura del Rotation Score</b><br>
-    {rotation_score:.2f} → <b>{comment}</b>
+
+    <b>Lettura corrente</b><br>
+    {rotation_score:.2f} → <b>{comment}</b><br>
+    L’ampiezza del valore indica la forza della leadership,
+    mentre la stabilità della linea nel tempo ne misura la persistenza.
 
     </div>
-    """, unsafe_allow_html=True)         
+    """, unsafe_allow_html=True)
