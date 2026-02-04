@@ -86,21 +86,23 @@ def ret_ytd(data):
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
 # ========================
-# FUNZIONE PER SPARKLINE ROTATION SCORE
+# FUNZIONE PER SPARKLINE ROTATION SCORE - MODIFICATA per RSR
 # ========================
 def compute_rotation_score_series(prices):
+    # Calcola i rendimenti percentuali (in forma decimale, es. 0.05)
     ret_1m = prices.pct_change(21)
     ret_3m = prices.pct_change(63)
     ret_6m = prices.pct_change(126)
+    
+    # Calcola RSR invece di RAR
+    rsr_1m = ((1 + ret_1m) / (1 + ret_1m[BENCHMARK]) - 1)
+    rsr_3m = ((1 + ret_3m) / (1 + ret_3m[BENCHMARK]) - 1)
+    rsr_6m = ((1 + ret_6m) / (1 + ret_6m[BENCHMARK]) - 1)
+    
+    rsr_mean = (rsr_1m + rsr_3m + rsr_6m) / 3
 
-    rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
-    rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
-    rar_6m = ret_6m.sub(ret_6m[BENCHMARK], axis=0)
-
-    rar_mean = (rar_1m + rar_3m + rar_6m) / 3
-
-    cyc = rar_mean[CYCLICAL].mean(axis=1)
-    def_ = rar_mean[DEFENSIVE].mean(axis=1)
+    cyc = rsr_mean[CYCLICAL].mean(axis=1)
+    def_ = rsr_mean[DEFENSIVE].mean(axis=1)
 
     rotation_score = (cyc - def_) * 100
     return rotation_score.dropna()
@@ -118,17 +120,41 @@ returns = pd.DataFrame({
     "6M": prices.apply(lambda x: ret(x,126)),
 })
 
-rar = returns.sub(returns.loc[BENCHMARK])
-df = rar.loc[SECTORS].copy()
+# ========================
+# MODIFICA PRINCIPALE: Calcola RSR invece di RAR
+# ========================
+# I valori in 'returns' sono in percentuale (es. 5.0 per 5%).
+# La formula converte in decimale, calcola il rapporto e riconverte in percentuale.
+# Usiamo .values.reshape(-1, 1) per assicurarci che la divisione sia corretta
+rsr = ((1 + returns / 100) / (1 + returns.loc[BENCHMARK] / 100).values.reshape(-1, 1) - 1) * 100
 
+# Prendi solo i settori (escludi SPY) per il DataFrame principale
+df = rsr.loc[SECTORS].copy()
+
+# Ricalcola Ra_momentum usando i nuovi valori RSR
 df["Ra_momentum"] = (
-    df["1M"]*WEIGHTS["1M"] +
-    df["3M"]*WEIGHTS["3M"] +
-    df["6M"]*WEIGHTS["6M"]
+    df["1M"] * WEIGHTS["1M"] +
+    df["3M"] * WEIGHTS["3M"] +
+    df["6M"] * WEIGHTS["6M"]
 )
 
+# ========================
+# NUOVO CALCOLO DELTA_RS_5D
+# ========================
+# Calcola il rapporto di forza (RS) giornaliero: prezzo ETF / prezzo SPY
+rs_ratio = prices[SECTORS].div(prices[BENCHMARK], axis=0)
+
+# Calcola la variazione % di questo rapporto tra oggi e 5 giorni fa
+# (es. -6 perché -1 è oggi, -6 è 5 giorni lavorativi prima)
+if len(rs_ratio) >= 6:
+    df["Delta_RS_5D"] = (rs_ratio.iloc[-1] / rs_ratio.iloc[-6] - 1) * 100
+else:
+    df["Delta_RS_5D"] = np.nan  # Non ci sono dati sufficienti
+
+# ========================
+# CALCOLI RESTANTI
+# ========================
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
-df["Delta_RS_5D"] = df["1W"]
 df = df.sort_values("Ra_momentum", ascending=False)
 df["Classifica"] = range(1, len(df)+1)
 
@@ -271,11 +297,11 @@ with tab4:
     CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    # --- RAR medio su timeframe guida ---
-    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
+    # --- RSR medio su timeframe guida --- (MODIFICATO: usa rsr invece di rar)
+    rsr_focus = rsr[["1M","3M","6M"]].mean(axis=1)
 
-    cyc_score = rar_focus.loc[CYCLICALS]
-    def_score = rar_focus.loc[DEFENSIVES]
+    cyc_score = rsr_focus.loc[CYCLICALS]
+    def_score = rsr_focus.loc[DEFENSIVES]
 
     # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
@@ -320,7 +346,7 @@ with tab4:
     """, unsafe_allow_html=True)
 
     # ========================
-    # ROTATION SCORE — SPARKLINE 12 MESI (INTERVENTO 2)
+    # ROTATION SCORE — SPARKLINE 12 MESI
     # ========================
     rotation_series = compute_rotation_score_series(prices)
     
@@ -386,4 +412,4 @@ with tab4:
     {rotation_score:.2f} → <b>{comment}</b>
 
     </div>
-    """, unsafe_allow_html=True)         
+    """, unsafe_allow_html=True)
