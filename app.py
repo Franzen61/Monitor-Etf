@@ -72,18 +72,37 @@ def load_prices(tickers):
     return data.dropna(how="all")
 
 # ========================
-# RETURN FUNCTIONS
+# RETURN FUNCTIONS - VERSIONE CORRETTA per giorni di borsa
 # ========================
-def ret(data, days):
-    if len(data) <= days:
+def ret_business_days(data, business_days):
+    """
+    Calcola il rendimento percentuale su N giorni di borsa.
+    Usa offset di business day di pandas.
+    """
+    if len(data) < business_days + 1:
         return np.nan
-    return (data.iloc[-1] / data.iloc[-days-1] - 1) * 100
-
-def ret_ytd(data):
-    ytd = data[data.index.year == datetime.today().year]
-    if len(ytd) < 2:
-        return np.nan
-    return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
+    
+    # Assicurati che l'indice sia DateTimeIndex
+    if not isinstance(data.index, pd.DatetimeIndex):
+        data = pd.Series(data.values, index=pd.to_datetime(data.index))
+    
+    # Prezzo finale (ultimo giorno disponibile)
+    end_price = data.iloc[-1]
+    end_date = data.index[-1]
+    
+    # Calcola la data di inizio: N giorni di borsa indietro
+    # 'B' sta per Business Day
+    start_date = end_date - pd.offsets.BDay(business_days)
+    
+    # Trova il prezzo più vicino a start_date (non nel futuro)
+    past_prices = data[data.index <= start_date]
+    if len(past_prices) == 0:
+        # Se non ci sono prezzi abbastanza indietro, usa il primo disponibile
+        start_price = data.iloc[0]
+    else:
+        start_price = past_prices.iloc[-1]
+    
+    return (end_price / start_price - 1) * 100
 
 # ========================
 # FUNZIONE PER SPARKLINE ROTATION SCORE - MODIFICATA per RSR
