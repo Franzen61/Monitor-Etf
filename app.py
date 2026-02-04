@@ -376,7 +376,7 @@ with tab4:
     <b>Breadth settoriale</b><br>
     Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
     Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)<br>
-    <b>Defensive: XLP-XLV-XLU-XLRE <b><b> Cyclicals: XLK-XLY-XLF-XLC-XLI-XLE-XLB<B>
+    <b>Defensive: XLP-XLV-XLU-XLRE <b><br> Cyclicals: XLK-XLY-XLF-XLC-XLI-XLE-XLB<b>
     
     <br><br>
 
