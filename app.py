@@ -141,7 +141,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ========================
 with tab4:
 
-    # --- RSR per timeframe ---
     rsr_1m = rsr(returns["1M"], returns.loc[BENCHMARK,"1M"])
     rsr_3m = rsr(returns["3M"], returns.loc[BENCHMARK,"3M"])
     rsr_6m = rsr(returns["6M"], returns.loc[BENCHMARK,"6M"])
@@ -159,7 +158,6 @@ with tab4:
 
     rotation_score = cyc_score.mean() - def_score.mean()
 
-    # --- Regime ---
     if rotation_score > 1.5 and cyc_pct >= 65:
         regime = "🟢 ROTATION: RISK ON"
         bg = "#003300"
@@ -173,89 +171,17 @@ with tab4:
         bg = "#333300"
         comment = "Rotazione poco direzionale / transizione"
 
-    # --- Box principale ---
     st.markdown(f"""
-    <div style="background:{bg};padding:40px;border-radius:12px;text-align:center;margin-bottom:20px;">
+    <div style="background:{bg};padding:40px;border-radius:12px;text-align:center;">
         <h1>{regime}</h1>
         <h2>Rotation Score: {rotation_score:.2f}</h2>
     </div>
     """, unsafe_allow_html=True)
 
-    # ========================
-    # SPARKLINE RSR 12 MESI
-    # ========================
-    rsr_series = (
-        compute_rotation_score_series(prices)
-        if "compute_rotation_score_series" in globals()
-        else None
-    )
-
-    if rsr_series is not None and not rsr_series.empty:
-        cutoff = rsr_series.index.max() - pd.Timedelta(days=365)
-        rsr_12m = rsr_series[rsr_series.index >= cutoff]
-
-        fig = go.Figure()
-
-        # Linea RSR
-        fig.add_trace(go.Scatter(
-            x=rsr_12m.index,
-            y=rsr_12m,
-            mode="lines",
-            line=dict(color="white", width=2),
-            name="RSR"
-        ))
-
-        # --- Range colorati ---
-        fig.add_hrect(ymin=1.5, ymax=10,
-                      fillcolor="green", opacity=0.15, line_width=0)
-        fig.add_hrect(ymin=-1.5, ymax=1.5,
-                      fillcolor="yellow", opacity=0.12, line_width=0)
-        fig.add_hrect(ymin=-10, ymax=-1.5,
-                      fillcolor="red", opacity=0.15, line_width=0)
-
-        # Linee soglia
-        fig.add_hline(y=1.5, line_dash="dot", line_color="#00aa00")
-        fig.add_hline(y=0.0, line_dash="dot", line_color="#888888")
-        fig.add_hline(y=-1.5, line_dash="dot", line_color="#aa0000")
-
-        fig.update_layout(
-            height=160,
-            margin=dict(l=20, r=20, t=10, b=10),
-            paper_bgcolor="#000000",
-            plot_bgcolor="#000000",
-            font_color="white",
-            showlegend=False,
-            yaxis_title="",
-            xaxis_title=""
-        )
-
-        st.plotly_chart(fig, width="stretch")
-
-    # ========================
-    # DIDASCALIA TECNICA
-    # ========================
     st.markdown(f"""
-    <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.6;">
-
-    <b>Interpretazione quantitativa</b><br>
-    Il Rotation Score misura, in punti percentuali, la differenza di performance relativa
-    media tra settori ciclici e difensivi sui timeframe 1M–3M–6M.
-    Valori &gt; +1.5 indicano sovraperformance dei ciclici (regime Risk On),
-    valori &lt; −1.5 leadership difensiva (Risk Off),
-    mentre l’area compresa tra −1.5 e +1.5 segnala una fase di rotazione neutrale o di transizione.
-
-    <br><br>
-
-    <b>Breadth settoriale</b><br>
+    <div style="background:#0d0d0d;padding:25px;border-radius:10px;">
     Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
-    Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
-
-    <br><br>
-
-    <b>Lettura corrente</b><br>
-    {rotation_score:.2f} → <b>{comment}</b><br>
-    L’ampiezza del valore indica la forza della leadership,
-    mentre la stabilità della linea nel tempo ne misura la persistenza.
-
+    Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)<br><br>
+    {rotation_score:.2f} → <b>{comment}</b>
     </div>
     """, unsafe_allow_html=True)
