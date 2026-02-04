@@ -121,12 +121,15 @@ returns = pd.DataFrame({
 })
 
 # ========================
-# MODIFICA PRINCIPALE: Calcola RSR invece di RAR
+# CALCOLO RSR - VERSIONE CORRETTA
 # ========================
-# I valori in 'returns' sono in percentuale (es. 5.0 per 5%).
-# La formula converte in decimale, calcola il rapporto e riconverte in percentuale.
-# Usiamo .values.reshape(-1, 1) per assicurarci che la divisione sia corretta
-rsr = ((1 + returns / 100) / (1 + returns.loc[BENCHMARK] / 100).values.reshape(-1, 1) - 1) * 100
+# Calcola RSR invece di RAR
+# Converti i rendimenti percentuali in decimali, applica la formula RSR e riconverti in percentuale
+returns_decimal = returns / 100
+benchmark_returns_decimal = returns_decimal.loc[BENCHMARK]
+
+# Calcola RSR per tutti i ticker (incluso SPY, che risulterà 0)
+rsr = ((1 + returns_decimal).div(1 + benchmark_returns_decimal, axis=1) - 1) * 100
 
 # Prendi solo i settori (escludi SPY) per il DataFrame principale
 df = rsr.loc[SECTORS].copy()
@@ -139,13 +142,13 @@ df["Ra_momentum"] = (
 )
 
 # ========================
-# NUOVO CALCOLO DELTA_RS_5D
+# CALCOLO DELTA_RS_5D (variazione del rapporto ETF/SPY negli ultimi 5 giorni)
 # ========================
-# Calcola il rapporto di forza (RS) giornaliero: prezzo ETF / prezzo SPY
+# Calcola il rapporto di forza giornaliero: prezzo ETF / prezzo SPY
 rs_ratio = prices[SECTORS].div(prices[BENCHMARK], axis=0)
 
 # Calcola la variazione % di questo rapporto tra oggi e 5 giorni fa
-# (es. -6 perché -1 è oggi, -6 è 5 giorni lavorativi prima)
+# (-6 perché -1 è oggi, -6 è 5 giorni lavorativi prima)
 if len(rs_ratio) >= 6:
     df["Delta_RS_5D"] = (rs_ratio.iloc[-1] / rs_ratio.iloc[-6] - 1) * 100
 else:
@@ -270,7 +273,6 @@ with tab3:
             return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
     
-    # INTERVENTO 1: Aggiungi funzione highlight_max
     def highlight_max(s):
         max_val = s.max()
         return [
@@ -279,7 +281,6 @@ with tab3:
             for v in s
         ]
     
-    # INTERVENTO 1: Modifica il blocco finale
     st.dataframe(
         f.round(2)
         .style
@@ -297,7 +298,7 @@ with tab4:
     CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    # --- RSR medio su timeframe guida --- (MODIFICATO: usa rsr invece di rar)
+    # --- RSR medio su timeframe guida ---
     rsr_focus = rsr[["1M","3M","6M"]].mean(axis=1)
 
     cyc_score = rsr_focus.loc[CYCLICALS]
@@ -350,7 +351,6 @@ with tab4:
     # ========================
     rotation_series = compute_rotation_score_series(prices)
     
-    # CORREZIONE: sostituzione del metodo deprecato .last("365D")
     if not rotation_series.empty:
         cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
