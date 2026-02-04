@@ -270,11 +270,15 @@ with tab4:
     CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    # --- RAR medio su timeframe guida ---
-    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
+    # --- RSR medio su timeframe guida ---
+    rsr_1m = rsr(returns["1M"], returns.loc[BENCHMARK,"1M"])
+    rsr_3m = rsr(returns["3M"], returns.loc[BENCHMARK,"3M"])
+    rsr_6m = rsr(returns["6M"], returns.loc[BENCHMARK,"6M"])
 
-    cyc_score = rar_focus.loc[CYCLICALS]
-    def_score = rar_focus.loc[DEFENSIVES]
+    rsr_focus = (rsr_1m + rsr_3m + rsr_6m) / 3
+
+    cyc_score = rsr_focus.loc[CYCLICALS]
+    def_score = rsr_focus.loc[DEFENSIVES]
 
     # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
