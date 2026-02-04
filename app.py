@@ -85,12 +85,6 @@ def ret_ytd(data):
         return np.nan
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
-    # ========================
-# RSR FUNCTION (EXCEL-COMPATIBLE)
-# ========================
-def rsr(etf_ret, bm_ret):
-    return ((1 + etf_ret/100) / (1 + bm_ret/100) - 1) * 100
-    
 # ========================
 # FUNZIONE PER SPARKLINE ROTATION SCORE
 # ========================
@@ -391,13 +385,5 @@ with tab4:
     <b>Lettura del Rotation Score</b><br>
     {rotation_score:.2f} → <b>{comment}</b>
 
-    <br><br>
-
-<b>Interpretazione della linea</b><br>
-Il Rotation Score rappresenta la sovra-/sotto-performance media dei settori ciclici
-rispetto ai difensivi (in punti percentuali) sui timeframe 1M–3M–6M.
-Valori positivi indicano propensione al rischio, valori negativi fase difensiva,
-mentre la pendenza della linea descrive l’intensità e la persistenza del regime.
-
-  </div>
+    </div>
     """, unsafe_allow_html=True)         
