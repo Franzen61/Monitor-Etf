@@ -1,4 +1,4 @@
-import streamlit as st
+   import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -70,6 +70,7 @@ def load_prices(tickers):
         data = data["Close"]
 
     return data.dropna(how="all")
+
 # ========================
 # RETURN FUNCTIONS
 # ========================
@@ -270,15 +271,11 @@ with tab4:
     CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    # --- RSR medio su timeframe guida ---
-    rsr_1m = rsr(returns["1M"], returns.loc[BENCHMARK,"1M"])
-    rsr_3m = rsr(returns["3M"], returns.loc[BENCHMARK,"3M"])
-    rsr_6m = rsr(returns["6M"], returns.loc[BENCHMARK,"6M"])
+    # --- RAR medio su timeframe guida ---
+    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
 
-    rsr_focus = (rsr_1m + rsr_3m + rsr_6m) / 3
-
-    cyc_score = rsr_focus.loc[CYCLICALS]
-    def_score = rsr_focus.loc[DEFENSIVES]
+    cyc_score = rar_focus.loc[CYCLICALS]
+    def_score = rar_focus.loc[DEFENSIVES]
 
     # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
@@ -362,31 +359,31 @@ with tab4:
     st.plotly_chart(fig_rs, width='stretch')
 
     # ========================
-    # DIDASCALIA TECNICA
+    # DIDASCALIA DINAMICA
     # ========================
     st.markdown(f"""
-    <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.6;">
+    <div style="
+        background:#0d0d0d;
+        padding:25px;
+        border-radius:10px;
+        font-size:1.05em;
+        line-height:1.6;
+    ">
 
-    <b>Interpretazione quantitativa</b><br>
-    Il Rotation Score misura, in punti percentuali, la differenza di performance relativa
-    media tra settori ciclici e difensivi sui timeframe 1M–3M–6M.
-    Valori &gt; +1.5 indicano sovraperformance dei ciclici (regime Risk On),
-    valori &lt; −1.5 leadership difensiva (Risk Off),
-    mentre l’area compresa tra −1.5 e +1.5 segnala una fase di rotazione neutrale o di transizione.
+    <b>Motivo della rotazione</b><br>
+    La leadership relativa tra settori ciclici e difensivi su timeframe
+    1M–3M–6M definisce il regime di rischio corrente.
 
     <br><br>
 
     <b>Breadth settoriale</b><br>
-    Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
-    Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)<br>
-    <b>Defensive: XLP-XLV-XLU-XLRE <b><br> Cyclicals: XLK-XLY-XLF-XLC-XLI-XLE-XLB<b>
-    
-    <br><br>
+    Cyclicals in leadership: <b>{cyc_breadth} / {len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
+    Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
 
-    <b>Lettura corrente</b><br>
-    {rotation_score:.2f} → <b>{comment}</b><br>
-    L’ampiezza del valore indica la forza della leadership,
-    mentre la stabilità della linea nel tempo ne misura la persistenza.
+    <br><br>
+ 
+    <b>Lettura del Rotation Score</b><br>
+    {rotation_score:.2f} → <b>{comment}</b>
 
     </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)         
