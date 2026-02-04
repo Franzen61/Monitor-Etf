@@ -53,7 +53,7 @@ WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 # ========================
 # DATA LOADER
 # ========================
-@st.cache_data
+@st.cache_data(ttl=60*60)
 def load_prices(tickers):
     end = datetime.today()
     start = end - timedelta(days=6*365)
@@ -70,7 +70,6 @@ def load_prices(tickers):
         data = data["Close"]
 
     return data.dropna(how="all")
-
 # ========================
 # RETURN FUNCTIONS
 # ========================
