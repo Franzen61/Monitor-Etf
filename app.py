@@ -86,6 +86,13 @@ def ret_ytd(data):
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
 # ========================
+# RELATIVE STRENGTH RETURN (RSR)
+# ========================
+def rsr(asset_ret, benchmark_ret):
+    return ((1 + asset_ret/100) / (1 + benchmark_ret/100) - 1) * 100
+
+
+# ========================
 # FUNZIONE PER SPARKLINE ROTATION SCORE
 # ========================
 def compute_rotation_score_series(prices):
@@ -118,8 +125,16 @@ returns = pd.DataFrame({
     "6M": prices.apply(lambda x: ret(x,126)),
 })
 
-rar = returns.sub(returns.loc[BENCHMARK])
-df = rar.loc[SECTORS].copy()
+# ========================
+# COSTRUZIONE RSR
+# ========================
+rsr_df = pd.DataFrame(index=returns.index, columns=returns.columns)
+
+for col in returns.columns:
+    rsr_df[col] = rsr(returns[col], returns.loc[BENCHMARK, col])
+
+df = rsr_df.loc[SECTORS].copy()
+
 
 df["Ra_momentum"] = (
     df["1M"]*WEIGHTS["1M"] +
