@@ -287,7 +287,8 @@ with tab4:
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
     # --- RAR medio su timeframe guida ---
-    rar_focus = rar[["1M","3M","6M"]].mean(axis=1)
+    rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
+
 
     cyc_score = rar_focus.loc[CYCLICALS]
     def_score = rar_focus.loc[DEFENSIVES]
