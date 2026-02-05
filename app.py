@@ -167,19 +167,6 @@ def operativita(row):
 
 df["Operatività"] = df.apply(operativita, axis=1)
 
-# ========================
-# CLASSIFICAZIONE FASE DI ROTAZIONE
-# ========================
-def classify_rotation(row):
-    if row["Ra_momentum"] > 0 and row["1M"] > 0:
-        return "Momentum Leader"
-    elif row["Ra_momentum"] > 0 and row["1M"] <= 0:
-        return "Early Rotation"
-    else:
-        return "Late Cycle / Defensive"
-
-df["Rotation Phase"] = df.apply(classify_rotation, axis=1)
-
 
 # ========================
 # UI TABS
