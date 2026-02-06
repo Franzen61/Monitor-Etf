@@ -474,8 +474,8 @@ with tab4:
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
         
         <b>Breadth Settoriale (conferma del regime):</b><br><br>
-- Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {'✅' if cyc_pct >= 65 else '⚠️'}<br>
-- Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {'✅' if def_pct >= 65 else '⚠️'}
+        - Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {'✅' if cyc_pct >= 65 else '⚠️'}<br>
+        - Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {'✅' if def_pct >= 65 else '⚠️'}
     </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
