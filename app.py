@@ -468,15 +468,26 @@ with tab4:
         </tr>
     </table>
 
-    <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
-    
-    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
-        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
-        
-        <b>Breadth Settoriale (conferma del regime):</b><br><br>
-        - Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {'✅' if cyc_pct >= 65 else '⚠️'}<br>
-        - Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {'✅' if def_pct >= 65 else '⚠️'}</b>
-    </div>
+    st.markdown(f"""
+<h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
+
+<div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+    <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
+
+    <b>Breadth Settoriale (conferma del regime):</b><br><br>
+
+    - Cyclicals in leadership:
+    <b>{cyc_breadth}/{len(CYCLICALS)}</b>
+    ({cyc_pct:.0f}%)
+    {"✅" if cyc_pct >= 65 else "⚠️"}<br>
+
+    - Defensives in leadership:
+    <b>{def_breadth}/{len(DEFENSIVES)}</b>
+    ({def_pct:.0f}%)
+    {"✅" if def_pct >= 65 else "⚠️"}
+</div>
+""", unsafe_allow_html=True)
+
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
     
