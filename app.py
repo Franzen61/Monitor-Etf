@@ -283,42 +283,46 @@ with tab2:
 # ========================
 with tab3:
     factor_prices = load_prices(FACTOR_ETFS)
-    f = pd.DataFrame(index=FACTOR_ETFS)
-
-    f["Prezzo"] = factor_prices.iloc[-1].round(2)
-    f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
-    f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
-    f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
-    f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
-    f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
-    f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
-    f["YTD"] = factor_prices.apply(ret_ytd)
-    f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
-    f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
-
-    def style(row):
-        if row.name in FACTOR_COMPARISON:
-            return ["background-color:#1e1e1e;color:#ccc"]*len(row)
-        return ["background-color:#000;color:white"]*len(row)
     
-    # INTERVENTO 1: Aggiungi funzione highlight_max
-    def highlight_max(s):
-        max_val = s.max()
-        return [
-            "background-color:#003300;color:#00FF00;font-weight:bold"
-            if v == max_val else ""
-            for v in s
-        ]
-    
-    # INTERVENTO 1: Modifica il blocco finale
-    st.dataframe(
-        f.round(2)
-        .style
-        .apply(style, axis=1)
-        .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
-        .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
-        width='stretch'
-    )
+    # DEBUG: verifica se i dati sono stati scaricati
+    if factor_prices.empty or factor_prices.isna().all().all():
+        st.error("⚠️ Impossibile scaricare i dati degli ETF fattoriali da Yahoo Finance. Riprova tra qualche minuto.")
+        st.info("Ticker richiesti: " + ", ".join(FACTOR_ETFS))
+    else:
+        f = pd.DataFrame(index=FACTOR_ETFS)
+
+        f["Prezzo"] = factor_prices.iloc[-1].round(2)
+        f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
+        f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
+        f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
+        f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
+        f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
+        f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+        f["YTD"] = factor_prices.apply(ret_ytd)
+        f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
+        f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+
+        def style(row):
+            if row.name in FACTOR_COMPARISON:
+                return ["background-color:#1e1e1e;color:#ccc"]*len(row)
+            return ["background-color:#000;color:white"]*len(row)
+        
+        def highlight_max(s):
+            max_val = s.max()
+            return [
+                "background-color:#003300;color:#00FF00;font-weight:bold"
+                if v == max_val else ""
+                for v in s
+            ]
+        
+        st.dataframe(
+            f.round(2)
+            .style
+            .apply(style, axis=1)
+            .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
+            .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
+            width='stretch'
+        )
 
 # ========================
 # TAB 4 — ROTAZIONE SETTORIALE
