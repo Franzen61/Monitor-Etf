@@ -171,10 +171,11 @@ df["Operatività"] = df.apply(operativita, axis=1)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "📊 Fattori",
+    "📚 Guida Fattori",
     "🔄 Rotazione Settoriale"
 ])
 
@@ -301,7 +302,6 @@ with tab3:
             return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
     
-    # INTERVENTO 1: Aggiungi funzione highlight_max
     def highlight_max(s):
         max_val = s.max()
         return [
@@ -310,7 +310,6 @@ with tab3:
             for v in s
         ]
     
-    # INTERVENTO 1: Modifica il blocco finale
     st.dataframe(
         f.round(2)
         .style
@@ -321,9 +320,137 @@ with tab3:
     )
 
 # ========================
-# TAB 4 — ROTAZIONE SETTORIALE
+# TAB 4 — GUIDA FATTORI
 # ========================
 with tab4:
+    st.markdown("""
+    <div style="background:#0a0a0a; padding:30px; border-radius:12px; line-height:1.8;">
+    
+    <h2 style="color:#ff9900; margin-top:0;">📚 Guida ai Fattori - Dizionario ETF</h2>
+    
+    <table style="width:100%; border-collapse:collapse; margin:20px 0;">
+        <tr>
+            <td style="width:50%; padding:0 10px 0 0; vertical-align:top;">
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #ff6b6b; margin-bottom:15px;">
+                    <b style="color:#ff9900;">MVOL.MI</b> - Minimum Volatility<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Titoli sviluppati a bassa volatilità. Sovraperforma in fasi di incertezza/paura.
+                    </span>
+                </div>
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #4ecdc4; margin-bottom:15px;">
+                    <b style="color:#ff9900;">IWQU.MI</b> - Quality<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Aziende con alto ROE, basso debito, utili stabili. Difensivo intelligente.
+                    </span>
+                </div>
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #45b7d1; margin-bottom:15px;">
+                    <b style="color:#ff9900;">IWMO.MI</b> - Momentum<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Titoli in trend rialzista 6-12M. Sovraperforma in bull market e Risk On.
+                    </span>
+                </div>
+                
+            </td>
+            <td style="width:50%; padding:0 0 0 10px; vertical-align:top;">
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #ffa07a; margin-bottom:15px;">
+                    <b style="color:#ff9900;">IWVL.MI</b> - Value<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Titoli sottovalutati (P/B, P/E bassi). Sovraperforma in rotazioni difensive.
+                    </span>
+                </div>
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #98d8c8; margin-bottom:15px;">
+                    <b style="color:#ff9900;">IUSN.DE</b> - USA Small Cap<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Piccole cap USA. Sovraperforma in fasi espansive domestiche aggressive.
+                    </span>
+                </div>
+                
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #f7dc6f; margin-bottom:15px;">
+                    <b style="color:#ff9900;">SWDA.MI</b> - MSCI World (Benchmark)<br>
+                    <span style="color:#aaa; font-size:0.95em;">
+                    Indice large/mid cap sviluppati. Riferimento neutrale per confronti.
+                    </span>
+                </div>
+                
+            </td>
+        </tr>
+    </table>
+    
+    <div style="background:#1a1a1a; padding:15px; border-radius:8px; border-left:4px solid #00ff00; margin:20px 0;">
+        <b style="color:#ff9900;">IQSA.MI</b> - Multi-Factor (Quality + Momentum + Value)<br>
+        <span style="color:#aaa; font-size:0.95em;">
+        Combina i 3 fattori storicamente più performanti vs MSCI World. Cerca alpha catturando rotazioni tra stili.
+        </span>
+    </div>
+    
+    <h2 style="color:#ff9900; margin-top:35px;">📊 Interpretazione Regime</h2>
+    
+    <table style="width:100%; border-collapse:collapse; margin:20px 0;">
+        <tr style="background:#1a1a1a;">
+            <td style="padding:12px; border:1px solid #333; width:35%;"><b>Scenario</b></td>
+            <td style="padding:12px; border:1px solid #333;"><b>Significato</b></td>
+        </tr>
+        <tr>
+            <td style="padding:12px; border:1px solid #333;">Value batte Momentum</td>
+            <td style="padding:12px; border:1px solid #333;">Rotazione difensiva o fine trend. Si cercano "affari" invece che rincorrere performance.</td>
+        </tr>
+        <tr style="background:#0a0a0a;">
+            <td style="padding:12px; border:1px solid #333;">Min Vol leader 1W</td>
+            <td style="padding:12px; border:1px solid #333;">Spike di paura. Protezione cercata, possibile correzione in vista.</td>
+        </tr>
+        <tr>
+            <td style="padding:12px; border:1px solid #333;">Quality sottoperforma in risk-off</td>
+            <td style="padding:12px; border:1px solid #333;">Value visto come miglior rapporto rischio/rendimento. Quality percepito "costoso".</td>
+        </tr>
+        <tr style="background:#0a0a0a;">
+            <td style="padding:12px; border:1px solid #333;">Momentum domina</td>
+            <td style="padding:12px; border:1px solid #333;">Trend forte, Risk On maturo. Il mercato premia continuazione vincitori.</td>
+        </tr>
+        <tr>
+            <td style="padding:12px; border:1px solid #333;">IQSA batte SWDA (1A+)</td>
+            <td style="padding:12px; border:1px solid #333;">Almeno uno dei 3 fattori sta outperformando. Validazione approccio fattoriale.</td>
+        </tr>
+    </table>
+    
+    <h2 style="color:#ff9900; margin-top:35px;">🎯 Checklist Operativa</h2>
+    
+    <div style="background:#1a1a1a; padding:20px; border-radius:8px; margin:20px 0;">
+        <table style="width:100%; border-collapse:collapse;">
+            <tr>
+                <td style="padding:8px; width:40%;">✅ <b>Value + Min Vol leader</b></td>
+                <td style="padding:8px; color:#ffa500;">→ Fase difensiva/prudente</td>
+            </tr>
+            <tr>
+                <td style="padding:8px;">✅ <b>Momentum + Small Cap leader</b></td>
+                <td style="padding:8px; color:#00ff00;">→ Risk On aggressivo</td>
+            </tr>
+            <tr>
+                <td style="padding:8px;">✅ <b>Quality stabile, altri volatili</b></td>
+                <td style="padding:8px; color:#ffff00;">→ Transizione incerta</td>
+            </tr>
+            <tr>
+                <td style="padding:8px;">✅ <b>IQSA > SWDA su 1A+</b></td>
+                <td style="padding:8px; color:#00ff00;">→ Fattori funzionano</td>
+            </tr>
+            <tr>
+                <td style="padding:8px;">⚠️ <b>Min Vol spike 1W + Value YTD alto</b></td>
+                <td style="padding:8px; color:#ff0000;">→ Possibile top, cautela</td>
+            </tr>
+        </table>
+    </div>
+    
+    </div>
+    """, unsafe_allow_html=True)
+
+# ========================
+# TAB 5 — ROTAZIONE SETTORIALE
+# ========================
+with tab5:
 
     CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
@@ -473,11 +600,9 @@ with tab4:
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
         
-        <b>Breadth Settoriale (conferma del regime):</b><br>
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) 
-        {' ✅' if cyc_pct >= 65 else ' ⚠️'}<br>
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
-        {' ✅' if def_pct >= 65 else ' ⚠️'}
+        <b>Breadth Settoriale (conferma del regime):</b><br><br>
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {'✅' if cyc_pct >= 65 else '⚠️'}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {'✅' if def_pct >= 65 else '⚠️'}
     </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
