@@ -184,7 +184,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     col1, col2 = st.columns([1.2,1])
 
-   with col1:
+    with col1:
         # Palette colori professionale per 11 settori + SPY
         colors = [
             '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
