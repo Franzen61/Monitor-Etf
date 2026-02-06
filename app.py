@@ -290,7 +290,6 @@ with tab4:
     # --- RAR medio su timeframe guida ---
     rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
 
-
     cyc_score = rar_focus.loc[CYCLICALS]
     def_score = rar_focus.loc[DEFENSIVES]
 
@@ -321,27 +320,26 @@ with tab4:
         comment = "Rotazione poco direzionale / transizione"
 
     # ========================
-    # MAIN BOX
+    # MAIN BOX - PIÙ COMPATTO
     # ========================
     st.markdown(f"""
     <div style="
         background:{bg};
-        padding:40px;
+        padding:20px 40px;
         border-radius:12px;
         text-align:center;
-        margin-bottom:25px;
+        margin-bottom:15px;
     ">
-        <h1>{regime}</h1>
-        <h2>Rotation Score: {rotation_score:.2f}</h2>
+        <h2 style="margin:0 0 8px 0;">{regime}</h2>
+        <h3 style="margin:0; font-weight:normal;">Rotation Score: {rotation_score:.2f}</h3>
     </div>
     """, unsafe_allow_html=True)
 
     # ========================
-    # ROTATION SCORE — SPARKLINE 12 MESI (INTERVENTO 2)
+    # ROTATION SCORE — SPARKLINE PIÙ GRANDE
     # ========================
     rotation_series = compute_rotation_score_series(prices)
     
-    # CORREZIONE: sostituzione del metodo deprecato .last("365D")
     if not rotation_series.empty:
         cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
@@ -355,28 +353,34 @@ with tab4:
         y=rotation_12m,
         mode="lines",
         line=dict(color="#DDDDDD", width=2),
-        name="Rotation Score"
+        name="Rotation Score",
+        fill='tozeroy',
+        fillcolor='rgba(100,100,100,0.2)'
     ))
 
-    fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#006600")
-    fig_rs.add_hline(y=0.0, line_dash="dot", line_color="#666666")
-    fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#660000")
+    # Linee di riferimento
+    fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#00AA00", 
+                     annotation_text="Risk On", annotation_position="right")
+    fig_rs.add_hline(y=0.0, line_dash="solid", line_color="#666666")
+    fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#AA0000",
+                     annotation_text="Risk Off", annotation_position="right")
 
     fig_rs.update_layout(
-        height=140,
-        margin=dict(l=20, r=20, t=10, b=10),
+        height=280,
+        margin=dict(l=40, r=40, t=20, b=40),
         paper_bgcolor="#000000",
         plot_bgcolor="#000000",
         font_color="white",
         showlegend=False,
-        yaxis_title="",
-        xaxis_title=""
+        yaxis_title="Rotation Score",
+        xaxis_title="",
+        yaxis=dict(gridcolor="#222222")
     )
 
-    st.plotly_chart(fig_rs, width='stretch')
+    st.plotly_chart(fig_rs, use_container_width=True)
 
     # ========================
-    # DIDASCALIA DINAMICA
+    # DIDASCALIA ARRICCHITA
     # ========================
     st.markdown(f"""
     <div style="
@@ -384,23 +388,65 @@ with tab4:
         padding:25px;
         border-radius:10px;
         font-size:1.05em;
-        line-height:1.6;
+        line-height:1.7;
     ">
 
-    <b>Motivo della rotazione</b><br>
-    La leadership relativa tra settori ciclici e difensivi su timeframe
-    1M–3M–6M definisce il regime di rischio corrente.
+    <h3 style="color:#ff9900; margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
+    
+    Il <b>Rotation Score</b> misura la forza relativa tra settori <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY:
+    
+    <ol style="margin:15px 0;">
+        <li><b>Calcolo RSR medio</b>: per ogni settore, media dei rendimenti relativi su 1M, 3M e 6M</li>
+        <li><b>Performance Ciclici</b>: media RSR di XLK, XLY, XLF, XLI, XLE, XLB</li>
+        <li><b>Performance Difensivi</b>: media RSR di XLP, XLV, XLU, XLRE</li>
+        <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
+    </ol>
 
-    <br><br>
+    <h3 style="color:#ff9900; margin-top:25px;">📈 Come Interpretare il Grafico</h3>
+    
+    <table style="width:100%; border-collapse:collapse; margin:15px 0;">
+        <tr style="background:#1a1a1a;">
+            <td style="padding:10px; border:1px solid #333;"><b>Zona</b></td>
+            <td style="padding:10px; border:1px solid #333;"><b>Range</b></td>
+            <td style="padding:10px; border:1px solid #333;"><b>Significato</b></td>
+        </tr>
+        <tr>
+            <td style="padding:10px; border:1px solid #333; color:#00ff00;">🟢 RISK ON</td>
+            <td style="padding:10px; border:1px solid #333;">&gt; +1.5</td>
+            <td style="padding:10px; border:1px solid #333;">Ciclici dominanti, mercato in fase espansiva</td>
+        </tr>
+        <tr style="background:#0a0a0a;">
+            <td style="padding:10px; border:1px solid #333; color:#ffff00;">🟡 NEUTRAL</td>
+            <td style="padding:10px; border:1px solid #333;">-1.5 a +1.5</td>
+            <td style="padding:10px; border:1px solid #333;">Equilibrio o fase di transizione tra stili</td>
+        </tr>
+        <tr>
+            <td style="padding:10px; border:1px solid #333; color:#ff0000;">🔴 RISK OFF</td>
+            <td style="padding:10px; border:1px solid #333;">&lt; -1.5</td>
+            <td style="padding:10px; border:1px solid #333;">Difensivi dominanti, mercato in fase difensiva</td>
+        </tr>
+    </table>
 
-    <b>Breadth settoriale</b><br>
-    Cyclicals in leadership: <b>{cyc_breadth} / {len(CYCLICALS)}</b> ({cyc_pct:.0f}%)<br>
-    Defensives in leadership: <b>{def_breadth} / {len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+    <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
+    
+    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
+        
+        <b>Breadth Settoriale (conferma del regime):</b><br>
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) 
+        {' ✅' if cyc_pct >= 65 else ' ⚠️'}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+        {' ✅' if def_pct >= 65 else ' ⚠️'}
+    </div>
 
-    <br><br>
- 
-    <b>Lettura del Rotation Score</b><br>
-    {rotation_score:.2f} → <b>{comment}</b>
+    <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
+    
+    <ul style="margin:10px 0;">
+        <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
+        <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
+        <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
+        <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
+    </ul>
 
     </div>
-    """, unsafe_allow_html=True)    
+    """, unsafe_allow_html=True)
