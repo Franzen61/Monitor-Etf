@@ -185,16 +185,19 @@ with tab1:
     col1, col2 = st.columns([1.2,1])
 
     with col1:
+        # Palette colori professionale per 11 settori + SPY
         colors = [
             '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
             '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
             '#F8B739', '#52B788', '#E76F51', '#00FF00'
         ]
         
+        # Prepara dati
         tickers_list = ALL_TICKERS
         values = [returns.loc[t, "1D"] for t in tickers_list]
         bar_colors = [colors[i] for i in range(len(tickers_list))]
         
+        # Crea grafico con UN SOLO trace (nessuna legenda multipla)
         fig = go.Figure(data=[
             go.Bar(
                 x=tickers_list,
@@ -208,6 +211,7 @@ with tab1:
             )
         ])
         
+        # Layout pulito
         fig.update_layout(
             height=300,
             paper_bgcolor="#000",
@@ -245,7 +249,7 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
-    st.dataframe(df.round(2), use_container_width=True)
+    st.dataframe(df.round(2), width='stretch')
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -272,7 +276,7 @@ with tab2:
         font_color="white",
         yaxis_title="Variazione %"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # ========================
 # TAB 3 — FATTORI
@@ -297,6 +301,7 @@ with tab3:
             return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
     
+    # INTERVENTO 1: Aggiungi funzione highlight_max
     def highlight_max(s):
         max_val = s.max()
         return [
@@ -305,32 +310,43 @@ with tab3:
             for v in s
         ]
     
+    # INTERVENTO 1: Modifica il blocco finale
     st.dataframe(
         f.round(2)
         .style
         .apply(style, axis=1)
         .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
         .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
-        use_container_width=True
+        width='stretch'
     )
 
 # ========================
 # TAB 4 — ROTAZIONE SETTORIALE
 # ========================
 with tab4:
+
+    CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
+    DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
+
+    # --- RAR medio su timeframe guida ---
     rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
 
-    cyc_score = rar_focus.loc[CYCLICAL]
-    def_score = rar_focus.loc[DEFENSIVE]
+    cyc_score = rar_focus.loc[CYCLICALS]
+    def_score = rar_focus.loc[DEFENSIVES]
 
+    # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
     def_breadth = (def_score > 0).sum()
 
-    cyc_pct = cyc_breadth / len(CYCLICAL) * 100
-    def_pct = def_breadth / len(DEFENSIVE) * 100
+    cyc_pct = cyc_breadth / len(CYCLICALS) * 100
+    def_pct = def_breadth / len(DEFENSIVES) * 100
 
+    # --- Rotation Score ---
     rotation_score = cyc_score.mean() - def_score.mean()
 
+    # ========================
+    # REGIME LOGIC
+    # ========================
     if rotation_score > 1.5 and cyc_pct >= 65:
         regime = "🟢 ROTATION: RISK ON"
         bg = "#003300"
@@ -344,6 +360,9 @@ with tab4:
         bg = "#333300"
         comment = "Rotazione poco direzionale / transizione"
 
+    # ========================
+    # MAIN BOX - PIÙ COMPATTO
+    # ========================
     st.markdown(f"""
     <div style="
         background:{bg};
@@ -357,12 +376,16 @@ with tab4:
     </div>
     """, unsafe_allow_html=True)
 
+    # ========================
+    # ROTATION SCORE — SPARKLINE PIÙ GRANDE
+    # ========================
     rotation_series = compute_rotation_score_series(prices)
     
-    rotation_12m = rotation_series
     if not rotation_series.empty:
         cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
+    else:
+        rotation_12m = rotation_series
 
     fig_rs = go.Figure()
 
@@ -376,6 +399,7 @@ with tab4:
         fillcolor='rgba(100,100,100,0.2)'
     ))
 
+    # Linee di riferimento
     fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#00AA00", 
                      annotation_text="Risk On", annotation_position="right")
     fig_rs.add_hline(y=0.0, line_dash="solid", line_color="#666666")
@@ -399,24 +423,7 @@ with tab4:
     # ========================
     # DIDASCALIA ARRICCHITA
     # ========================
-    
-    # --- MODIFICA DEFINITIVA: Costruzione manuale della stringa HTML ---
-    # Questo evita problemi di rendering dovuti a spazi bianchi e indentazione
-    
-    situazione_attuale_html = f"""
-    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
-        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b>  
-  
-
-        <b>Breadth Settoriale (conferma del regime):</b>  
-
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICAL)}</b> ({cyc_pct:.0f}%) {' ✅' if cyc_pct >= 65 else ' ⚠️'}  
-
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVE)}</b> ({def_pct:.0f}%) {' ✅' if def_pct >= 65 else ' ⚠️'}
-    </div>
-    """
-
-    didascalia_html = f"""
+    st.markdown(f"""
     <div style="
         background:#0d0d0d;
         padding:25px;
@@ -431,8 +438,8 @@ with tab4:
     
     <ol style="margin:15px 0;">
         <li><b>Calcolo RSR medio</b>: per ogni settore, media dei rendimenti relativi su 1M, 3M e 6M</li>
-        <li><b>Performance Ciclici</b>: media RSR di {', '.join(CYCLICAL)}</li>
-        <li><b>Performance Difensivi</b>: media RSR di {', '.join(DEFENSIVE)}</li>
+        <li><b>Performance Ciclici</b>: media RSR di XLK, XLY, XLF, XLI, XLE, XLB</li>
+        <li><b>Performance Difensivi</b>: media RSR di XLP, XLV, XLU, XLRE</li>
         <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
     </ol>
 
@@ -442,7 +449,7 @@ with tab4:
         <tr style="background:#1a1a1a;">
             <td style="padding:10px; border:1px solid #333;"><b>Zona</b></td>
             <td style="padding:10px; border:1px solid #333;"><b>Range</b></td>
-            <td style="padding:10px; border:1-px solid #333;"><b>Significato</b></td>
+            <td style="padding:10px; border:1px solid #333;"><b>Significato</b></td>
         </tr>
         <tr>
             <td style="padding:10px; border:1px solid #333; color:#00ff00;">🟢 RISK ON</td>
@@ -463,7 +470,15 @@ with tab4:
 
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
     
-    {situazione_attuale_html}
+    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
+        
+        <b>Breadth Settoriale (conferma del regime):</b><br>
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) 
+        {' ✅' if cyc_pct >= 65 else ' ⚠️'}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+        {' ✅' if def_pct >= 65 else ' ⚠️'}
+    </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
     
@@ -475,7 +490,4 @@ with tab4:
     </ul>
 
     </div>
-    """
-    
-    st.markdown(didascalia_html, unsafe_allow_html=True)
-
+    """, unsafe_allow_html=True)
