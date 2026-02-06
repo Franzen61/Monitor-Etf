@@ -437,18 +437,19 @@ with tab4:
     ">
 
     <h3 style="color:#ff9900; margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
-    
-    Il <b>Rotation Score</b> misura la forza relativa tra settori <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY:
-    
+
+    Il <b>Rotation Score</b> misura la forza relativa tra settori
+    <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY.
+
     <ol style="margin:15px 0;">
-        <li><b>Calcolo RSR medio</b>: per ogni settore, media dei rendimenti relativi su 1M, 3M e 6M</li>
-        <li><b>Performance Ciclici</b>: media RSR di XLK, XLY, XLF, XLI, XLE, XLB</li>
-        <li><b>Performance Difensivi</b>: media RSR di XLP, XLV, XLU, XLRE</li>
+        <li><b>Calcolo RSR medio</b>: media dei rendimenti relativi su 1M, 3M e 6M</li>
+        <li><b>Performance Ciclici</b>: XLK, XLY, XLF, XLI, XLE, XLB</li>
+        <li><b>Performance Difensivi</b>: XLP, XLV, XLU, XLRE</li>
         <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
     </ol>
 
     <h3 style="color:#ff9900; margin-top:25px;">📈 Come Interpretare il Grafico</h3>
-    
+
     <table style="width:100%; border-collapse:collapse; margin:15px 0;">
         <tr style="background:#1a1a1a;">
             <td style="padding:10px; border:1px solid #333;"><b>Zona</b></td>
@@ -458,39 +459,42 @@ with tab4:
         <tr>
             <td style="padding:10px; border:1px solid #333; color:#00ff00;">🟢 RISK ON</td>
             <td style="padding:10px; border:1px solid #333;">&gt; +1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Ciclici dominanti, mercato in fase espansiva</td>
+            <td style="padding:10px; border:1px solid #333;">Ciclici dominanti</td>
         </tr>
         <tr style="background:#0a0a0a;">
             <td style="padding:10px; border:1px solid #333; color:#ffff00;">🟡 NEUTRAL</td>
             <td style="padding:10px; border:1px solid #333;">-1.5 a +1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Equilibrio o fase di transizione tra stili</td>
+            <td style="padding:10px; border:1px solid #333;">Fase di transizione</td>
         </tr>
         <tr>
             <td style="padding:10px; border:1px solid #333; color:#ff0000;">🔴 RISK OFF</td>
             <td style="padding:10px; border:1px solid #333;">&lt; -1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Difensivi dominanti, mercato in fase difensiva</td>
+            <td style="padding:10px; border:1px solid #333;">Difensivi dominanti</td>
         </tr>
     </table>
 
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
-    
+
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
-        
+
         <b>Breadth Settoriale (conferma del regime):</b><br>
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) 
-        {' ✅' if cyc_pct >= 65 else ' ⚠️'}<br>
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
-        {' ✅' if def_pct >= 65 else ' ⚠️'}
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b>
+        ({cyc_pct:.0f}%)
+        {'✅' if cyc_pct >= 65 else '⚠️'}<br>
+
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b>
+        ({def_pct:.0f}%)
+        {'✅' if def_pct >= 65 else '⚠️'}
     </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
-    
-    <ul style="margin:10px 0;">
-        <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
-        <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
-        <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
-        <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
+
+    <ul>
+        <li>Linea in salita → rotazione Risk On</li>
+        <li>Linea in discesa → rotazione Risk Off</li>
+        <li>Breadth &gt;65% → regime confermato</li>
+        <li>Breadth basso + score estremo → possibile inversione</li>
     </ul>
 
     </div>
