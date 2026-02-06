@@ -301,6 +301,7 @@ with tab3:
             return ["background-color:#1e1e1e;color:#ccc"]*len(row)
         return ["background-color:#000;color:white"]*len(row)
     
+    # INTERVENTO 1: Aggiungi funzione highlight_max
     def highlight_max(s):
         max_val = s.max()
         return [
@@ -309,6 +310,7 @@ with tab3:
             for v in s
         ]
     
+    # INTERVENTO 1: Modifica il blocco finale
     st.dataframe(
         f.round(2)
         .style
@@ -421,12 +423,7 @@ with tab4:
     # ========================
     # DIDASCALIA ARRICCHITA
     # ========================
-    # Prepara emoji per breadth
-    cyc_emoji = "✅" if cyc_pct >= 65 else "⚠️"
-    def_emoji = "✅" if def_pct >= 65 else "⚠️"
-    
-    # Costruisci HTML con variabili
-    html_content = f"""
+    st.markdown(f"""
     <div style="
         background:#0d0d0d;
         padding:25px;
@@ -476,9 +473,11 @@ with tab4:
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
         
-        <b>Breadth Settoriale (conferma del regime):</b><br><br>
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}<br>
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}
+        <b>Breadth Settoriale (conferma del regime):</b><br>
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) 
+        {' ✅' if cyc_pct >= 65 else ' ⚠️'}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%)
+        {' ✅' if def_pct >= 65 else ' ⚠️'}
     </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
@@ -491,6 +490,4 @@ with tab4:
     </ul>
 
     </div>
-    """
-    
-    st.markdown(html_content, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
