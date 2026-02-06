@@ -185,17 +185,58 @@ with tab1:
     col1, col2 = st.columns([1.2,1])
 
     with col1:
-        fig = go.Figure()
-        for t in ALL_TICKERS:
-            fig.add_bar(x=[t], y=[returns.loc[t,"1D"]])
-        fig.update_layout(
-            height=300,
-            paper_bgcolor="#000",
-            plot_bgcolor="#000",
-            font_color="white",
-            title="Variazione % Giornaliera"
+    # Palette colori professionale per 11 settori + SPY
+    colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
+        '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
+        '#F8B739', '#52B788', '#E76F51', '#00FF00'
+    ]
+    
+    # Prepara dati
+    tickers_list = ALL_TICKERS
+    values = [returns.loc[t, "1D"] for t in tickers_list]
+    bar_colors = [colors[i] for i in range(len(tickers_list))]
+    
+    # Crea grafico con UN SOLO trace (nessuna legenda multipla)
+    fig = go.Figure(data=[
+        go.Bar(
+            x=tickers_list,
+            y=values,
+            marker=dict(
+                color=bar_colors,
+                line=dict(color='#333', width=1)  # bordo sottile
+            ),
+            width=0.7,  # larghezza barre (0.5-0.9 ottimale)
+            showlegend=False  # NESSUNA LEGENDA
         )
-        st.plotly_chart(fig, width='stretch')
+    ])
+    
+    # Layout pulito
+    fig.update_layout(
+        height=300,
+        paper_bgcolor="#000",
+        plot_bgcolor="#000",
+        font=dict(color="white", size=12),
+        title=dict(
+            text="Variazione % Giornaliera",
+            font=dict(size=16, color="#ff9900")
+        ),
+        xaxis=dict(
+            tickangle=0,
+            gridcolor="#1a1a1a"
+        ),
+        yaxis=dict(
+            title="",
+            gridcolor="#1a1a1a",
+            zeroline=True,
+            zerolinecolor="#444",
+            zerolinewidth=2
+        ),
+        margin=dict(l=40, r=20, t=50, b=40),
+        bargap=0.15  # spazio tra barre
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
     with col2:
         for t,row in df.head(3).iterrows():
