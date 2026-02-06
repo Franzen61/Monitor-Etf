@@ -425,7 +425,8 @@ with tab4:
     cyc_emoji = "✅" if cyc_pct >= 65 else "⚠️"
     def_emoji = "✅" if def_pct >= 65 else "⚠️"
     
-    st.markdown(f"""
+    # Costruisci HTML con variabili
+    html_content = f"""
     <div style="
         background:#0d0d0d;
         padding:25px;
@@ -490,4 +491,6 @@ with tab4:
     </ul>
 
     </div>
-    """, unsafe_allow_html=True)
+    """
+    
+    st.markdown(html_content, unsafe_allow_html=True)
