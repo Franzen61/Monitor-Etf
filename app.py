@@ -39,8 +39,6 @@ SECTORS = ["XLK","XLY","XLF","XLC","XLV","XLP","XLI","XLE","XLB","XLU","XLRE"]
 BENCHMARK = "SPY"
 ALL_TICKERS = SECTORS + [BENCHMARK]
 
-# --- MODIFICA 1: Definizioni spostate qui per essere usate globalmente ---
-# Definiamo i settori ciclici e difensivi una sola volta
 CYCLICAL = ["XLK","XLY","XLF","XLI","XLB","XLE"]
 DEFENSIVE = ["XLV","XLP","XLU","XLRE"]
 
@@ -320,28 +318,19 @@ with tab3:
 # TAB 4 — ROTAZIONE SETTORIALE
 # ========================
 with tab4:
-    # --- MODIFICA 2: Rimosse definizioni ridondanti di CYCLICALS e DEFENSIVES ---
-    # Si usano le variabili globali CYCLICAL e DEFENSIVE definite all'inizio
-
-    # --- RAR medio su timeframe guida ---
     rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
 
     cyc_score = rar_focus.loc[CYCLICAL]
     def_score = rar_focus.loc[DEFENSIVE]
 
-    # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
     def_breadth = (def_score > 0).sum()
 
     cyc_pct = cyc_breadth / len(CYCLICAL) * 100
     def_pct = def_breadth / len(DEFENSIVE) * 100
 
-    # --- Rotation Score ---
     rotation_score = cyc_score.mean() - def_score.mean()
 
-    # ========================
-    # REGIME LOGIC
-    # ========================
     if rotation_score > 1.5 and cyc_pct >= 65:
         regime = "🟢 ROTATION: RISK ON"
         bg = "#003300"
@@ -355,9 +344,6 @@ with tab4:
         bg = "#333300"
         comment = "Rotazione poco direzionale / transizione"
 
-    # ========================
-    # MAIN BOX - PIÙ COMPATTO
-    # ========================
     st.markdown(f"""
     <div style="
         background:{bg};
@@ -371,16 +357,12 @@ with tab4:
     </div>
     """, unsafe_allow_html=True)
 
-    # ========================
-    # ROTATION SCORE — SPARKLINE PIÙ GRANDE
-    # ========================
     rotation_series = compute_rotation_score_series(prices)
     
+    rotation_12m = rotation_series
     if not rotation_series.empty:
         cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
-    else:
-        rotation_12m = rotation_series
 
     fig_rs = go.Figure()
 
@@ -400,7 +382,7 @@ with tab4:
     fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#AA0000",
                      annotation_text="Risk Off", annotation_position="right")
 
-    fig.update_layout(
+    fig_rs.update_layout(
         height=280,
         margin=dict(l=40, r=40, t=20, b=40),
         paper_bgcolor="#000000",
@@ -417,7 +399,24 @@ with tab4:
     # ========================
     # DIDASCALIA ARRICCHITA
     # ========================
-    st.markdown(f"""
+    
+    # --- MODIFICA DEFINITIVA: Costruzione manuale della stringa HTML ---
+    # Questo evita problemi di rendering dovuti a spazi bianchi e indentazione
+    
+    situazione_attuale_html = f"""
+    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b>  
+  
+
+        <b>Breadth Settoriale (conferma del regime):</b>  
+
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICAL)}</b> ({cyc_pct:.0f}%) {' ✅' if cyc_pct >= 65 else ' ⚠️'}  
+
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVE)}</b> ({def_pct:.0f}%) {' ✅' if def_pct >= 65 else ' ⚠️'}
+    </div>
+    """
+
+    didascalia_html = f"""
     <div style="
         background:#0d0d0d;
         padding:25px;
@@ -443,7 +442,7 @@ with tab4:
         <tr style="background:#1a1a1a;">
             <td style="padding:10px; border:1px solid #333;"><b>Zona</b></td>
             <td style="padding:10px; border:1px solid #333;"><b>Range</b></td>
-            <td style="padding:10px; border:1px solid #333;"><b>Significato</b></td>
+            <td style="padding:10px; border:1-px solid #333;"><b>Significato</b></td>
         </tr>
         <tr>
             <td style="padding:10px; border:1px solid #333; color:#00ff00;">🟢 RISK ON</td>
@@ -464,19 +463,7 @@ with tab4:
 
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
     
-    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
-        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b>  
-  
-
-        
-        <b>Breadth Settoriale (conferma del regime):</b>  
-
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICAL)}</b> ({cyc_pct:.0f}%) 
-        {' ✅' if cyc_pct >= 65 else ' ⚠️'}  
-
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVE)}</b> ({def_pct:.0f}%)
-        {' ✅' if def_pct >= 65 else ' ⚠️'}
-    </div>
+    {situazione_attuale_html}
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
     
@@ -488,4 +475,7 @@ with tab4:
     </ul>
 
     </div>
-    """, unsafe_allow_html=True)
+    """
+    
+    st.markdown(didascalia_html, unsafe_allow_html=True)
+
