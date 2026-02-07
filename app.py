@@ -137,7 +137,7 @@ for col in returns.columns:
 df = rsr_df.loc[SECTORS].copy()
 
 
-df["Ra_momentum"] = (
+df["Rsr_momentum"] = (
     df["1M"]*WEIGHTS["1M"] +
     df["3M"]*WEIGHTS["3M"] +
     df["6M"]*WEIGHTS["6M"]
@@ -145,11 +145,11 @@ df["Ra_momentum"] = (
 
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
 df["Delta_RS_5D"] = df["1W"]
-df = df.sort_values("Ra_momentum", ascending=False)
+df = df.sort_values("Rsr_momentum", ascending=False)
 df["Classifica"] = range(1, len(df)+1)
 
 def situazione(row):
-    if row.Ra_momentum > 0:
+    if row.Rsr_momentum > 0:
         return "LEADER" if row.Coerenza_Trend >= 4 else "IN RECUPERO"
     return "DEBOLE"
 
@@ -163,8 +163,8 @@ def operativita(row):
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
         return "📈 HOLD"
     if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
-        return "👀 OSSERVA"
-    return "❌ EVITA"
+        return "👀 OBSERVE"
+    return "❌ SKIP"
 
 df["Operatività"] = df.apply(operativita, axis=1)
 
