@@ -425,10 +425,13 @@ with tab4:
     st.plotly_chart(fig_rs, use_container_width=True)
 
     # ========================
-    # DIDASCALIA ARRICCHITA
+    # DIDASCALIA COMPLETA
     # ========================
+    
+    cyc_emoji = "✅" if cyc_pct >= 65 else "⚠️"
+    def_emoji = "✅" if def_pct >= 65 else "⚠️"
 
-    st.markdown("""
+    st.markdown(f"""
     <div style="
         background:#0d0d0d;
         padding:25px;
@@ -437,9 +440,7 @@ with tab4:
         line-height:1.7;
     ">
 
-    <h3 style="color:#ff9900; margin-top:0;">
-    📊 Come si Calcola il Rotation Score
-    </h3>
+    <h3 style="color:#ff9900; margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
 
     Il <b>Rotation Score</b> misura la forza relativa tra settori
     <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY.
@@ -451,9 +452,7 @@ with tab4:
         <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
     </ol>
 
-    <h3 style="color:#ff9900; margin-top:25px;">
-    📈 Come Interpretare il Grafico
-    </h3>
+    <h3 style="color:#ff9900; margin-top:25px;">📈 Come Interpretare il Grafico</h3>
 
     <table style="width:100%; border-collapse:collapse; margin:15px 0;">
         <tr style="background:#1a1a1a;">
@@ -478,52 +477,25 @@ with tab4:
         </tr>
     </table>
 
-    </div>
-    """, unsafe_allow_html=True)
+    <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
 
-
-    # ========================
-    # SITUAZIONE ATTUALE (SEPARATA)
-    # ========================
-
-    st.markdown(f"""
-    <h3 style="color:#ff9900; margin-top:25px;">
-    🎯 Situazione Attuale
-    </h3>
-
-    <div style="
-        background:#1a1a1a;
-        padding:15px;
-        border-radius:8px;
-        margin:15px 0;
-    ">
-
-        <b>Rotation Score:</b> {rotation_score:.2f}
-        → <b>{comment}</b><br><br>
+    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
 
         <b>Breadth Settoriale (conferma del regime):</b><br>
-
-        • Cyclicals in leadership:
-        <b>{cyc_breadth}/{len(CYCLICALS)}</b>
-        ({cyc_pct:.0f}%)
-        {"✅" if cyc_pct >= 65 else "⚠️"}<br>
-
-        • Defensives in leadership:
-        <b>{def_breadth}/{len(DEFENSIVES)}</b>
-        ({def_pct:.0f}%)
-        {"✅" if def_pct >= 65 else "⚠️"}
-
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}
     </div>
 
-    <h3 style="color:#ff9900; margin-top:25px;">
-    💡 Come Usare Questo Indicatore
-    </h3>
+    <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
 
-    <ul>
-        <li>Linea in salita → rotazione Risk On</li>
-        <li>Linea in discesa → rotazione Risk Off</li>
-        <li>Breadth &gt;65% → regime confermato</li>
-        <li>Breadth basso + score estremo → possibile inversione</li>
+    <ul style="margin:10px 0;">
+        <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
+        <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
+        <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
+        <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
     </ul>
+
+    </div>
     """, unsafe_allow_html=True)
 
