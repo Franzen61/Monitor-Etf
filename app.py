@@ -244,7 +244,7 @@ with tab1:
             st.markdown(f"""
             <div class="leader-box">
                 <div class="leader-ticker">{t}</div>
-                <div class="leader-mom">Ra Momentum: {row.Ra_momentum:.2f}</div>
+                <div class="leader-mom">Rsr Momentum: {row.Rsr_momentum:.2f}</div>
                 <div>Operatività: {row.Operatività}</div>
                 <div>{row.Situazione}</div>
             </div>
