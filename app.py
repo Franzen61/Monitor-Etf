@@ -475,10 +475,10 @@ with tab4:
 
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
     
-    st.markdown(f"""
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
 
+    st.markdown(f"""
         <b>Breadth Settoriale (conferma del regime):</b><br>
         • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b>
         ({cyc_pct:.0f}%)
