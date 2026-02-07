@@ -428,8 +428,14 @@ with tab4:
     # DIDASCALIA COMPLETA
     # ========================
     
+    # Prepara tutte le variabili PRIMA
     cyc_emoji = "✅" if cyc_pct >= 65 else "⚠️"
     def_emoji = "✅" if def_pct >= 65 else "⚠️"
+    
+    breadth_html = f"""
+        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}<br>
+        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}
+    """
 
     st.markdown(f"""
     <div style="
@@ -481,10 +487,8 @@ with tab4:
 
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
-
         <b>Breadth Settoriale (conferma del regime):</b><br>
-        • Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}<br>
-        • Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}
+        {breadth_html}
     </div>
 
     <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
@@ -498,4 +502,3 @@ with tab4:
 
     </div>
     """, unsafe_allow_html=True)
-
