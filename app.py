@@ -473,9 +473,9 @@ with tab4:
         </tr>
     </table>
 
-    st.markdown(f"""
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
-
+    
+    st.markdown(f"""
     <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b><br><br>
 
