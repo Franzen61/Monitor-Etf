@@ -486,8 +486,6 @@ with tab4:
     <ul style="margin:10px 0;">
         <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
         <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
-        <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
-        <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
     </ul>
 
     </div>
