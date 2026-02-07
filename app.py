@@ -4,6 +4,7 @@ import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import streamlit.components.v1 as components
 
 # ========================
 # CONFIG & STYLE
@@ -428,10 +429,11 @@ with tab4:
     # DIDASCALIA COMPLETA
     # ========================
     
-    # Prepara tutte le variabili PRIMA
+    # Prepara variabili
     cyc_emoji = "✅" if cyc_pct >= 65 else "⚠️"
     def_emoji = "✅" if def_pct >= 65 else "⚠️"
 
+    # Prima parte - funziona con st.markdown
     st.markdown(f"""
     <div style="
         background:#0d0d0d;
@@ -479,23 +481,29 @@ with tab4:
     </table>
 
     <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
-
-    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
-        <p><b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b></p>
-        
-        <p><b>Breadth Settoriale (conferma del regime):</b></p>
-        <p>• Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}</p>
-        <p>• Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}</p>
-    </div>
-
-    <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
-
-    <ul style="margin:10px 0;">
-        <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
-        <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
-        <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
-        <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
-    </ul>
-
     </div>
     """, unsafe_allow_html=True)
+
+    # Seconda parte - usa components.html per le emoji
+    situazione_html = f"""
+    <div style="background:#0d0d0d; padding:0 25px 25px 25px; margin-top:-10px; border-radius:0 0 10px 10px;">
+        <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0; font-size:1.05em; line-height:1.7;">
+            <p style="margin:5px 0;"><b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b></p>
+            
+            <p style="margin:15px 0 5px 0;"><b>Breadth Settoriale (conferma del regime):</b></p>
+            <p style="margin:5px 0;">• Cyclicals in leadership: <b>{cyc_breadth}/{len(CYCLICALS)}</b> ({cyc_pct:.0f}%) {cyc_emoji}</p>
+            <p style="margin:5px 0;">• Defensives in leadership: <b>{def_breadth}/{len(DEFENSIVES)}</b> ({def_pct:.0f}%) {def_emoji}</p>
+        </div>
+
+        <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
+
+        <ul style="margin:10px 0; line-height:1.7; font-size:1.05em;">
+            <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
+            <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
+            <li><b>Breadth &gt;65%</b> → conferma la validità del regime corrente</li>
+            <li><b>Breadth basso + score estremo</b> → possibile rotazione imminente</li>
+        </ul>
+    </div>
+    """
+    
+    components.html(situazione_html, height=350)
