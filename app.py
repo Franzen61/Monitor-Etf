@@ -352,18 +352,18 @@ with tab4:
     # ========================
     # REGIME LOGIC
     # ========================
-    if rotation_score > 1.5 and cyc_pct >= 65:
+    if rotation_score > 1.5:
         regime = "🟢 ROTATION: RISK ON"
         bg = "#003300"
-        comment = "Risk On maturo, non euforico"
-    elif rotation_score < -1.5 and def_pct >= 65:
+        comment = "Ciclici dominanti su timeframe medio"
+    elif rotation_score < -1.5:
         regime = "🔴 ROTATION: RISK OFF"
         bg = "#330000"
-        comment = "Fase difensiva dominante"
+        comment = "Difensivi dominanti su timeframe medio"
     else:
         regime = "🟡 ROTATION: NEUTRAL"
         bg = "#333300"
-        comment = "Rotazione poco direzionale / transizione"
+        comment = "Equilibrio tra ciclici e difensivi"
 
     # ========================
     # MAIN BOX - PIÙ COMPATTO
