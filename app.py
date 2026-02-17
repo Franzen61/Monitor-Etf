@@ -252,13 +252,11 @@ def volume_signal(score_short, score_medium):
         sublabel  = "Segnale volumetrico non direzionale"
         text_plain = "■~ ■~  INDECISO"
 
-    html_badge = f"""
-    <div class="vol-badge">
-        {sq_s}&nbsp;{sq_m}
-        <span class="{css_label}">{label}</span>
-    </div>
-    <div class="vol-sublabel">{sublabel}</div>
-    """
+    html_badge = (
+        f'{sq_s}&nbsp;{sq_m}&nbsp;'
+        f'<span class="{css_label}">{label}</span>'
+        f'<br><span class="vol-sublabel">{sublabel}</span>'
+    )
 
     return html_badge, text_plain
 
@@ -431,20 +429,16 @@ with tab1:
 
     with col2:
         for t, row in df.head(3).iterrows():
-            st.markdown(f"""
-            <div class="leader-box">
-                <div class="leader-ticker">{t}</div>
-                <div class="leader-mom">Rsr Momentum: {row.Rsr_momentum:.2f}</div>
-                <div>Operatività: {row.Operatività}</div>
-                <div>{row.Situazione}</div>
-                <div style="margin-top:8px; border-top:1px solid #2a2a2a; padding-top:8px;">
-                    <span style="color:#666; font-size:0.78em; text-transform:uppercase; letter-spacing:0.08em;">
-                        Volume Signal
-                    </span>
-                    {vol_html[t]}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            badge = vol_html[t]
+            html = (
+                '<div class="leader-box">'
+                f'<div class="leader-ticker">{t}</div>'
+                f'<div class="leader-mom">RSR: {row.Rsr_momentum:.2f} &nbsp;|&nbsp; {row.Operatività} &nbsp;|&nbsp; {row.Situazione}</div>'
+                f'<div style="margin-top:5px;font-size:0.78em;color:#555;letter-spacing:0.06em;">VOL SIGNAL</div>'
+                f'<div style="font-size:0.88em;margin-top:2px;">{badge}</div>'
+                '</div>'
+            )
+            st.markdown(html, unsafe_allow_html=True)
 
     # Tabella con colonna Vol Signal testuale
     # Styling celle per Vol Signal
