@@ -225,32 +225,32 @@ def volume_signal(score_short, score_medium):
         label     = "CONFERMATO"
         css_label = "vol-label-confirmed"
         sublabel  = "Volume in accumulo su entrambi i timeframe"
-        text_plain = "■✓ ■✓  CONFERMATO"
+        text_plain = "✓✓ OK"
 
     elif is_neg(score_short) and is_neg(score_medium):
         label     = "DISTRIBUZIONE"
         css_label = "vol-label-distribution"
         sublabel  = "Pressione vendita dominante — cautela"
-        text_plain = "■✗ ■✗  DISTRIBUZIONE"
+        text_plain = "✗✗ DIST."
 
     elif is_pos(score_short) and is_neg(score_medium):
         label     = "INVERSIONE IN CORSO"
         css_label = "vol-label-reversal"
         sublabel  = "Breve si rafforza su medio debole — monitorare"
-        text_plain = "■✓ ■✗  INVERSIONE IN CORSO"
+        text_plain = "✓✗ INV."
 
     elif is_neg(score_short) and is_pos(score_medium):
         label     = "ESAURIMENTO"
         css_label = "vol-label-exhaustion"
         sublabel  = "Breve si deteriora su medio positivo — attenzione"
-        text_plain = "■✗ ■✓  ESAURIMENTO"
+        text_plain = "✗✓ ESAUR."
 
     else:
         # almeno uno dei due è neutro
         label     = "INDECISO"
         css_label = "vol-label-neutral"
         sublabel  = "Segnale volumetrico non direzionale"
-        text_plain = "■~ ■~  INDECISO"
+        text_plain = "~~ —"
 
     html_badge = (
         f'{sq_s}&nbsp;{sq_m}&nbsp;'
@@ -409,7 +409,7 @@ with tab1:
             )
         ])
         fig.update_layout(
-            height=300,
+            height=380,
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font=dict(color="white", size=12),
@@ -477,11 +477,11 @@ with tab1:
         gap:24px;
         flex-wrap:wrap;
     ">
-        <span><b style="color:#00ff55">■✓ ■✓ CONFERMATO</b> — accumulo confermato su entrambi i timeframe</span>
-        <span><b style="color:#ffaa00">■✗ ■✓ ESAURIMENTO</b> — momentum si indebolisce nel breve</span>
-        <span><b style="color:#44aaff">■✓ ■✗ INVERSIONE IN CORSO</b> — breve si rafforza su medio debole</span>
-        <span><b style="color:#ff4422">■✗ ■✗ DISTRIBUZIONE</b> — pressione vendita dominante</span>
-        <span><b style="color:#888">■~ ■~ INDECISO</b> — segnale non direzionale</span>
+        <span><b style="color:#00ff55">✓✓ OK</b> — accumulo su entrambi i timeframe</span>
+        <span><b style="color:#ffaa00">✗✓ ESAUR.</b> — breve si deteriora su medio positivo</span>
+        <span><b style="color:#44aaff">✓✗ INV.</b> — breve si rafforza su medio debole</span>
+        <span><b style="color:#ff4422">✗✗ DIST.</b> — pressione vendita dominante</span>
+        <span><b style="color:#888">~~ —</b> — segnale non direzionale</span>
     </div>
     """, unsafe_allow_html=True)
 
