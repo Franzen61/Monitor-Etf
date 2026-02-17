@@ -409,7 +409,7 @@ with tab1:
             )
         ])
         fig.update_layout(
-            height=380,
+            height=420,
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font=dict(color="white", size=12),
@@ -440,6 +440,12 @@ with tab1:
             )
             st.markdown(html, unsafe_allow_html=True)
 
+    # Riduci gap tra sezione top e tabella
+    st.markdown(
+        '<style>div[data-testid="stDataFrame"] { margin-top: -1rem; }</style>',
+        unsafe_allow_html=True
+    )
+
     # Tabella con colonna Vol Signal testuale
     # Styling celle per Vol Signal
     def style_vol(val):
@@ -462,7 +468,16 @@ with tab1:
         .map(style_vol, subset=["Vol Signal"])
     )
 
-    st.dataframe(styled, width="stretch")
+    st.dataframe(
+        styled,
+        width="stretch",
+        column_config={
+            "Vol Signal": st.column_config.TextColumn(
+                "Vol Signal",
+                width="medium",
+            )
+        }
+    )
 
     # Legenda Volume Signal
     st.markdown("""
