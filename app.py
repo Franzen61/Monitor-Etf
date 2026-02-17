@@ -225,32 +225,32 @@ def volume_signal(score_short, score_medium):
         label     = "CONFERMATO"
         css_label = "vol-label-confirmed"
         sublabel  = "Volume in accumulo su entrambi i timeframe"
-        text_plain = "✓✓ OK"
+        text_plain = "[B+M+] ACCUMULO"
 
     elif is_neg(score_short) and is_neg(score_medium):
         label     = "DISTRIBUZIONE"
         css_label = "vol-label-distribution"
         sublabel  = "Pressione vendita dominante — cautela"
-        text_plain = "✗✗ DIST."
+        text_plain = "[B-M-] DISTRIBUZ"
 
     elif is_pos(score_short) and is_neg(score_medium):
         label     = "INVERSIONE IN CORSO"
         css_label = "vol-label-reversal"
         sublabel  = "Breve si rafforza su medio debole — monitorare"
-        text_plain = "✓✗ INV."
+        text_plain = "[B+M-] INVERSIONE"
 
     elif is_neg(score_short) and is_pos(score_medium):
         label     = "ESAURIMENTO"
         css_label = "vol-label-exhaustion"
         sublabel  = "Breve si deteriora su medio positivo — attenzione"
-        text_plain = "✗✓ ESAUR."
+        text_plain = "[B-M+] ESAURIM."
 
     else:
         # almeno uno dei due è neutro
         label     = "INDECISO"
         css_label = "vol-label-neutral"
         sublabel  = "Segnale volumetrico non direzionale"
-        text_plain = "~~ —"
+        text_plain = "[B~ M~] INDECISO"
 
     html_badge = (
         f'{sq_s}&nbsp;{sq_m}&nbsp;'
@@ -443,15 +443,16 @@ with tab1:
     # Tabella con colonna Vol Signal testuale
     # Styling celle per Vol Signal
     def style_vol(val):
-        if "CONFERMATO" in str(val):
+        v = str(val)
+        if "ACCUMULO" in v:
             return "background-color:#0d2b0d; color:#00ff55; font-weight:bold"
-        if "DISTRIBUZIONE" in str(val):
+        if "DISTRIBUZ" in v:
             return "background-color:#2b0d0d; color:#ff4422; font-weight:bold"
-        if "ESAURIMENTO" in str(val):
+        if "ESAURIM" in v:
             return "background-color:#2b1a00; color:#ffaa00; font-weight:bold"
-        if "INVERSIONE" in str(val):
+        if "INVERSIONE" in v:
             return "background-color:#0d1a2b; color:#44aaff; font-weight:bold"
-        if "INDECISO" in str(val):
+        if "INDECISO" in v:
             return "background-color:#1a1a1a; color:#888888"
         return ""
 
@@ -477,11 +478,11 @@ with tab1:
         gap:24px;
         flex-wrap:wrap;
     ">
-        <span><b style="color:#00ff55">✓✓ OK</b> — accumulo su entrambi i timeframe</span>
-        <span><b style="color:#ffaa00">✗✓ ESAUR.</b> — breve si deteriora su medio positivo</span>
-        <span><b style="color:#44aaff">✓✗ INV.</b> — breve si rafforza su medio debole</span>
-        <span><b style="color:#ff4422">✗✗ DIST.</b> — pressione vendita dominante</span>
-        <span><b style="color:#888">~~ —</b> — segnale non direzionale</span>
+        <span><b style="color:#00ff55">[B+M+] ACCUMULO</b> — breve e medio positivi</span>
+        <span><b style="color:#ffaa00">[B-M+] ESAURIM.</b> — breve si deteriora su medio positivo</span>
+        <span><b style="color:#44aaff">[B+M-] INVERSIONE</b> — breve si rafforza su medio debole</span>
+        <span><b style="color:#ff4422">[B-M-] DISTRIBUZ</b> — pressione vendita dominante</span>
+        <span><b style="color:#888">[B~ M~] INDECISO</b> — segnale non direzionale</span>
     </div>
     """, unsafe_allow_html=True)
 
