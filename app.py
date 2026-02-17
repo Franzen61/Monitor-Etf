@@ -11,62 +11,61 @@ import streamlit.components.v1 as components
 # ========================
 st.set_page_config(layout="wide", page_title="Financial Terminal")
 
-st.markdown("""
-<style>
-.main { background-color: #000000; color: #ffffff; }
-.leader-box {
-    background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 12px;
-}
-.leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }
-.leader-mom { color: #00ff00; font-family: monospace; }
-.rotation-box {
-    text-align:center;
-    padding:40px;
-    border-radius:12px;
-    font-size:32px;
-    font-weight:bold;
-}
-
-/* Volume Signal badge */
-.vol-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-    font-family: 'Courier New', monospace;
-    font-size: 0.85em;
-}
-.vol-square {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: bold;
-    line-height: 1;
-}
-.vol-green  { background-color: #1a4a1a; border: 1.5px solid #00cc44; color: #00ff55; }
-.vol-red    { background-color: #4a1a1a; border: 1.5px solid #cc2200; color: #ff4422; }
-.vol-yellow { background-color: #3a3a00; border: 1.5px solid #aaaa00; color: #ffff44; }
-.vol-label-confirmed    { color: #00ff55; font-weight: bold; letter-spacing: 0.05em; }
-.vol-label-exhaustion   { color: #ffaa00; font-weight: bold; letter-spacing: 0.05em; }
-.vol-label-reversal     { color: #44aaff; font-weight: bold; letter-spacing: 0.05em; }
-.vol-label-distribution { color: #ff4422; font-weight: bold; letter-spacing: 0.05em; }
-.vol-label-neutral      { color: #aaaaaa; font-weight: bold; letter-spacing: 0.05em; }
-.vol-sublabel {
-    color: #666;
-    font-size: 0.78em;
-    margin-top: 2px;
-    font-style: italic;
-}
-</style>
-""", unsafe_allow_html=True)
+CSS_STYLE = (
+    "<style>"
+    ".main { background-color: #000000; color: #ffffff; }"
+    ".leader-box {"
+    "    background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);"
+    "    border: 1px solid #333;"
+    "    border-radius: 8px;"
+    "    padding: 15px;"
+    "    margin-bottom: 12px;"
+    "}"
+    ".leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }"
+    ".leader-mom { color: #00ff00; font-family: monospace; }"
+    ".rotation-box {"
+    "    text-align:center;"
+    "    padding:40px;"
+    "    border-radius:12px;"
+    "    font-size:32px;"
+    "    font-weight:bold;"
+    "}"
+    ".vol-badge {"
+    "    display: inline-flex;"
+    "    align-items: center;"
+    "    gap: 6px;"
+    "    margin-top: 6px;"
+    "    font-family: Courier New, monospace;"
+    "    font-size: 0.85em;"
+    "}"
+    ".vol-square {"
+    "    display: inline-flex;"
+    "    align-items: center;"
+    "    justify-content: center;"
+    "    width: 18px;"
+    "    height: 18px;"
+    "    border-radius: 3px;"
+    "    font-size: 11px;"
+    "    font-weight: bold;"
+    "    line-height: 1;"
+    "}"
+    ".vol-green  { background-color: #1a4a1a; border: 1.5px solid #00cc44; color: #00ff55; }"
+    ".vol-red    { background-color: #4a1a1a; border: 1.5px solid #cc2200; color: #ff4422; }"
+    ".vol-yellow { background-color: #3a3a00; border: 1.5px solid #aaaa00; color: #ffff44; }"
+    ".vol-label-confirmed    { color: #00ff55; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-exhaustion   { color: #ffaa00; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-reversal     { color: #44aaff; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-distribution { color: #ff4422; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-neutral      { color: #aaaaaa; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-sublabel {"
+    "    color: #666;"
+    "    font-size: 0.78em;"
+    "    margin-top: 2px;"
+    "    font-style: italic;"
+    "}"
+    "</style>"
+)
+st.markdown(CSS_STYLE, unsafe_allow_html=True)
 
 # ========================
 # TICKERS
@@ -289,9 +288,9 @@ def rsr(asset_ret, benchmark_ret):
 # ROTATION SCORE SERIES
 # ========================
 def compute_rotation_score_series(prices):
-    ret_1m = prices.pct_change(21)
-    ret_3m = prices.pct_change(63)
-    ret_6m = prices.pct_change(126)
+    ret_1m = prices.pct_change(21, fill_method=None)
+    ret_3m = prices.pct_change(63, fill_method=None)
+    ret_6m = prices.pct_change(126, fill_method=None)
 
     rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
     rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
@@ -428,7 +427,7 @@ with tab1:
             margin=dict(l=40, r=20, t=50, b=40),
             bargap=0.15
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col2:
         for t, row in df.head(3).iterrows():
@@ -465,10 +464,10 @@ with tab1:
     styled = (
         df.round(2)
         .style
-        .applymap(style_vol, subset=["Vol Signal"])
+        .map(style_vol, subset=["Vol Signal"])
     )
 
-    st.dataframe(styled, use_container_width=True)
+    st.dataframe(styled, width="stretch")
 
     # Legenda Volume Signal
     st.markdown("""
@@ -517,7 +516,7 @@ with tab2:
         font_color="white",
         yaxis_title="Variazione %"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 # ========================
@@ -561,7 +560,7 @@ with tab3:
             .apply(style_row, axis=1)
             .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
             .format({"Prezzo": "{:.2f}", **{c: "{:+.2f}%" for c in f.columns if c != "Prezzo"}}),
-            use_container_width=True
+            width="stretch"
         )
 
 
@@ -643,7 +642,7 @@ with tab4:
         xaxis_title="",
         yaxis=dict(gridcolor="#222222")
     )
-    st.plotly_chart(fig_rs, use_container_width=True)
+    st.plotly_chart(fig_rs, width="stretch")
 
     st.markdown(f"""
     <div style="
