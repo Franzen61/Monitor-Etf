@@ -11,27 +11,61 @@ import streamlit.components.v1 as components
 # ========================
 st.set_page_config(layout="wide", page_title="Financial Terminal")
 
-st.markdown("""
-<style>
-.main { background-color: #000000; color: #ffffff; }
-.leader-box {
-    background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 12px;
-}
-.leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }
-.leader-mom { color: #00ff00; font-family: monospace; }
-.rotation-box {
-    text-align:center;
-    padding:40px;
-    border-radius:12px;
-    font-size:32px;
-    font-weight:bold;
-}
-</style>
-""", unsafe_allow_html=True)
+CSS_STYLE = (
+    "<style>"
+    ".main { background-color: #000000; color: #ffffff; }"
+    ".leader-box {"
+    "    background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);"
+    "    border: 1px solid #333;"
+    "    border-radius: 8px;"
+    "    padding: 15px;"
+    "    margin-bottom: 12px;"
+    "}"
+    ".leader-ticker { color: #ff9900; font-size: 1.4em; font-weight: bold; }"
+    ".leader-mom { color: #00ff00; font-family: monospace; }"
+    ".rotation-box {"
+    "    text-align:center;"
+    "    padding:40px;"
+    "    border-radius:12px;"
+    "    font-size:32px;"
+    "    font-weight:bold;"
+    "}"
+    ".vol-badge {"
+    "    display: inline-flex;"
+    "    align-items: center;"
+    "    gap: 6px;"
+    "    margin-top: 6px;"
+    "    font-family: Courier New, monospace;"
+    "    font-size: 0.85em;"
+    "}"
+    ".vol-square {"
+    "    display: inline-flex;"
+    "    align-items: center;"
+    "    justify-content: center;"
+    "    width: 18px;"
+    "    height: 18px;"
+    "    border-radius: 3px;"
+    "    font-size: 11px;"
+    "    font-weight: bold;"
+    "    line-height: 1;"
+    "}"
+    ".vol-green  { background-color: #1a4a1a; border: 1.5px solid #00cc44; color: #00ff55; }"
+    ".vol-red    { background-color: #4a1a1a; border: 1.5px solid #cc2200; color: #ff4422; }"
+    ".vol-yellow { background-color: #3a3a00; border: 1.5px solid #aaaa00; color: #ffff44; }"
+    ".vol-label-confirmed    { color: #00ff55; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-exhaustion   { color: #ffaa00; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-reversal     { color: #44aaff; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-distribution { color: #ff4422; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-label-neutral      { color: #aaaaaa; font-weight: bold; letter-spacing: 0.05em; }"
+    ".vol-sublabel {"
+    "    color: #666;"
+    "    font-size: 0.78em;"
+    "    margin-top: 2px;"
+    "    font-style: italic;"
+    "}"
+    "</style>"
+)
+st.markdown(CSS_STYLE, unsafe_allow_html=True)
 
 # ========================
 # TICKERS
@@ -52,13 +86,12 @@ FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
 # ========================
-# DATA LOADER
+# DATA LOADER — OHLCV
 # ========================
 @st.cache_data(ttl=60*60)
 def load_prices(tickers):
     end = datetime.today()
     start = end - timedelta(days=6*365)
-
     data = yf.download(
         tickers,
         start=start,
@@ -66,11 +99,167 @@ def load_prices(tickers):
         auto_adjust=True,
         progress=False
     )
-
     if isinstance(data.columns, pd.MultiIndex):
-        data = data["Close"]
+        close = data["Close"]
+    else:
+        close = data
+    return close.dropna(how="all")
 
-    return data.dropna(how="all")
+
+@st.cache_data(ttl=60*60)
+def load_ohlcv(tickers):
+    """Scarica OHLCV completo per il calcolo del Volume Signal."""
+    end = datetime.today()
+    start = end - timedelta(days=60)
+    raw = yf.download(
+        tickers,
+        start=start,
+        end=end,
+        auto_adjust=True,
+        progress=False
+    )
+    return raw
+
+
+# ========================
+# VOLUME SIGNAL
+# ========================
+def compute_vwds(ohlcv_raw, ticker, window):
+    """
+    Volume-Weighted Directional Score per un singolo ticker.
+
+    Logica:
+    - Per ogni candela stima la quota "buy" come (Close - Low) / (High - Low)
+      → 1.0 = close al massimo (tutta pressione buy)
+      → 0.0 = close al minimo (tutta pressione sell)
+    - Calcola buy_vol  = volume * buy_ratio
+              sell_vol = volume * (1 - buy_ratio)
+    - Score = (sum_buy - sum_sell) / (sum_buy + sum_sell)  nell'intervallo [-1, +1]
+
+    window: numero di giorni da considerare (10 = breve, 20 = medio)
+    """
+    try:
+        if isinstance(ohlcv_raw.columns, pd.MultiIndex):
+            hi = ohlcv_raw["High"][ticker].dropna()
+            lo = ohlcv_raw["Low"][ticker].dropna()
+            cl = ohlcv_raw["Close"][ticker].dropna()
+            vo = ohlcv_raw["Volume"][ticker].dropna()
+        else:
+            # singolo ticker
+            hi = ohlcv_raw["High"].dropna()
+            lo = ohlcv_raw["Low"].dropna()
+            cl = ohlcv_raw["Close"].dropna()
+            vo = ohlcv_raw["Volume"].dropna()
+
+        # Allinea gli indici
+        idx = hi.index.intersection(lo.index).intersection(cl.index).intersection(vo.index)
+        hi, lo, cl, vo = hi[idx], lo[idx], cl[idx], vo[idx]
+
+        # Prendi gli ultimi `window` giorni
+        hi = hi.iloc[-window:]
+        lo = lo.iloc[-window:]
+        cl = cl.iloc[-window:]
+        vo = vo.iloc[-window:]
+
+        if len(cl) < window // 2:
+            return np.nan
+
+        # Range della candela — evita divisione per zero
+        rng = hi - lo
+        rng = rng.replace(0, np.nan)
+
+        buy_ratio  = (cl - lo) / rng
+        buy_ratio  = buy_ratio.fillna(0.5)   # doji → neutro
+        buy_ratio  = buy_ratio.clip(0, 1)
+
+        buy_vol  = vo * buy_ratio
+        sell_vol = vo * (1 - buy_ratio)
+
+        total = buy_vol.sum() + sell_vol.sum()
+        if total == 0:
+            return np.nan
+
+        score = (buy_vol.sum() - sell_vol.sum()) / total
+        return round(score, 3)
+
+    except Exception:
+        return np.nan
+
+
+def volume_signal(score_short, score_medium):
+    """
+    Combina i due score (breve 10g, medio 20g) in un segnale testuale + HTML.
+
+    Soglie:
+        positivo  > +0.05
+        negativo  < -0.05
+        neutro    tra -0.05 e +0.05
+    """
+    THRESHOLD = 0.05
+
+    def is_pos(s): return s is not None and not np.isnan(s) and s >  THRESHOLD
+    def is_neg(s): return s is not None and not np.isnan(s) and s < -THRESHOLD
+    def is_neu(s): return not is_pos(s) and not is_neg(s)
+
+    sq_green  = '<span class="vol-square vol-green">✓</span>'
+    sq_red    = '<span class="vol-square vol-red">✗</span>'
+    sq_yellow = '<span class="vol-square vol-yellow">~</span>'
+
+    # Determina quadrato breve e medio
+    if is_pos(score_short):
+        sq_s = sq_green
+    elif is_neg(score_short):
+        sq_s = sq_red
+    else:
+        sq_s = sq_yellow
+
+    if is_pos(score_medium):
+        sq_m = sq_green
+    elif is_neg(score_medium):
+        sq_m = sq_red
+    else:
+        sq_m = sq_yellow
+
+    # 4 stati principali + caso neutro
+    if is_pos(score_short) and is_pos(score_medium):
+        label     = "CONFERMATO"
+        css_label = "vol-label-confirmed"
+        sublabel  = "Volume in accumulo su entrambi i timeframe"
+        text_plain = "[B+M+] ACCUMULO"
+
+    elif is_neg(score_short) and is_neg(score_medium):
+        label     = "DISTRIBUZIONE"
+        css_label = "vol-label-distribution"
+        sublabel  = "Pressione vendita dominante — cautela"
+        text_plain = "[B-M-] DISTRIBUZ"
+
+    elif is_pos(score_short) and is_neg(score_medium):
+        label     = "INVERSIONE IN CORSO"
+        css_label = "vol-label-reversal"
+        sublabel  = "Breve si rafforza su medio debole — monitorare"
+        text_plain = "[B+M-] INVERSIONE"
+
+    elif is_neg(score_short) and is_pos(score_medium):
+        label     = "ESAURIMENTO"
+        css_label = "vol-label-exhaustion"
+        sublabel  = "Breve si deteriora su medio positivo — attenzione"
+        text_plain = "[B-M+] ESAURIM."
+
+    else:
+        # almeno uno dei due è neutro
+        label     = "INDECISO"
+        css_label = "vol-label-neutral"
+        sublabel  = "Segnale volumetrico non direzionale"
+        text_plain = "[B~ M~] INDECISO"
+
+    html_badge = (
+        f'{sq_s}&nbsp;{sq_m}&nbsp;'
+        f'<span class="{css_label}">{label}</span>'
+        f'<br><span class="vol-sublabel">{sublabel}</span>'
+    )
+
+    return html_badge, text_plain
+
 
 # ========================
 # RETURN FUNCTIONS
@@ -94,12 +283,12 @@ def rsr(asset_ret, benchmark_ret):
 
 
 # ========================
-# FUNZIONE PER SPARKLINE ROTATION SCORE
+# ROTATION SCORE SERIES
 # ========================
 def compute_rotation_score_series(prices):
-    ret_1m = prices.pct_change(21)
-    ret_3m = prices.pct_change(63)
-    ret_6m = prices.pct_change(126)
+    ret_1m = prices.pct_change(21, fill_method=None)
+    ret_3m = prices.pct_change(63, fill_method=None)
+    ret_6m = prices.pct_change(126, fill_method=None)
 
     rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
     rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
@@ -107,46 +296,46 @@ def compute_rotation_score_series(prices):
 
     rar_mean = (rar_1m + rar_3m + rar_6m) / 3
 
-    cyc = rar_mean[CYCLICAL].mean(axis=1)
+    cyc  = rar_mean[CYCLICAL].mean(axis=1)
     def_ = rar_mean[DEFENSIVE].mean(axis=1)
 
     rotation_score = (cyc - def_) * 100
     return rotation_score.dropna()
 
+
 # ========================
 # LOAD DATA
 # ========================
-prices = load_prices(ALL_TICKERS)
+prices   = load_prices(ALL_TICKERS)
+ohlcv    = load_ohlcv(ALL_TICKERS)
 
 returns = pd.DataFrame({
-    "1D": prices.apply(lambda x: ret(x,1)),
-    "1W": prices.apply(lambda x: ret(x,5)),
-    "1M": prices.apply(lambda x: ret(x,21)),
-    "3M": prices.apply(lambda x: ret(x,63)),
-    "6M": prices.apply(lambda x: ret(x,126)),
+    "1D": prices.apply(lambda x: ret(x, 1)),
+    "1W": prices.apply(lambda x: ret(x, 5)),
+    "1M": prices.apply(lambda x: ret(x, 21)),
+    "3M": prices.apply(lambda x: ret(x, 63)),
+    "6M": prices.apply(lambda x: ret(x, 126)),
 })
 
 # ========================
-# COSTRUZIONE RSR
+# RSR
 # ========================
 rsr_df = pd.DataFrame(index=returns.index, columns=returns.columns)
-
 for col in returns.columns:
     rsr_df[col] = rsr(returns[col], returns.loc[BENCHMARK, col])
 
 df = rsr_df.loc[SECTORS].copy()
 
-
 df["Rsr_momentum"] = (
-    df["1M"]*WEIGHTS["1M"] +
-    df["3M"]*WEIGHTS["3M"] +
-    df["6M"]*WEIGHTS["6M"]
+    df["1M"] * WEIGHTS["1M"] +
+    df["3M"] * WEIGHTS["3M"] +
+    df["6M"] * WEIGHTS["6M"]
 )
 
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
-df["Delta_RS_5D"] = df["1W"]
+df["Delta_RS_5D"]    = df["1W"]
 df = df.sort_values("Rsr_momentum", ascending=False)
-df["Classifica"] = range(1, len(df)+1)
+df["Classifica"]     = range(1, len(df)+1)
 
 def situazione(row):
     if row.Rsr_momentum > 0:
@@ -168,6 +357,21 @@ def operativita(row):
 
 df["Operatività"] = df.apply(operativita, axis=1)
 
+# ========================
+# CALCOLO VOLUME SIGNAL
+# ========================
+vol_html  = {}   # per leader-box
+vol_plain = {}   # per dataframe
+
+for ticker in SECTORS:
+    s_short  = compute_vwds(ohlcv, ticker, window=10)
+    s_medium = compute_vwds(ohlcv, ticker, window=20)
+    h, p     = volume_signal(s_short, s_medium)
+    vol_html[ticker]  = h
+    vol_plain[ticker] = p
+
+df["Vol Signal"] = df.index.map(vol_plain)
+
 
 # ========================
 # UI TABS
@@ -183,49 +387,34 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # TAB 1 — DASHBOARD
 # ========================
 with tab1:
-    col1, col2 = st.columns([1.2,1])
+    col1, col2 = st.columns([1.2, 1])
 
     with col1:
-        # Palette colori professionale per 11 settori + SPY
         colors = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
-            '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
-            '#F8B739', '#52B788', '#E76F51', '#00FF00'
+            '#FF6B6B','#4ECDC4','#45B7D1','#FFA07A',
+            '#98D8C8','#F7DC6F','#BB8FCE','#85C1E2',
+            '#F8B739','#52B788','#E76F51','#00FF00'
         ]
-        
-        # Prepara dati
         tickers_list = ALL_TICKERS
-        values = [returns.loc[t, "1D"] for t in tickers_list]
-        bar_colors = [colors[i] for i in range(len(tickers_list))]
-        
-        # Crea grafico con UN SOLO trace (nessuna legenda multipla)
+        values       = [returns.loc[t, "1D"] for t in tickers_list]
+        bar_colors   = [colors[i] for i in range(len(tickers_list))]
+
         fig = go.Figure(data=[
             go.Bar(
                 x=tickers_list,
                 y=values,
-                marker=dict(
-                    color=bar_colors,
-                    line=dict(color='#333', width=1)
-                ),
+                marker=dict(color=bar_colors, line=dict(color='#333', width=1)),
                 width=0.7,
                 showlegend=False
             )
         ])
-        
-        # Layout pulito
         fig.update_layout(
-            height=300,
+            height=420,
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font=dict(color="white", size=12),
-            title=dict(
-                text="Variazione % Giornaliera",
-                font=dict(size=16, color="#ff9900")
-            ),
-            xaxis=dict(
-                tickangle=0,
-                gridcolor="#1a1a1a"
-            ),
+            title=dict(text="Variazione % Giornaliera", font=dict(size=16, color="#ff9900")),
+            xaxis=dict(tickangle=0, gridcolor="#1a1a1a"),
             yaxis=dict(
                 title="",
                 gridcolor="#1a1a1a",
@@ -236,21 +425,82 @@ with tab1:
             margin=dict(l=40, r=20, t=50, b=40),
             bargap=0.15
         )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col2:
-        for t,row in df.head(3).iterrows():
-            st.markdown(f"""
-            <div class="leader-box">
-                <div class="leader-ticker">{t}</div>
-                <div class="leader-mom">Rsr Momentum: {row.Rsr_momentum:.2f}</div>
-                <div>Operatività: {row.Operatività}</div>
-                <div>{row.Situazione}</div>
-            </div>
-            """, unsafe_allow_html=True)
+        for t, row in df.head(3).iterrows():
+            badge = vol_html[t]
+            html = (
+                '<div class="leader-box">'
+                f'<div class="leader-ticker">{t}</div>'
+                f'<div class="leader-mom">RSR: {row.Rsr_momentum:.2f} &nbsp;|&nbsp; {row.Operatività} &nbsp;|&nbsp; {row.Situazione}</div>'
+                f'<div style="margin-top:5px;font-size:0.78em;color:#555;letter-spacing:0.06em;">VOL SIGNAL</div>'
+                f'<div style="font-size:0.88em;margin-top:2px;">{badge}</div>'
+                '</div>'
+            )
+            st.markdown(html, unsafe_allow_html=True)
 
-    st.dataframe(df.round(2), width='stretch')
+    # Riduci gap tra sezione top e tabella
+    st.markdown(
+        '<style>div[data-testid="stDataFrame"] { margin-top: -1rem; }</style>',
+        unsafe_allow_html=True
+    )
+
+    # Tabella con colonna Vol Signal testuale
+    # Styling celle per Vol Signal
+    def style_vol(val):
+        v = str(val)
+        if "ACCUMULO" in v:
+            return "background-color:#0d2b0d; color:#00ff55; font-weight:bold"
+        if "DISTRIBUZ" in v:
+            return "background-color:#2b0d0d; color:#ff4422; font-weight:bold"
+        if "ESAURIM" in v:
+            return "background-color:#2b1a00; color:#ffaa00; font-weight:bold"
+        if "INVERSIONE" in v:
+            return "background-color:#0d1a2b; color:#44aaff; font-weight:bold"
+        if "INDECISO" in v:
+            return "background-color:#1a1a1a; color:#888888"
+        return ""
+
+    styled = (
+        df.round(2)
+        .style
+        .map(style_vol, subset=["Vol Signal"])
+    )
+
+    st.dataframe(
+        styled,
+        width="stretch",
+        column_config={
+            "Vol Signal": st.column_config.TextColumn(
+                "Vol Signal",
+                width="medium",
+            )
+        }
+    )
+
+    # Legenda Volume Signal
+    st.markdown("""
+    <div style="
+        background:#0d0d0d;
+        border:1px solid #222;
+        border-radius:8px;
+        padding:12px 20px;
+        margin-top:8px;
+        font-size:0.82em;
+        color:#888;
+        display:flex;
+        gap:24px;
+        flex-wrap:wrap;
+    ">
+        <span><b style="color:#00ff55">[B+M+] ACCUMULO</b> — breve e medio positivi</span>
+        <span><b style="color:#ffaa00">[B-M+] ESAURIM.</b> — breve si deteriora su medio positivo</span>
+        <span><b style="color:#44aaff">[B+M-] INVERSIONE</b> — breve si rafforza su medio debole</span>
+        <span><b style="color:#ff4422">[B-M-] DISTRIBUZ</b> — pressione vendita dominante</span>
+        <span><b style="color:#888">[B~ M~] INDECISO</b> — segnale non direzionale</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -259,9 +509,9 @@ with tab2:
     selected = st.multiselect("ETF", SECTORS, default=SECTORS)
     tf = st.selectbox("Timeframe", ["1W","1M","3M","6M","1Y","3Y","5Y"])
 
-    days = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
+    days  = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
     slice_ = prices.iloc[-days:]
-    norm = (slice_ / slice_.iloc[0] - 1) * 100
+    norm   = (slice_ / slice_.iloc[0] - 1) * 100
 
     fig = go.Figure()
     for t in selected:
@@ -270,44 +520,42 @@ with tab2:
         x=norm.index, y=norm[BENCHMARK],
         name="SPY", line=dict(width=4, color="#00FF00")
     ))
-
     fig.update_layout(
         paper_bgcolor="#000",
         plot_bgcolor="#000",
         font_color="white",
         yaxis_title="Variazione %"
     )
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, width="stretch")
+
 
 # ========================
 # TAB 3 — FATTORI
 # ========================
 with tab3:
     factor_prices = load_prices(FACTOR_ETFS)
-    
-    # DEBUG: verifica se i dati sono stati scaricati
+
     if factor_prices.empty or factor_prices.isna().all().all():
-        st.error("⚠️ Impossibile scaricare i dati degli ETF fattoriali da Yahoo Finance. Riprova tra qualche minuto.")
+        st.error("⚠️ Impossibile scaricare i dati degli ETF fattoriali da Yahoo Finance.")
         st.info("Ticker richiesti: " + ", ".join(FACTOR_ETFS))
     else:
         f = pd.DataFrame(index=FACTOR_ETFS)
-
         f["Prezzo"] = factor_prices.iloc[-1].round(2)
-        f["1D"]  = factor_prices.apply(lambda x: ret(x,1))
-        f["1W"]  = factor_prices.apply(lambda x: ret(x,5))
-        f["1M"]  = factor_prices.apply(lambda x: ret(x,21))
-        f["3M"]  = factor_prices.apply(lambda x: ret(x,63))
-        f["6M"]  = factor_prices.apply(lambda x: ret(x,126))
-        f["1A"]  = factor_prices.apply(lambda x: ret(x,252))
+        f["1D"]  = factor_prices.apply(lambda x: ret(x, 1))
+        f["1W"]  = factor_prices.apply(lambda x: ret(x, 5))
+        f["1M"]  = factor_prices.apply(lambda x: ret(x, 21))
+        f["3M"]  = factor_prices.apply(lambda x: ret(x, 63))
+        f["6M"]  = factor_prices.apply(lambda x: ret(x, 126))
+        f["1A"]  = factor_prices.apply(lambda x: ret(x, 252))
         f["YTD"] = factor_prices.apply(ret_ytd)
-        f["3A"]  = factor_prices.apply(lambda x: ret(x,756))
-        f["5A"]  = factor_prices.apply(lambda x: ret(x,1260))
+        f["3A"]  = factor_prices.apply(lambda x: ret(x, 756))
+        f["5A"]  = factor_prices.apply(lambda x: ret(x, 1260))
 
-        def style(row):
+        def style_row(row):
             if row.name in FACTOR_COMPARISON:
-                return ["background-color:#1e1e1e;color:#ccc"]*len(row)
-            return ["background-color:#000;color:white"]*len(row)
-        
+                return ["background-color:#1e1e1e;color:#ccc"] * len(row)
+            return ["background-color:#000;color:white"] * len(row)
+
         def highlight_max(s):
             max_val = s.max()
             return [
@@ -315,59 +563,48 @@ with tab3:
                 if v == max_val else ""
                 for v in s
             ]
-        
+
         st.dataframe(
             f.round(2)
             .style
-            .apply(style, axis=1)
+            .apply(style_row, axis=1)
             .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
-            .format({"Prezzo":"{:.2f}", **{c:"{:+.2f}%" for c in f.columns if c!="Prezzo"}}),
-            width='stretch'
+            .format({"Prezzo": "{:.2f}", **{c: "{:+.2f}%" for c in f.columns if c != "Prezzo"}}),
+            width="stretch"
         )
+
 
 # ========================
 # TAB 4 — ROTAZIONE SETTORIALE
 # ========================
 with tab4:
 
-    CYCLICALS = ["XLK","XLY","XLF","XLI","XLE","XLB"]
+    CYCLICALS  = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    # --- RAR medio su timeframe guida ---
     rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
 
     cyc_score = rar_focus.loc[CYCLICALS]
     def_score = rar_focus.loc[DEFENSIVES]
 
-    # --- Breadth ---
     cyc_breadth = (cyc_score > 0).sum()
     def_breadth = (def_score > 0).sum()
 
-    cyc_pct = cyc_breadth / len(CYCLICALS) * 100
-    def_pct = def_breadth / len(DEFENSIVES) * 100
-
-    # --- Rotation Score ---
     rotation_score = cyc_score.mean() - def_score.mean()
 
-    # ========================
-    # REGIME LOGIC
-    # ========================
-    if rotation_score > 1.5 and cyc_pct >= 65:
-        regime = "🟢 ROTATION: RISK ON"
-        bg = "#003300"
-        comment = "Risk On maturo, non euforico"
-    elif rotation_score < -1.5 and def_pct >= 65:
-        regime = "🔴 ROTATION: RISK OFF"
-        bg = "#330000"
-        comment = "Fase difensiva dominante"
+    if rotation_score > 1.5:
+        regime  = "🟢 ROTATION: RISK ON"
+        bg      = "#003300"
+        comment = "Ciclici dominanti su timeframe medio"
+    elif rotation_score < -1.5:
+        regime  = "🔴 ROTATION: RISK OFF"
+        bg      = "#330000"
+        comment = "Difensivi dominanti su timeframe medio"
     else:
-        regime = "🟡 ROTATION: NEUTRAL"
-        bg = "#333300"
-        comment = "Rotazione poco direzionale / transizione"
+        regime  = "🟡 ROTATION: NEUTRAL"
+        bg      = "#333300"
+        comment = "Equilibrio tra ciclici e difensivi"
 
-    # ========================
-    # MAIN BOX - PIÙ COMPATTO
-    # ========================
     st.markdown(f"""
     <div style="
         background:{bg};
@@ -381,19 +618,15 @@ with tab4:
     </div>
     """, unsafe_allow_html=True)
 
-    # ========================
-    # ROTATION SCORE — SPARKLINE PIÙ GRANDE
-    # ========================
     rotation_series = compute_rotation_score_series(prices)
-    
+
     if not rotation_series.empty:
-        cutoff_date = rotation_series.index.max() - pd.Timedelta(days=365)
+        cutoff_date  = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
     else:
         rotation_12m = rotation_series
 
     fig_rs = go.Figure()
-
     fig_rs.add_trace(go.Scatter(
         x=rotation_12m.index,
         y=rotation_12m,
@@ -403,14 +636,11 @@ with tab4:
         fill='tozeroy',
         fillcolor='rgba(100,100,100,0.2)'
     ))
-
-    # Linee di riferimento
-    fig_rs.add_hline(y=1.5, line_dash="dot", line_color="#00AA00", 
-                     annotation_text="Risk On", annotation_position="right")
-    fig_rs.add_hline(y=0.0, line_dash="solid", line_color="#666666")
-    fig_rs.add_hline(y=-1.5, line_dash="dot", line_color="#AA0000",
+    fig_rs.add_hline(y=1.5,  line_dash="dot",   line_color="#00AA00",
+                     annotation_text="Risk On",  annotation_position="right")
+    fig_rs.add_hline(y=0.0,  line_dash="solid",  line_color="#666666")
+    fig_rs.add_hline(y=-1.5, line_dash="dot",    line_color="#AA0000",
                      annotation_text="Risk Off", annotation_position="right")
-
     fig_rs.update_layout(
         height=280,
         margin=dict(l=40, r=40, t=20, b=40),
@@ -422,12 +652,7 @@ with tab4:
         xaxis_title="",
         yaxis=dict(gridcolor="#222222")
     )
-
-    st.plotly_chart(fig_rs, use_container_width=True)
-
-    # ========================
-    # DIDASCALIA COMPLETA
-    # ========================
+    st.plotly_chart(fig_rs, width="stretch")
 
     st.markdown(f"""
     <div style="
