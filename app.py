@@ -86,7 +86,7 @@ FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
 # ========================
-# DATA LOADER — OHLCV
+# DATA LOADERS
 # ========================
 @st.cache_data(ttl=60*60)
 def load_prices(tickers):
@@ -119,8 +119,11 @@ def load_ohlcv(tickers):
         progress=False
     )
     return raw
-    @st.cache_data(ttl=60*60*6)
+
+
+@st.cache_data(ttl=60*60*6)
 def load_sp500_data(timeframe_days: int):
+    """Scarica lista S&P 500 da Wikipedia + prezzi via yfinance batch."""
     try:
         tables = pd.read_html(
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
@@ -177,19 +180,6 @@ def load_sp500_data(timeframe_days: int):
 # VOLUME SIGNAL
 # ========================
 def compute_vwds(ohlcv_raw, ticker, window):
-    """
-    Volume-Weighted Directional Score per un singolo ticker.
-
-    Logica:
-    - Per ogni candela stima la quota "buy" come (Close - Low) / (High - Low)
-      → 1.0 = close al massimo (tutta pressione buy)
-      → 0.0 = close al minimo (tutta pressione sell)
-    - Calcola buy_vol  = volume * buy_ratio
-              sell_vol = volume * (1 - buy_ratio)
-    - Score = (sum_buy - sum_sell) / (sum_buy + sum_sell)  nell'intervallo [-1, +1]
-
-    window: numero di giorni da considerare (10 = breve, 20 = medio)
-    """
     try:
         if isinstance(ohlcv_raw.columns, pd.MultiIndex):
             hi = ohlcv_raw["High"][ticker].dropna()
@@ -197,17 +187,14 @@ def compute_vwds(ohlcv_raw, ticker, window):
             cl = ohlcv_raw["Close"][ticker].dropna()
             vo = ohlcv_raw["Volume"][ticker].dropna()
         else:
-            # singolo ticker
             hi = ohlcv_raw["High"].dropna()
             lo = ohlcv_raw["Low"].dropna()
             cl = ohlcv_raw["Close"].dropna()
             vo = ohlcv_raw["Volume"].dropna()
 
-        # Allinea gli indici
         idx = hi.index.intersection(lo.index).intersection(cl.index).intersection(vo.index)
         hi, lo, cl, vo = hi[idx], lo[idx], cl[idx], vo[idx]
 
-        # Prendi gli ultimi `window` giorni
         hi = hi.iloc[-window:]
         lo = lo.iloc[-window:]
         cl = cl.iloc[-window:]
@@ -216,12 +203,11 @@ def compute_vwds(ohlcv_raw, ticker, window):
         if len(cl) < window // 2:
             return np.nan
 
-        # Range della candela — evita divisione per zero
         rng = hi - lo
         rng = rng.replace(0, np.nan)
 
         buy_ratio  = (cl - lo) / rng
-        buy_ratio  = buy_ratio.fillna(0.5)   # doji → neutro
+        buy_ratio  = buy_ratio.fillna(0.5)
         buy_ratio  = buy_ratio.clip(0, 1)
 
         buy_vol  = vo * buy_ratio
@@ -239,25 +225,15 @@ def compute_vwds(ohlcv_raw, ticker, window):
 
 
 def volume_signal(score_short, score_medium):
-    """
-    Combina i due score (breve 10g, medio 20g) in un segnale testuale + HTML.
-
-    Soglie:
-        positivo  > +0.05
-        negativo  < -0.05
-        neutro    tra -0.05 e +0.05
-    """
     THRESHOLD = 0.05
 
     def is_pos(s): return s is not None and not np.isnan(s) and s >  THRESHOLD
     def is_neg(s): return s is not None and not np.isnan(s) and s < -THRESHOLD
-    def is_neu(s): return not is_pos(s) and not is_neg(s)
 
     sq_green  = '<span class="vol-square vol-green">✓</span>'
     sq_red    = '<span class="vol-square vol-red">✗</span>'
     sq_yellow = '<span class="vol-square vol-yellow">~</span>'
 
-    # Determina quadrato breve e medio
     if is_pos(score_short):
         sq_s = sq_green
     elif is_neg(score_short):
@@ -272,36 +248,30 @@ def volume_signal(score_short, score_medium):
     else:
         sq_m = sq_yellow
 
-    # 4 stati principali + caso neutro
     if is_pos(score_short) and is_pos(score_medium):
-        label     = "CONFERMATO"
-        css_label = "vol-label-confirmed"
-        sublabel  = "Volume in accumulo su entrambi i timeframe"
+        label      = "CONFERMATO"
+        css_label  = "vol-label-confirmed"
+        sublabel   = "Volume in accumulo su entrambi i timeframe"
         text_plain = "[B+M+] ACCUMULO"
-
     elif is_neg(score_short) and is_neg(score_medium):
-        label     = "DISTRIBUZIONE"
-        css_label = "vol-label-distribution"
-        sublabel  = "Pressione vendita dominante — cautela"
+        label      = "DISTRIBUZIONE"
+        css_label  = "vol-label-distribution"
+        sublabel   = "Pressione vendita dominante — cautela"
         text_plain = "[B-M-] DISTRIBUZ"
-
     elif is_pos(score_short) and is_neg(score_medium):
-        label     = "INVERSIONE IN CORSO"
-        css_label = "vol-label-reversal"
-        sublabel  = "Breve si rafforza su medio debole — monitorare"
+        label      = "INVERSIONE IN CORSO"
+        css_label  = "vol-label-reversal"
+        sublabel   = "Breve si rafforza su medio debole — monitorare"
         text_plain = "[B+M-] INVERSIONE"
-
     elif is_neg(score_short) and is_pos(score_medium):
-        label     = "ESAURIMENTO"
-        css_label = "vol-label-exhaustion"
-        sublabel  = "Breve si deteriora su medio positivo — attenzione"
+        label      = "ESAURIMENTO"
+        css_label  = "vol-label-exhaustion"
+        sublabel   = "Breve si deteriora su medio positivo — attenzione"
         text_plain = "[B-M+] ESAURIM."
-
     else:
-        # almeno uno dei due è neutro
-        label     = "INDECISO"
-        css_label = "vol-label-neutral"
-        sublabel  = "Segnale volumetrico non direzionale"
+        label      = "INDECISO"
+        css_label  = "vol-label-neutral"
+        sublabel   = "Segnale volumetrico non direzionale"
         text_plain = "[B~ M~] INDECISO"
 
     html_badge = (
@@ -327,9 +297,6 @@ def ret_ytd(data):
         return np.nan
     return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
 
-# ========================
-# RELATIVE STRENGTH RETURN (RSR)
-# ========================
 def rsr(asset_ret, benchmark_ret):
     return ((1 + asset_ret/100) / (1 + benchmark_ret/100) - 1) * 100
 
@@ -358,8 +325,8 @@ def compute_rotation_score_series(prices):
 # ========================
 # LOAD DATA
 # ========================
-prices   = load_prices(ALL_TICKERS)
-ohlcv    = load_ohlcv(ALL_TICKERS)
+prices = load_prices(ALL_TICKERS)
+ohlcv  = load_ohlcv(ALL_TICKERS)
 
 returns = pd.DataFrame({
     "1D": prices.apply(lambda x: ret(x, 1)),
@@ -412,8 +379,8 @@ df["Operatività"] = df.apply(operativita, axis=1)
 # ========================
 # CALCOLO VOLUME SIGNAL
 # ========================
-vol_html  = {}   # per leader-box
-vol_plain = {}   # per dataframe
+vol_html  = {}
+vol_plain = {}
 
 for ticker in SECTORS:
     s_short  = compute_vwds(ohlcv, ticker, window=10)
@@ -432,7 +399,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "📊 Fattori",
-    "🔄 Rotazione Settoriale"
+    "🔄 Rotazione Settoriale",
     "🫧 S&P 500 Bubble"
 ])
 
@@ -493,14 +460,11 @@ with tab1:
             )
             st.markdown(html, unsafe_allow_html=True)
 
-    # Riduci gap tra sezione top e tabella
     st.markdown(
         '<style>div[data-testid="stDataFrame"] { margin-top: -1rem; }</style>',
         unsafe_allow_html=True
     )
 
-    # Tabella con colonna Vol Signal testuale
-    # Styling celle per Vol Signal
     def style_vol(val):
         v = str(val)
         if "ACCUMULO" in v:
@@ -532,7 +496,6 @@ with tab1:
         }
     )
 
-    # Legenda Volume Signal
     st.markdown("""
     <div style="
         background:#0d0d0d;
@@ -562,7 +525,7 @@ with tab2:
     selected = st.multiselect("ETF", SECTORS, default=SECTORS)
     tf = st.selectbox("Timeframe", ["1W","1M","3M","6M","1Y","3Y","5Y"])
 
-    days  = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
+    days   = {"1W":5,"1M":21,"3M":63,"6M":126,"1Y":252,"3Y":756,"5Y":1260}[tf]
     slice_ = prices.iloc[-days:]
     norm   = (slice_ / slice_.iloc[0] - 1) * 100
 
@@ -768,6 +731,8 @@ with tab4:
 
     </div>
     """, unsafe_allow_html=True)
+
+
 # ========================
 # TAB 5 — BUBBLE CHART S&P 500
 # ========================
