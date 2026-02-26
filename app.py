@@ -812,6 +812,19 @@ with tab5:
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
+    tot = len(sp500_df)
+    pos = (sp500_df["Return"] > 0).sum()
+    pct = round(pos / tot * 100, 1)
+    colore = "#00ff55" if pct >= 50 else "#ff4422"
+    st.markdown(
+        f'<div style="background:#0d0d0d; border:1px solid #222; border-radius:8px; '
+        f'padding:10px 20px; margin-bottom:10px; font-size:1.05em;">'
+        f'📊 Su timeframe <b>{tf_sel}</b>: '
+        f'<b style="color:{colore}">{pos} titoli su {tot} ({pct}%)</b> '
+        f'sono in territorio positivo nell\'S&P 500</div>',
+        unsafe_allow_html=True
+    )
+
     sector_order = sector_stats["Sector"].tolist()
     sp500_df["SectorRank"] = sp500_df["Sector"].map(
         {s: i for i, s in enumerate(sector_order)}
