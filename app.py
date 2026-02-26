@@ -125,7 +125,7 @@ def load_ohlcv(tickers):
 def load_sp500_data(timeframe_days: int):
     """Scarica lista S&P 500 da Wikipedia + prezzi via yfinance batch."""
     try:
-       import requests
+        import requests
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
         resp = requests.get(
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
