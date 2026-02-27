@@ -121,6 +121,20 @@ def load_ohlcv(tickers):
     return raw
 
 
+@st.cache_data(ttl=60*60*4)
+def load_pe_live(tickers):
+    """Scarica P/E attuale per ogni ETF settoriale via yfinance."""
+    pe_live = {}
+    for t in tickers:
+        try:
+            info = yf.Ticker(t).info
+            pe = info.get("trailingPE") or info.get("forwardPE")
+            pe_live[t] = round(pe, 2) if pe else None
+        except Exception:
+            pe_live[t] = None
+    return pe_live
+
+
 @st.cache_data(ttl=60*60*6)
 def load_sp500_data(timeframe_days: int):
     """Scarica lista S&P 500 da Wikipedia + prezzi via yfinance batch."""
@@ -398,12 +412,13 @@ df["Vol Signal"] = df.index.map(vol_plain)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "📊 Fattori",
     "🔄 Rotazione Settoriale",
-    "🫧 S&P 500 Bubble"
+    "🫧 S&P 500 Bubble",
+    "📐 Valutazione P/E"
 ])
 
 # ========================
@@ -913,3 +928,213 @@ with tab5:
             use_container_width=True,
             hide_index=True
         )
+
+with tab6:
+
+    st.markdown(
+        '<h3 style="color:#ff9900; margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
+        '<p style="color:#666; font-size:0.85em; margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com · Aggiornato al caricamento</p>'
+    '<p style="color:#444; font-size:0.78em; margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b> — aggiornamento consigliato ogni <b style="color:#ff9900">6 mesi</b></p>',
+        unsafe_allow_html=True
+    )
+
+    # Periodo di riferimento storico da confrontare
+    period_sel = st.radio(
+        "Confronta con media storica",
+        options=["Last 1Y", "Last 3Y", "Last 5Y", "Last 10Y", "Last 20Y"],
+        index=2,
+        horizontal=True
+    )
+
+    # Carica dati storici dall'Excel
+    try:
+        pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
+        pe_hist = pe_hist.set_index("Period")
+    except Exception as e:
+        st.error(f"Errore lettura pe_historical.xlsx: {e}")
+        st.stop()
+
+    # Carica P/E live
+    with st.spinner("Scarico P/E attuali..."):
+        pe_live = load_pe_live(SECTORS)
+
+    # Costruisci tabella comparativa
+    etf_sectors = {
+        "XLK": "Info Technology",
+        "XLY": "Cons Discretionary",
+        "XLF": "Financials",
+        "XLC": "Comm Services",
+        "XLV": "Health Care",
+        "XLP": "Cons Staples",
+        "XLI": "Industrials",
+        "XLE": "Energy",
+        "XLB": "Materials",
+        "XLU": "Utilities",
+        "XLRE": "Real Estate",
+    }
+
+    rows = []
+    for etf, sector_name in etf_sectors.items():
+        pe_now   = pe_live.get(etf)
+        avg_col  = f"{etf}_AvgPE"
+        std_col  = f"{etf}_StdDev"
+        dev_col  = f"{etf}_Deviation"
+
+        if period_sel not in pe_hist.index:
+            continue
+
+        avg_pe  = pe_hist.loc[period_sel, avg_col]  if avg_col  in pe_hist.columns else None
+        std_dev = pe_hist.loc[period_sel, std_col]  if std_col  in pe_hist.columns else None
+        dev_ref = pe_hist.loc[period_sel, dev_col]  if dev_col  in pe_hist.columns else None
+
+        # Calcola deviazione live = (PE_now - avg_pe) / std_dev
+        if pe_now and avg_pe and std_dev and std_dev > 0:
+            dev_live = round((pe_now - avg_pe) / std_dev, 2)
+        else:
+            dev_live = None
+
+        # Giudizio valutazione
+        def valuation_label(dev):
+            if dev is None:
+                return "N/D", "#888888"
+            if dev < 0:
+                return "Cheap", "#00ff55"
+            if dev < 0.5:
+                return "Fair", "#aaaaaa"
+            if dev < 1.5:
+                return "Moderato", "#ffff44"
+            if dev < 2.5:
+                return "Overvalued", "#ffaa00"
+            return "Expensive", "#ff4422"
+
+        label, color = valuation_label(dev_live)
+
+        rows.append({
+            "ETF":        etf,
+            "Settore":    sector_name,
+            "P/E Live":   pe_now,
+            f"Avg P/E ({period_sel})": avg_pe,
+            "Std Dev":    std_dev,
+            "Dev σ (live)": dev_live,
+            "Valutazione": label,
+            "_color":     color,
+        })
+
+    comp_df = pd.DataFrame(rows)
+
+    # ── GRAFICO BARRE — Dev σ per settore ────────────────────────────────────
+    bar_colors = []
+    for _, r in comp_df.iterrows():
+        d = r["Dev σ (live)"]
+        if d is None:
+            bar_colors.append("#555555")
+        elif d < 0:
+            bar_colors.append("#00ff55")
+        elif d < 0.5:
+            bar_colors.append("#aaaaaa")
+        elif d < 1.5:
+            bar_colors.append("#ffff44")
+        elif d < 2.5:
+            bar_colors.append("#ffaa00")
+        else:
+            bar_colors.append("#ff4422")
+
+    fig_pe = go.Figure()
+    fig_pe.add_trace(go.Bar(
+        x=comp_df["ETF"],
+        y=comp_df["Dev σ (live)"],
+        marker_color=bar_colors,
+        text=[f"{v:.2f}σ" if v is not None else "N/D" for v in comp_df["Dev σ (live)"]],
+        textposition="outside",
+        textfont=dict(size=11, color="white"),
+        hovertemplate="<b>%{x}</b><br>Deviazione: %{y:.2f}σ<extra></extra>",
+    ))
+
+    # Linee di riferimento
+    fig_pe.add_hline(y=0,   line_color="#444444", line_width=1)
+    fig_pe.add_hline(y=1.5, line_dash="dot", line_color="#ffaa00",
+                     annotation_text="Overvalued", annotation_font_color="#ffaa00",
+                     annotation_position="right")
+    fig_pe.add_hline(y=2.5, line_dash="dot", line_color="#ff4422",
+                     annotation_text="Expensive",  annotation_font_color="#ff4422",
+                     annotation_position="right")
+    fig_pe.add_hline(y=-0.5, line_dash="dot", line_color="#00ff55",
+                     annotation_text="Cheap",      annotation_font_color="#00ff55",
+                     annotation_position="right")
+
+    fig_pe.update_layout(
+        height=320,
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="white", size=11),
+        title=dict(
+            text=f"Deviazione P/E Live vs Media {period_sel}  (σ)",
+            font=dict(size=13, color="#ff9900")
+        ),
+        xaxis=dict(gridcolor="#111"),
+        yaxis=dict(gridcolor="#1a1a1a", ticksuffix="σ"),
+        margin=dict(l=40, r=80, t=50, b=40),
+        showlegend=False,
+    )
+    st.plotly_chart(fig_pe, use_container_width=True)
+
+    # ── TABELLA DETTAGLIO ─────────────────────────────────────────────────────
+    display_cols = ["ETF", "Settore", "P/E Live", f"Avg P/E ({period_sel})", "Std Dev", "Dev σ (live)", "Valutazione"]
+    display_df   = comp_df[display_cols].copy()
+
+    def style_valuation(val):
+        colors_map = {
+            "Cheap":     "color:#00ff55; font-weight:bold",
+            "Fair":      "color:#aaaaaa",
+            "Moderato":  "color:#ffff44; font-weight:bold",
+            "Overvalued":"color:#ffaa00; font-weight:bold",
+            "Expensive": "color:#ff4422; font-weight:bold",
+            "N/D":       "color:#555555",
+        }
+        return colors_map.get(str(val), "")
+
+    def style_dev(val):
+        try:
+            v = float(val)
+            if v < 0:     return "color:#00ff55"
+            if v < 0.5:   return "color:#aaaaaa"
+            if v < 1.5:   return "color:#ffff44"
+            if v < 2.5:   return "color:#ffaa00"
+            return "color:#ff4422"
+        except:
+            return ""
+
+    st.dataframe(
+        display_df.style
+            .map(style_valuation, subset=["Valutazione"])
+            .map(style_dev,       subset=["Dev σ (live)"])
+            .format({
+                "P/E Live":              lambda x: f"{x:.2f}" if x else "N/D",
+                f"Avg P/E ({period_sel})": lambda x: f"{x:.2f}" if x else "N/D",
+                "Std Dev":               lambda x: f"{x:.2f}" if x else "N/D",
+                "Dev σ (live)":          lambda x: f"{x:.2f}σ" if x else "N/D",
+            }),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # ── LEGENDA ───────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="background:#0d0d0d; border:1px solid #222; border-radius:8px;
+                padding:10px 20px; margin-top:8px; font-size:0.82em; color:#888;
+                display:flex; gap:20px; flex-wrap:wrap;">
+        <span><b style="color:#00ff55">Cheap</b> — sotto la media storica</span>
+        <span><b style="color:#aaaaaa">Fair</b> — entro 0.5σ dalla media</span>
+        <span><b style="color:#ffff44">Moderato</b> — tra 0.5σ e 1.5σ</span>
+        <span><b style="color:#ffaa00">Overvalued</b> — tra 1.5σ e 2.5σ</span>
+        <span><b style="color:#ff4422">Expensive</b> — oltre 2.5σ dalla media</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+
+
+
+
+
+
