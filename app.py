@@ -417,7 +417,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Andamento Settoriale",
     "📊 Fattori",
     "🔄 Rotazione Settoriale",
-    "🫧 S&P 500 Bubble"
+    "🫧 S&P 500 Bubble",
     "📐 Valutazione P/E"
 ])
 
