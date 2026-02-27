@@ -933,7 +933,8 @@ with tab6:
 
     st.markdown(
         '<h3 style="color:#ff9900; margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
-        '<p style="color:#666; font-size:0.85em; margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com · Aggiornato al caricamento</p>',
+        '<p style="color:#666; font-size:0.85em; margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com · Aggiornato al caricamento</p>'
+    '<p style="color:#444; font-size:0.78em; margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b> — aggiornamento consigliato ogni <b style="color:#ff9900">6 mesi</b></p>',
         unsafe_allow_html=True
     )
 
