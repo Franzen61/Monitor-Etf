@@ -399,12 +399,21 @@ df["Operatività"] = df.apply(operativita, axis=1)
 vol_html  = {}
 vol_plain = {}
 
+_vol_errors = []
 for ticker in SECTORS:
     s_short  = compute_vwds(ohlcv, ticker, window=10)
     s_medium = compute_vwds(ohlcv, ticker, window=20)
+    if np.isnan(s_short) and np.isnan(s_medium):
+        _vol_errors.append(ticker)
     h, p     = volume_signal(s_short, s_medium)
     vol_html[ticker]  = h
     vol_plain[ticker] = p
+
+if _vol_errors:
+    st.sidebar.warning(
+        f"⚠️ Volume Signal non disponibile per: {', '.join(_vol_errors)}. "
+        "Dati OHLCV insufficienti o ticker non disponibile su Yahoo Finance."
+    )
 
 df["Vol Signal"] = df.index.map(vol_plain)
 
@@ -950,8 +959,19 @@ with tab6:
     try:
         pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
         pe_hist = pe_hist.set_index("Period")
+    except FileNotFoundError:
+        st.warning("⚠️ File pe_historical.xlsx non trovato in questo repository.")
+        st.info(
+            "Carica il file pe_historical.xlsx nella stessa cartella del file .py su GitHub. "
+            "Deve avere un foglio chiamato PE_Historical con colonna Period come indice."
+        )
+        st.markdown("_Le altre tab funzionano normalmente — solo questa tab richiede il file Excel._")
+        pe_hist = None
     except Exception as e:
         st.error(f"Errore lettura pe_historical.xlsx: {e}")
+        pe_hist = None
+
+    if pe_hist is None:
         st.stop()
 
     # Carica P/E live
