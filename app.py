@@ -384,7 +384,7 @@ def operativita(row):
     if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "NEUTRAL":
         return "🔭 ALERT"
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
-        return "🔥 SUPERTREND"
+        return "🔥 LEADER"
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
         return "📈 HOLD"
     if row["Classifica"] > 3 and row["Coerenza_Trend"] >= 4:
