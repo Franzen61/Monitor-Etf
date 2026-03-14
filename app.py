@@ -1160,7 +1160,7 @@ with tab7:
                 y0=0, y1=r["BM_ret"],
                 line=dict(
                     color="#00cc44" if r["BM_ret"] >= 0 else "#cc2200",
-                    width=6, dash="solid"
+                    width=8, dash="solid"
                 ),
                 opacity=0.45,
             )
@@ -1171,7 +1171,7 @@ with tab7:
             y=cdf_plot["BM_ret"].fillna(0),
             marker=dict(color=bar_bm_colors, opacity=0.70,
                         line=dict(color="#333", width=1)),
-            width=0.25,
+            width=0.40,
             text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d"
                   for v in cdf_plot["BM_ret"]],
             textposition="outside",
@@ -1204,9 +1204,9 @@ with tab7:
                 mode="markers",
                 marker=dict(
                     symbol="diamond",
-                    size=10,
+                    size=8,
                     color=breadth_col,
-                    line=dict(color="#ffffff", width=1.5)
+                    line=dict(color="#ffffff", width=1.2)
                 ),
                 name="Breadth ◆",
                 hovertemplate="%{customdata}<extra></extra>",
@@ -1220,18 +1220,19 @@ with tab7:
             plot_bgcolor="#000",
             font=dict(color="white", size=9),
             title=dict(
-                text="◆ colore = breadth tematici" if show_bm else "",
-                font=dict(size=9, color="#555")
+                text=f"Ritorno benchmark {tf_label}  |  ◆ = breadth tematici (verde ≥60% · giallo 40-60% · rosso &lt;40%)" if show_bm else f"Ritorno benchmark {tf_label}",
+                font=dict(size=9, color="#555"),
+                x=0, xanchor="left",
             ),
             xaxis=dict(tickangle=-25, gridcolor="#0a0a0a",
                        tickfont=dict(size=8)),
             yaxis=dict(range=[y_bot, y_top], gridcolor="#111",
                        ticksuffix="%", zeroline=False,
                        tickfont=dict(size=8),
-                       title=dict(text=f"Ritorno BM {tf_label}", font=dict(size=8, color="#555"))),
+                       title=None),
             legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
-                        orientation="h", y=1.06, x=0),
-            margin=dict(l=50, r=40, t=35, b=60),
+                        orientation="h", y=1.0, x=1, xanchor="right"),
+            margin=dict(l=45, r=40, t=40, b=60),
             barmode="overlay",
         )
         st.plotly_chart(fig_coh, use_container_width=True)
