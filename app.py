@@ -1231,8 +1231,8 @@ with tab7:
                        tickfont=dict(size=8),
                        title=None),
             legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
-                        orientation="h", y=1.0, x=1, xanchor="right"),
-            margin=dict(l=45, r=40, t=40, b=60),
+                        orientation="h", y=1.02, x=1, xanchor="right"),
+            margin=dict(l=45, r=40, t=30, b=60),
             barmode="overlay",
         )
         st.plotly_chart(fig_coh, use_container_width=True)
