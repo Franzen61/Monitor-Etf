@@ -1160,7 +1160,7 @@ with tab7:
                 y0=0, y1=r["BM_ret"],
                 line=dict(
                     color="#00cc44" if r["BM_ret"] >= 0 else "#cc2200",
-                    width=10, dash="solid"
+                    width=6, dash="solid"
                 ),
                 opacity=0.45,
             )
@@ -1171,7 +1171,7 @@ with tab7:
             y=cdf_plot["BM_ret"].fillna(0),
             marker=dict(color=bar_bm_colors, opacity=0.70,
                         line=dict(color="#333", width=1)),
-            width=0.35,
+            width=0.25,
             text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d"
                   for v in cdf_plot["BM_ret"]],
             textposition="outside",
@@ -1204,9 +1204,9 @@ with tab7:
                 mode="markers",
                 marker=dict(
                     symbol="diamond",
-                    size=16,
+                    size=10,
                     color=breadth_col,
-                    line=dict(color="#ffffff", width=2)
+                    line=dict(color="#ffffff", width=1.5)
                 ),
                 name="Breadth ◆",
                 hovertemplate="%{customdata}<extra></extra>",
