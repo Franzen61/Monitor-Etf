@@ -1264,10 +1264,35 @@ with tab7:
             regime_color = "#ff4422"
             regime_icon  = "🔴"
 
-        # Top 3 e bottom 3 gruppi per BM_ret
-        sorted_cdf = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
-        top3  = sorted_cdf.head(3)
-        bot3  = sorted_cdf.tail(3).sort_values("BM_ret")
+        # Leader = BM_ret > 0, ordinati desc, max 5
+        # Correzione = BM_ret < 0, ordinati asc (più negativo prima), max 5
+        # Meno forti = se tutti positivi, bottom 3 con nota
+        sorted_cdf   = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
+        bm_positivi  = sorted_cdf[sorted_cdf["BM_ret"] >  0]
+        bm_negativi  = sorted_cdf[sorted_cdf["BM_ret"] <= 0].sort_values("BM_ret")
+
+        all_positive = len(bm_negativi) == 0
+        all_negative = len(bm_positivi) == 0
+
+        # Leader: se esistono positivi mostra top 3 positivi, altrimenti "meno peggio"
+        if not all_negative:
+            leader_df    = bm_positivi.head(3)
+            leader_title = "▲ Leader benchmark"
+            leader_note  = ""
+        else:
+            leader_df    = sorted_cdf.head(3)
+            leader_title = "▲ Meno peggio"
+            leader_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti i benchmark negativi su {tf_label}</div>'
+
+        # Correzione: se esistono negativi mostra top 3 negativi, altrimenti "meno forti"
+        if not all_positive:
+            corr_df    = bm_negativi.head(3)
+            corr_title = "▼ Benchmark in correzione"
+            corr_note  = ""
+        else:
+            corr_df    = sorted_cdf.tail(3).sort_values("BM_ret")
+            corr_title = "▼ Gruppi meno forti"
+            corr_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti i benchmark positivi su {tf_label}</div>'
 
         # Divergenze: barra verde + breadth rossa (fragile) o barra rossa + breadth verde (difensivo)
         divergenze = []
@@ -1291,22 +1316,24 @@ with tab7:
                 )
 
         # Render pannello
-        top3_html = "".join([
+        leader_html = "".join([
             f'<div style="display:flex;justify-content:space-between;'
             f'padding:3px 0;border-bottom:1px solid #1a1a1a;">'
             f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
             f'<span style="color:#00ff55;font-weight:bold;font-size:0.82em">'
             f'{r["BM_ret"]:+.1f}%</span></div>'
-            for _, r in top3.iterrows()
-        ])
-        bot3_html = "".join([
+            for _, r in leader_df.iterrows()
+        ]) or '<span style="color:#444;font-style:italic;font-size:0.80em">—</span>'
+
+        corr_color = "#ff4422" if not all_positive else "#ffaa00"
+        corr_html  = "".join([
             f'<div style="display:flex;justify-content:space-between;'
             f'padding:3px 0;border-bottom:1px solid #1a1a1a;">'
             f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
-            f'<span style="color:#ff4422;font-weight:bold;font-size:0.82em">'
+            f'<span style="color:{corr_color};font-weight:bold;font-size:0.82em">'
             f'{r["BM_ret"]:+.1f}%</span></div>'
-            for _, r in bot3.iterrows()
-        ])
+            for _, r in corr_df.iterrows()
+        ]) or '<span style="color:#444;font-style:italic;font-size:0.80em">—</span>'
         div_html = (
             "<br>".join(divergenze)
             if divergenze
@@ -1330,17 +1357,19 @@ with tab7:
             f'BM medio: {avg_bm_ret:+.1f}%</div>'
             f'</div>'
 
-            # Top 3
+            # Leader
             f'<div style="margin-bottom:12px;">'
             f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
-            f'text-transform:uppercase;margin-bottom:4px;">▲ Leader benchmark</div>'
-            f'{top3_html}</div>'
+            f'text-transform:uppercase;margin-bottom:4px;">{leader_title}</div>'
+            f'{leader_note}'
+            f'{leader_html}</div>'
 
-            # Bottom 3
+            # Correzione / meno forti
             f'<div style="margin-bottom:12px;">'
             f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
-            f'text-transform:uppercase;margin-bottom:4px;">▼ Benchmark in correzione</div>'
-            f'{bot3_html}</div>'
+            f'text-transform:uppercase;margin-bottom:4px;">{corr_title}</div>'
+            f'{corr_note}'
+            f'{corr_html}</div>'
 
             # Divergenze
             f'<div>'
