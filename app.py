@@ -1215,7 +1215,7 @@ with tab7:
 
         fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
         fig_coh.update_layout(
-            height=320,
+            height=420,
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font=dict(color="white", size=9),
@@ -1233,7 +1233,7 @@ with tab7:
                        tickfont=dict(size=8)),
             legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
                         orientation="h", y=1.12, x=0),
-            margin=dict(l=45, r=20, t=45, b=80),
+            margin=dict(l=45, r=20, t=45, b=60),
             barmode="overlay",
         )
         st.plotly_chart(fig_coh, use_container_width=True)
