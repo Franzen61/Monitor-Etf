@@ -1077,7 +1077,6 @@ with tab7:
     total_etf  = len(valid_ret)
     total_all  = len(tem_df)
     missing_n  = total_all - total_etf
-    # identify which tickers are missing on this TF
     missing_tickers = tem_df[tem_df[tf_label].isna()]["Ticker"].tolist()
 
     pos_count = (valid_ret > 0).sum()
@@ -1087,13 +1086,13 @@ with tab7:
 
     k1, k2, k3, k4 = st.columns(4)
     kpi_data = [
-        (k1, "ETF con dati",   str(total_etf),                                                  "#ff9900"),
+        (k1, "ETF con dati",        str(total_etf),                                           "#ff9900"),
         (k2, f"Positivi {tf_label}", f"{pos_count}/{total_etf} ({pos_pct}%)",
          "#00ff55" if pos_pct >= 50 else "#ff4422"),
         (k3, f"Top {tf_label}",
-         f"{top_row['Ticker']} ({top_row[tf_label]:+.1f}%)" if top_row is not None else "—", "#00ff55"),
+         f"{top_row['Ticker']} ({top_row[tf_label]:+.1f}%)" if top_row is not None else "—",  "#00ff55"),
         (k4, f"Worst {tf_label}",
-         f"{bot_row['Ticker']} ({bot_row[tf_label]:+.1f}%)" if bot_row is not None else "—", "#ff4422"),
+         f"{bot_row['Ticker']} ({bot_row[tf_label]:+.1f}%)" if bot_row is not None else "—",  "#ff4422"),
     ]
     for col, label, val, color in kpi_data:
         col.markdown(
@@ -1105,7 +1104,6 @@ with tab7:
             unsafe_allow_html=True,
         )
 
-    # Nota ETF esclusi per storico insufficiente
     if missing_n > 0:
         st.markdown(
             f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
@@ -1115,119 +1113,245 @@ with tab7:
             unsafe_allow_html=True,
         )
 
-    # Barre coerenza per gruppo
+    # ── BUILD coerenza_data ───────────────────────────────────────────────────
     coerenza_data = []
     for sector, tickers, bm_ticker in TEMATICI_STRUCT:
-        grp = tem_df[(tem_df["Gruppo"] == sector)][tf_label].dropna()
+        grp = tem_df[tem_df["Gruppo"] == sector][tf_label].dropna()
         if len(grp) == 0:
             continue
-        n_pos = (grp > 0).sum()
-        n_tot = len(grp)
-        pct   = round(n_pos / n_tot * 100, 1)
-        bm_r  = tem_df[tem_df["Gruppo"] == sector]["BM ret"].dropna()
-        bm_val = bm_r.iloc[0] if len(bm_r) > 0 else np.nan
-        coerenza_data.append({"Gruppo": sector, "Pct_pos": pct, "n_pos": n_pos,
-                               "n_tot": n_tot, "BM_ret": bm_val})
+        n_pos  = int((grp > 0).sum())
+        n_tot  = int(len(grp))
+        pct    = round(n_pos / n_tot * 100, 1)
+        bm_r   = tem_df[tem_df["Gruppo"] == sector]["BM ret"].dropna()
+        bm_val = float(bm_r.iloc[0]) if len(bm_r) > 0 else np.nan
+        coerenza_data.append({
+            "Gruppo": sector, "Pct_pos": pct,
+            "n_pos": n_pos, "n_tot": n_tot, "BM_ret": bm_val,
+        })
 
-    cdf = pd.DataFrame(coerenza_data).sort_values("Pct_pos", ascending=False)
-
-    # ── GRAFICO UNIFICATO: barre ritorno benchmark + diamante breadth ──────────
-    # Asse Y = ritorno % (benchmark), diamante giallo = % ETF positivi sul gruppo
-    # Barra verde se BM > 0, rossa se BM < 0. Diamante sempre visibile a quota breadth%.
-    # cdf è ordinato per Pct_pos; per il grafico usiamo l'ordine originale dei gruppi
     cdf_plot = pd.DataFrame(coerenza_data)  # ordine originale TEMATICI_STRUCT
 
-    bar_bm_colors = [
-        "#00cc44" if (not np.isnan(r["BM_ret"]) and r["BM_ret"] >= 0) else "#cc2200"
-        for _, r in cdf_plot.iterrows()
-    ]
+    # ── LAYOUT DUE COLONNE ───────────────────────────────────────────────────
+    col_chart, col_panel = st.columns([3, 2])
 
-    # Calcola range Y dinamico per contenere sia barre BM che diamanti (breadth 0-100 rescaled)
-    bm_vals   = cdf_plot["BM_ret"].dropna()
-    y_max_bm  = bm_vals.max() if len(bm_vals) > 0 else 20
-    y_min_bm  = bm_vals.min() if len(bm_vals) > 0 else -10
-    y_pad     = max(abs(y_max_bm), abs(y_min_bm)) * 0.35
-    y_top     = y_max_bm + y_pad + 8   # spazio per etichette
-    y_bot     = min(y_min_bm - y_pad, -5)
+    with col_chart:
+        bar_bm_colors = [
+            "#00cc44" if (not np.isnan(r["BM_ret"]) and r["BM_ret"] >= 0) else "#cc2200"
+            for _, r in cdf_plot.iterrows()
+        ]
 
-    fig_coh = go.Figure()
+        bm_vals  = cdf_plot["BM_ret"].dropna()
+        y_max_bm = bm_vals.max() if len(bm_vals) > 0 else 10
+        y_min_bm = bm_vals.min() if len(bm_vals) > 0 else -5
+        y_abs    = max(abs(y_max_bm), abs(y_min_bm))
+        y_pad    = y_abs * 0.30
+        y_top    = y_max_bm + y_pad + 5
+        y_bot    = min(y_min_bm - y_pad, -3)
 
-    # Barre benchmark
-    fig_coh.add_trace(go.Bar(
-        x=cdf_plot["Gruppo"],
-        y=cdf_plot["BM_ret"].fillna(0),
-        marker=dict(
-            color=bar_bm_colors,
-            opacity=0.55,
-            line=dict(color="#444", width=1)
-        ),
-        text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d" for v in cdf_plot["BM_ret"]],
-        textposition="outside",
-        textfont=dict(color="#aaaaaa", size=9),
-        name=f"BM {tf_label}",
-        hovertemplate="<b>%{x}</b><br>Benchmark: %{y:+.1f}%<extra></extra>",
-    ))
+        fig_coh = go.Figure()
 
-    # Diamante giallo = breadth (% ETF positivi), posizionato sul valore BM come Y di ancoraggio
-    # Per renderlo leggibile lo posizioniamo a metà tra 0 e il valore BM, con Y = BM_ret
-    # e testo con la breadth sopra
-    if show_bm:
-        diamond_y  = cdf_plot["BM_ret"].fillna(0).tolist()
-        breadth_txt = [f"{int(r['n_pos'])}/{int(r['n_tot'])}\n{r['Pct_pos']:.0f}%"
-                       for _, r in cdf_plot.iterrows()]
-        breadth_col = ["#00ff55" if r["Pct_pos"] >= 60
-                       else "#ffff44" if r["Pct_pos"] >= 40
-                       else "#ff4422"
-                       for _, r in cdf_plot.iterrows()]
+        # Stem lines from 0 to BM value (visual anchor)
+        for _, r in cdf_plot.iterrows():
+            if np.isnan(r["BM_ret"]):
+                continue
+            fig_coh.add_shape(
+                type="line",
+                x0=r["Gruppo"], x1=r["Gruppo"],
+                y0=0, y1=r["BM_ret"],
+                line=dict(
+                    color="#00cc44" if r["BM_ret"] >= 0 else "#cc2200",
+                    width=10, dash="solid"
+                ),
+                opacity=0.45,
+            )
 
-        fig_coh.add_trace(go.Scatter(
+        # Barre BM sottili (overlay su stem per valore esatto)
+        fig_coh.add_trace(go.Bar(
             x=cdf_plot["Gruppo"],
-            y=diamond_y,
-            mode="markers+text",
-            marker=dict(
-                symbol="diamond",
-                size=14,
-                color=breadth_col,
-                line=dict(color="#000", width=1.5)
-            ),
-            text=[f"{r['Pct_pos']:.0f}%  ({int(r['n_pos'])}/{int(r['n_tot'])})"
-                  for _, r in cdf_plot.iterrows()],
-            textposition="top center",
-            textfont=dict(size=8, color="#dddddd"),
-            name="Breadth (% ETF pos.)",
+            y=cdf_plot["BM_ret"].fillna(0),
+            marker=dict(color=bar_bm_colors, opacity=0.70,
+                        line=dict(color="#333", width=1)),
+            width=0.35,
+            text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d"
+                  for v in cdf_plot["BM_ret"]],
+            textposition="outside",
+            textfont=dict(color="#888888", size=8),
+            name=f"BM {tf_label}",
             hovertemplate=(
                 "<b>%{x}</b><br>"
-                "BM: %{y:+.1f}%<br>"
-                "Breadth: %{text}<extra></extra>"
+                f"Benchmark {tf_label}: %{{y:+.1f}}%"
+                "<extra></extra>"
             ),
         ))
 
-    fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
-    fig_coh.update_layout(
-        height=300,
-        paper_bgcolor="#000",
-        plot_bgcolor="#000",
-        font=dict(color="white", size=10),
-        title=dict(
-            text=(
-                f"Ritorno benchmark di gruppo — {tf_label}"
-                + ("  |  ◆ = breadth (% ETF tematici positivi)" if show_bm else "")
+        # Diamante — posizionato al valore BM, breadth solo in tooltip
+        if show_bm:
+            breadth_col = [
+                "#00ff55" if r["Pct_pos"] >= 60
+                else "#ffff44" if r["Pct_pos"] >= 40
+                else "#ff4422"
+                for _, r in cdf_plot.iterrows()
+            ]
+            hover_diamond = [
+                f"<b>{r['Gruppo']}</b><br>"
+                f"BM {tf_label}: {r['BM_ret']:+.1f}%<br>"
+                f"Breadth: {r['Pct_pos']:.0f}% ({r['n_pos']}/{r['n_tot']})"
+                for _, r in cdf_plot.iterrows()
+            ]
+            fig_coh.add_trace(go.Scatter(
+                x=cdf_plot["Gruppo"],
+                y=cdf_plot["BM_ret"].fillna(0),
+                mode="markers",
+                marker=dict(
+                    symbol="diamond",
+                    size=16,
+                    color=breadth_col,
+                    line=dict(color="#ffffff", width=2)
+                ),
+                name="Breadth ◆",
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=hover_diamond,
+            ))
+
+        fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
+        fig_coh.update_layout(
+            height=320,
+            paper_bgcolor="#000",
+            plot_bgcolor="#000",
+            font=dict(color="white", size=9),
+            title=dict(
+                text=(
+                    f"Ritorno benchmark — {tf_label}"
+                    + ("  |  ◆ colore = breadth tematici" if show_bm else "")
+                ),
+                font=dict(size=10, color="#555")
             ),
-            font=dict(size=11, color="#666")
-        ),
-        xaxis=dict(tickangle=-20, gridcolor="#111"),
-        yaxis=dict(
-            range=[y_bot, y_top],
-            gridcolor="#111",
-            ticksuffix="%",
-            zeroline=False,
-        ),
-        legend=dict(font=dict(size=9), bgcolor="rgba(0,0,0,0)",
-                    orientation="h", y=1.10, x=0),
-        margin=dict(l=50, r=80, t=50, b=90),
-        barmode="overlay",
-    )
-    st.plotly_chart(fig_coh, use_container_width=True)
+            xaxis=dict(tickangle=-25, gridcolor="#0a0a0a",
+                       tickfont=dict(size=8)),
+            yaxis=dict(range=[y_bot, y_top], gridcolor="#111",
+                       ticksuffix="%", zeroline=False,
+                       tickfont=dict(size=8)),
+            legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
+                        orientation="h", y=1.12, x=0),
+            margin=dict(l=45, r=20, t=45, b=80),
+            barmode="overlay",
+        )
+        st.plotly_chart(fig_coh, use_container_width=True)
+
+    # ── PANNELLO INTERPRETATIVO ───────────────────────────────────────────────
+    with col_panel:
+
+        # Calcola regime globale
+        n_bm_pos     = (cdf_plot["BM_ret"] > 0).sum()
+        n_bm_tot     = cdf_plot["BM_ret"].dropna().__len__()
+        global_breadth = round(pos_pct, 1)
+        avg_bm_ret   = round(cdf_plot["BM_ret"].mean(), 1)
+
+        if n_bm_pos >= 9:
+            regime_txt   = "RISK ON DIFFUSO"
+            regime_color = "#00ff55"
+            regime_icon  = "🟢"
+        elif n_bm_pos >= 6:
+            regime_txt   = "MOMENTUM MISTO"
+            regime_color = "#ffff44"
+            regime_icon  = "🟡"
+        elif n_bm_pos >= 3:
+            regime_txt   = "RISK OFF PARZIALE"
+            regime_color = "#ffaa00"
+            regime_icon  = "🟠"
+        else:
+            regime_txt   = "RISK OFF DIFFUSO"
+            regime_color = "#ff4422"
+            regime_icon  = "🔴"
+
+        # Top 3 e bottom 3 gruppi per BM_ret
+        sorted_cdf = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
+        top3  = sorted_cdf.head(3)
+        bot3  = sorted_cdf.tail(3).sort_values("BM_ret")
+
+        # Divergenze: barra verde + breadth rossa (fragile) o barra rossa + breadth verde (difensivo)
+        divergenze = []
+        for _, r in cdf_plot.iterrows():
+            if np.isnan(r["BM_ret"]):
+                continue
+            bm_pos   = r["BM_ret"] > 0
+            brd_high = r["Pct_pos"] >= 60
+            brd_low  = r["Pct_pos"] < 40
+            if bm_pos and brd_low:
+                divergenze.append(
+                    f'<span style="color:#ffaa00">⚡ <b>{r["Gruppo"]}</b></span>: '
+                    f'BM {r["BM_ret"]:+.1f}% ma breadth {r["Pct_pos"]:.0f}% '
+                    f'→ <i>rally non confermato dai tematici</i>'
+                )
+            elif not bm_pos and brd_high:
+                divergenze.append(
+                    f'<span style="color:#44aaff">⚡ <b>{r["Gruppo"]}</b></span>: '
+                    f'BM {r["BM_ret"]:+.1f}% ma breadth {r["Pct_pos"]:.0f}% '
+                    f'→ <i>tematici reggono nonostante il benchmark</i>'
+                )
+
+        # Render pannello
+        top3_html = "".join([
+            f'<div style="display:flex;justify-content:space-between;'
+            f'padding:3px 0;border-bottom:1px solid #1a1a1a;">'
+            f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
+            f'<span style="color:#00ff55;font-weight:bold;font-size:0.82em">'
+            f'{r["BM_ret"]:+.1f}%</span></div>'
+            for _, r in top3.iterrows()
+        ])
+        bot3_html = "".join([
+            f'<div style="display:flex;justify-content:space-between;'
+            f'padding:3px 0;border-bottom:1px solid #1a1a1a;">'
+            f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
+            f'<span style="color:#ff4422;font-weight:bold;font-size:0.82em">'
+            f'{r["BM_ret"]:+.1f}%</span></div>'
+            for _, r in bot3.iterrows()
+        ])
+        div_html = (
+            "<br>".join(divergenze)
+            if divergenze
+            else '<span style="color:#444;font-style:italic;font-size:0.80em">'
+                 'Nessuna divergenza significativa</span>'
+        )
+
+        st.markdown(
+            f'<div style="background:#080808;border:1px solid #222;border-radius:10px;'
+            f'padding:16px 18px;height:100%;font-family:monospace;">'
+
+            # Header regime
+            f'<div style="border-bottom:1px solid #222;padding-bottom:10px;margin-bottom:12px;">'
+            f'<div style="color:#555;font-size:0.70em;letter-spacing:0.1em;'
+            f'text-transform:uppercase;">Regime tematico — {tf_label}</div>'
+            f'<div style="color:{regime_color};font-size:1.25em;font-weight:bold;margin-top:4px;">'
+            f'{regime_icon} {regime_txt}</div>'
+            f'<div style="color:#444;font-size:0.75em;margin-top:2px;">'
+            f'BM positivi: {n_bm_pos}/{n_bm_tot} &nbsp;·&nbsp; '
+            f'Breadth globale: {global_breadth}% &nbsp;·&nbsp; '
+            f'BM medio: {avg_bm_ret:+.1f}%</div>'
+            f'</div>'
+
+            # Top 3
+            f'<div style="margin-bottom:12px;">'
+            f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin-bottom:4px;">▲ Leader benchmark</div>'
+            f'{top3_html}</div>'
+
+            # Bottom 3
+            f'<div style="margin-bottom:12px;">'
+            f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin-bottom:4px;">▼ Benchmark in correzione</div>'
+            f'{bot3_html}</div>'
+
+            # Divergenze
+            f'<div>'
+            f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin-bottom:6px;">⚡ Divergenze rilevate</div>'
+            f'<div style="font-size:0.78em;line-height:1.7;">{div_html}</div>'
+            f'</div>'
+
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── SEZIONE 2: TABELLA PERFORMANCE (stile Fattori) ────────────────────────
     st.markdown("---")
