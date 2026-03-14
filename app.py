@@ -1131,55 +1131,103 @@ with tab7:
 
     cdf = pd.DataFrame(coerenza_data).sort_values("Pct_pos", ascending=False)
 
-    bar_c = ["#00ff55" if p >= 60 else "#ffff44" if p >= 40 else "#ff4422" for p in cdf["Pct_pos"]]
+    # ── GRAFICO UNIFICATO: barre ritorno benchmark + diamante breadth ──────────
+    # Asse Y = ritorno % (benchmark), diamante giallo = % ETF positivi sul gruppo
+    # Barra verde se BM > 0, rossa se BM < 0. Diamante sempre visibile a quota breadth%.
+    # cdf è ordinato per Pct_pos; per il grafico usiamo l'ordine originale dei gruppi
+    cdf_plot = pd.DataFrame(coerenza_data)  # ordine originale TEMATICI_STRUCT
+
+    bar_bm_colors = [
+        "#00cc44" if (not np.isnan(r["BM_ret"]) and r["BM_ret"] >= 0) else "#cc2200"
+        for _, r in cdf_plot.iterrows()
+    ]
+
+    # Calcola range Y dinamico per contenere sia barre BM che diamanti (breadth 0-100 rescaled)
+    bm_vals   = cdf_plot["BM_ret"].dropna()
+    y_max_bm  = bm_vals.max() if len(bm_vals) > 0 else 20
+    y_min_bm  = bm_vals.min() if len(bm_vals) > 0 else -10
+    y_pad     = max(abs(y_max_bm), abs(y_min_bm)) * 0.35
+    y_top     = y_max_bm + y_pad + 8   # spazio per etichette
+    y_bot     = min(y_min_bm - y_pad, -5)
+
     fig_coh = go.Figure()
+
+    # Barre benchmark
     fig_coh.add_trace(go.Bar(
-        x=cdf["Gruppo"], y=cdf["Pct_pos"],
-        marker=dict(color=bar_c, line=dict(color="#333", width=1)),
-        text=[f"{int(r['n_pos'])}/{int(r['n_tot'])}" for _, r in cdf.iterrows()],
-        textposition="outside", textfont=dict(color="white", size=10),
-        name="% positivi", hovertemplate="<b>%{x}</b><br>%{y:.1f}% positivi<extra></extra>",
+        x=cdf_plot["Gruppo"],
+        y=cdf_plot["BM_ret"].fillna(0),
+        marker=dict(
+            color=bar_bm_colors,
+            opacity=0.55,
+            line=dict(color="#444", width=1)
+        ),
+        text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d" for v in cdf_plot["BM_ret"]],
+        textposition="outside",
+        textfont=dict(color="#aaaaaa", size=9),
+        name=f"BM {tf_label}",
+        hovertemplate="<b>%{x}</b><br>Benchmark: %{y:+.1f}%<extra></extra>",
     ))
-    fig_coh.add_hline(y=50, line_dash="dot", line_color="#555",
-                      annotation_text="50%", annotation_font_color="#888", annotation_position="right")
+
+    # Diamante giallo = breadth (% ETF positivi), posizionato sul valore BM come Y di ancoraggio
+    # Per renderlo leggibile lo posizioniamo a metà tra 0 e il valore BM, con Y = BM_ret
+    # e testo con la breadth sopra
+    if show_bm:
+        diamond_y  = cdf_plot["BM_ret"].fillna(0).tolist()
+        breadth_txt = [f"{int(r['n_pos'])}/{int(r['n_tot'])}\n{r['Pct_pos']:.0f}%"
+                       for _, r in cdf_plot.iterrows()]
+        breadth_col = ["#00ff55" if r["Pct_pos"] >= 60
+                       else "#ffff44" if r["Pct_pos"] >= 40
+                       else "#ff4422"
+                       for _, r in cdf_plot.iterrows()]
+
+        fig_coh.add_trace(go.Scatter(
+            x=cdf_plot["Gruppo"],
+            y=diamond_y,
+            mode="markers+text",
+            marker=dict(
+                symbol="diamond",
+                size=14,
+                color=breadth_col,
+                line=dict(color="#000", width=1.5)
+            ),
+            text=[f"{r['Pct_pos']:.0f}%  ({int(r['n_pos'])}/{int(r['n_tot'])})"
+                  for _, r in cdf_plot.iterrows()],
+            textposition="top center",
+            textfont=dict(size=8, color="#dddddd"),
+            name="Breadth (% ETF pos.)",
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "BM: %{y:+.1f}%<br>"
+                "Breadth: %{text}<extra></extra>"
+            ),
+        ))
+
+    fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
     fig_coh.update_layout(
-        height=240, paper_bgcolor="#000", plot_bgcolor="#000",
+        height=300,
+        paper_bgcolor="#000",
+        plot_bgcolor="#000",
         font=dict(color="white", size=10),
-        title=dict(text=f"% ETF tematici positivi per gruppo — {tf_label}",
-                   font=dict(size=11, color="#666")),
+        title=dict(
+            text=(
+                f"Ritorno benchmark di gruppo — {tf_label}"
+                + ("  |  ◆ = breadth (% ETF tematici positivi)" if show_bm else "")
+            ),
+            font=dict(size=11, color="#666")
+        ),
         xaxis=dict(tickangle=-20, gridcolor="#111"),
-        yaxis=dict(range=[0, 120], gridcolor="#111", ticksuffix="%"),
-        margin=dict(l=40, r=80, t=35, b=80),
-        showlegend=False,
+        yaxis=dict(
+            range=[y_bot, y_top],
+            gridcolor="#111",
+            ticksuffix="%",
+            zeroline=False,
+        ),
+        legend=dict(font=dict(size=9), bgcolor="rgba(0,0,0,0)",
+                    orientation="h", y=1.10, x=0),
+        margin=dict(l=50, r=80, t=50, b=90),
+        barmode="overlay",
     )
     st.plotly_chart(fig_coh, use_container_width=True)
-
-    # Riga benchmark separata — scala omogenea, nessuna ambiguità
-    if show_bm:
-        bm_valid = cdf.dropna(subset=["BM_ret"]).copy()
-        if not bm_valid.empty:
-            bm_colors = ["#00ff55" if v >= 0 else "#ff4422" for v in bm_valid["BM_ret"]]
-            fig_bm = go.Figure()
-            fig_bm.add_trace(go.Bar(
-                x=bm_valid["Gruppo"], y=bm_valid["BM_ret"],
-                marker=dict(color=bm_colors, opacity=0.75, line=dict(color="#333", width=1)),
-                text=[f"{v:+.1f}%" for v in bm_valid["BM_ret"]],
-                textposition="outside", textfont=dict(color="#ff9900", size=9),
-                hovertemplate="<b>%{x}</b><br>BM ret: %{y:.2f}%<extra></extra>",
-            ))
-            fig_bm.add_hline(y=0, line_color="#444", line_width=1)
-            fig_bm.update_layout(
-                height=160, paper_bgcolor="#000", plot_bgcolor="#000",
-                font=dict(color="white", size=10),
-                title=dict(text=f"Ritorno benchmark di gruppo — {tf_label}",
-                           font=dict(size=11, color="#666")),
-                xaxis=dict(tickangle=-20, gridcolor="#111", categoryorder="array",
-                           categoryarray=bm_valid["Gruppo"].tolist()),
-                yaxis=dict(gridcolor="#111", ticksuffix="%"),
-                margin=dict(l=40, r=80, t=35, b=80),
-                showlegend=False,
-            )
-            st.plotly_chart(fig_bm, use_container_width=True)
 
     # ── SEZIONE 2: TABELLA PERFORMANCE (stile Fattori) ────────────────────────
     st.markdown("---")
