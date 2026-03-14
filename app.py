@@ -91,12 +91,12 @@ WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 TEMATICI_STRUCT = [
     ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","ISPY.MI","ECAR.MI"],   "XDWT.DE"),
     ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
-    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE"],                        "XDWF.DE"),
+    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],                "XDWF.DE"),
     ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE"],                                  "XWTS.DE"),
     ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
     ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI"],                        "XDWI.DE"),
-    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI"],             "XDWM.DE"),
+    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],               "XDWI.DE"),
+    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],    "XDWM.DE"),
     ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                       "XDW0.DE"),
     ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],  "XDWU.DE"),
     ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS"],                        "EPRA.MI"),
@@ -121,7 +121,8 @@ TEMATICI_DESCRIPTIONS = {
     "WNDY.DE": "eolico",              "RENW.MI": "rinnovabili (2)",
     "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
     "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",
-    "LVO.MI":  "vix",                 "BUYB.PA": "buyback",
+    "DPAY.MI": "pagamenti digitali",   "XSGI.MI": "infrast. globali",
+    "WOOE.AS": "legname",
     "HODLX.PA":"basket crypto",       "GOAT.PA": "global moat",     "FOOD.MI": "futuro del cibo",
 }
 
