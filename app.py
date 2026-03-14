@@ -86,6 +86,52 @@ FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
 # ========================
+# STRUTTURA ETF TEMATICI
+# ========================
+TEMATICI_STRUCT = [
+    ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","ISPY.MI","ECAR.MI"],   "XDWT.DE"),
+    ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
+    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE"],                        "XDWF.DE"),
+    ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE"],                                  "XWTS.DE"),
+    ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
+    ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
+    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI"],                        "XDWI.DE"),
+    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI"],             "XDWM.DE"),
+    ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                       "XDW0.DE"),
+    ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],  "XDWU.DE"),
+    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS"],                        "EPRA.MI"),
+    ("INTRAS./ALTERNATIVI",     ["LVO.MI","BUYB.PA","HODLX.PA","GOAT.PA","FOOD.MI"],  "SWDA.MI"),
+]
+
+TEMATICI_DESCRIPTIONS = {
+    "BCHN.MI": "blockchain & crypto", "XAIX.MI": "AI", "QNTM.MI": "quantum comp.",
+    "ISPY.MI": "cybersecurity",       "ECAR.MI": "mobilità elettr.",
+    "GLUX.MI": "beni di lusso",       "EXV5.DE": "automobili",
+    "EXV9.DE": "travel & leisure",    "ECOM.MI": "e.commerce",
+    "ITBL.MI": "banche italiane",     "BNKE.PA": "banche europa",   "EXH5.DE": "assic. europa",
+    "ESPO.MI": "gaming",              "EXV2.DE": "telco europa",
+    "AGED.MI": "ageing popul.",       "2B70.DE": "biotech",
+    "DOCT.MI": "tech salute",         "HEAL.MI": "health innovat.",
+    "EXH3.DE": "food & beverage",     "DXSK.DE": "cons.stapl.europa",
+    "HTWO.MI": "idrogeno",            "DFNS.MI": "difesa",          "JEDI.MI": "aerospazio",
+    "REMX.MI": "terre rare",          "BATT.MI": "batterie",
+    "EXV7.DE": "chimica",             "ISAG.MI": "agricoltura",
+    "STNX.MI": "energia europa",      "IOGP.AS": "oil & gas global","NUCL.MI": "nucleare",
+    "H2OA.AS": "acqua",               "INRG.MI": "rinnovabili",
+    "WNDY.DE": "eolico",              "RENW.MI": "rinnovabili (2)",
+    "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
+    "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",
+    "LVO.MI":  "vix",                 "BUYB.PA": "buyback",
+    "HODLX.PA":"basket crypto",       "GOAT.PA": "global moat",     "FOOD.MI": "futuro del cibo",
+}
+
+ALL_THEMATIC_TICKERS = list(dict.fromkeys(
+    t for _, tickers, bm in TEMATICI_STRUCT for t in tickers + [bm]
+))
+
+TF_DAYS = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "YTD": None, "1A": 252, "2A": 504}
+
+# ========================
 # DATA LOADERS
 # ========================
 @st.cache_data(ttl=60*60)
@@ -108,7 +154,6 @@ def load_prices(tickers):
 
 @st.cache_data(ttl=60*60)
 def load_ohlcv(tickers):
-    """Scarica OHLCV completo per il calcolo del Volume Signal."""
     end = datetime.today()
     start = end - timedelta(days=60)
     raw = yf.download(
@@ -123,7 +168,6 @@ def load_ohlcv(tickers):
 
 @st.cache_data(ttl=60*60*4)
 def load_pe_live(tickers):
-    """Scarica P/E attuale per ogni ETF settoriale via yfinance."""
     pe_live = {}
     for t in tickers:
         try:
@@ -137,7 +181,6 @@ def load_pe_live(tickers):
 
 @st.cache_data(ttl=60*60*6)
 def load_sp500_data(timeframe_days: int):
-    """Scarica lista S&P 500 da Wikipedia + prezzi via yfinance batch."""
     try:
         import requests
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
@@ -154,7 +197,6 @@ def load_sp500_data(timeframe_days: int):
         return pd.DataFrame()
 
     tickers = wiki["Ticker"].tolist()
-
     fetch_days = timeframe_days + 15
     end   = datetime.today()
     start = end - timedelta(days=fetch_days)
@@ -193,6 +235,24 @@ def load_sp500_data(timeframe_days: int):
     return merged
 
 
+@st.cache_data(ttl=60*60)
+def load_thematic_prices():
+    end   = datetime.today()
+    start = end - timedelta(days=2*365 + 30)
+    raw = yf.download(
+        ALL_THEMATIC_TICKERS,
+        start=start,
+        end=end,
+        auto_adjust=True,
+        progress=False
+    )
+    if isinstance(raw.columns, pd.MultiIndex):
+        close = raw["Close"]
+    else:
+        close = raw
+    return close.dropna(how="all")
+
+
 # ========================
 # VOLUME SIGNAL
 # ========================
@@ -211,7 +271,6 @@ def compute_vwds(ohlcv_raw, ticker, window):
 
         idx = hi.index.intersection(lo.index).intersection(cl.index).intersection(vo.index)
         hi, lo, cl, vo = hi[idx], lo[idx], cl[idx], vo[idx]
-
         hi = hi.iloc[-window:]
         lo = lo.iloc[-window:]
         cl = cl.iloc[-window:]
@@ -222,21 +281,15 @@ def compute_vwds(ohlcv_raw, ticker, window):
 
         rng = hi - lo
         rng = rng.replace(0, np.nan)
-
         buy_ratio  = (cl - lo) / rng
-        buy_ratio  = buy_ratio.fillna(0.5)
-        buy_ratio  = buy_ratio.clip(0, 1)
-
+        buy_ratio  = buy_ratio.fillna(0.5).clip(0, 1)
         buy_vol  = vo * buy_ratio
         sell_vol = vo * (1 - buy_ratio)
-
         total = buy_vol.sum() + sell_vol.sum()
         if total == 0:
             return np.nan
-
         score = (buy_vol.sum() - sell_vol.sum()) / total
         return round(score, 3)
-
     except Exception:
         return np.nan
 
@@ -251,52 +304,30 @@ def volume_signal(score_short, score_medium):
     sq_red    = '<span class="vol-square vol-red">✗</span>'
     sq_yellow = '<span class="vol-square vol-yellow">~</span>'
 
-    if is_pos(score_short):
-        sq_s = sq_green
-    elif is_neg(score_short):
-        sq_s = sq_red
-    else:
-        sq_s = sq_yellow
-
-    if is_pos(score_medium):
-        sq_m = sq_green
-    elif is_neg(score_medium):
-        sq_m = sq_red
-    else:
-        sq_m = sq_yellow
+    sq_s = sq_green if is_pos(score_short) else sq_red if is_neg(score_short) else sq_yellow
+    sq_m = sq_green if is_pos(score_medium) else sq_red if is_neg(score_medium) else sq_yellow
 
     if is_pos(score_short) and is_pos(score_medium):
-        label      = "CONFERMATO"
-        css_label  = "vol-label-confirmed"
-        sublabel   = "Volume in accumulo su entrambi i timeframe"
-        text_plain = "[B+M+] ACCUMULO"
+        label, css_label = "CONFERMATO",      "vol-label-confirmed"
+        sublabel, text_plain = "Volume in accumulo su entrambi i timeframe", "[B+M+] ACCUMULO"
     elif is_neg(score_short) and is_neg(score_medium):
-        label      = "DISTRIBUZIONE"
-        css_label  = "vol-label-distribution"
-        sublabel   = "Pressione vendita dominante — cautela"
-        text_plain = "[B-M-] DISTRIBUZ"
+        label, css_label = "DISTRIBUZIONE",   "vol-label-distribution"
+        sublabel, text_plain = "Pressione vendita dominante — cautela", "[B-M-] DISTRIBUZ"
     elif is_pos(score_short) and is_neg(score_medium):
-        label      = "INVERSIONE IN CORSO"
-        css_label  = "vol-label-reversal"
-        sublabel   = "Breve si rafforza su medio debole — monitorare"
-        text_plain = "[B+M-] INVERSIONE"
+        label, css_label = "INVERSIONE IN CORSO", "vol-label-reversal"
+        sublabel, text_plain = "Breve si rafforza su medio debole — monitorare", "[B+M-] INVERSIONE"
     elif is_neg(score_short) and is_pos(score_medium):
-        label      = "ESAURIMENTO"
-        css_label  = "vol-label-exhaustion"
-        sublabel   = "Breve si deteriora su medio positivo — attenzione"
-        text_plain = "[B-M+] ESAURIM."
+        label, css_label = "ESAURIMENTO",     "vol-label-exhaustion"
+        sublabel, text_plain = "Breve si deteriora su medio positivo — attenzione", "[B-M+] ESAURIM."
     else:
-        label      = "INDECISO"
-        css_label  = "vol-label-neutral"
-        sublabel   = "Segnale volumetrico non direzionale"
-        text_plain = "[B~ M~] INDECISO"
+        label, css_label = "INDECISO",        "vol-label-neutral"
+        sublabel, text_plain = "Segnale volumetrico non direzionale", "[B~ M~] INDECISO"
 
     html_badge = (
         f'{sq_s}&nbsp;{sq_m}&nbsp;'
         f'<span class="{css_label}">{label}</span>'
         f'<br><span class="vol-sublabel">{sublabel}</span>'
     )
-
     return html_badge, text_plain
 
 
@@ -317,6 +348,17 @@ def ret_ytd(data):
 def rsr(asset_ret, benchmark_ret):
     return ((1 + asset_ret/100) / (1 + benchmark_ret/100) - 1) * 100
 
+def safe_ret(series, days):
+    s = series.dropna()
+    if days is None:
+        ytd = s[s.index.year == datetime.today().year]
+        if len(ytd) < 2:
+            return np.nan
+        return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
+    if len(s) <= days:
+        return np.nan
+    return (s.iloc[-1] / s.iloc[-days - 1] - 1) * 100
+
 
 # ========================
 # ROTATION SCORE SERIES
@@ -331,16 +373,14 @@ def compute_rotation_score_series(prices):
     rar_6m = ret_6m.sub(ret_6m[BENCHMARK], axis=0)
 
     rar_mean = (rar_1m + rar_3m + rar_6m) / 3
-
     cyc  = rar_mean[CYCLICAL].mean(axis=1)
     def_ = rar_mean[DEFENSIVE].mean(axis=1)
-
     rotation_score = (cyc - def_) * 100
     return rotation_score.dropna()
 
 
 # ========================
-# LOAD DATA
+# LOAD SECTORAL DATA
 # ========================
 prices = load_prices(ALL_TICKERS)
 ohlcv  = load_ohlcv(ALL_TICKERS)
@@ -353,21 +393,16 @@ returns = pd.DataFrame({
     "6M": prices.apply(lambda x: ret(x, 126)),
 })
 
-# ========================
-# RSR
-# ========================
 rsr_df = pd.DataFrame(index=returns.index, columns=returns.columns)
 for col in returns.columns:
     rsr_df[col] = rsr(returns[col], returns.loc[BENCHMARK, col])
 
 df = rsr_df.loc[SECTORS].copy()
-
 df["Rsr_momentum"] = (
     df["1M"] * WEIGHTS["1M"] +
     df["3M"] * WEIGHTS["3M"] +
     df["6M"] * WEIGHTS["6M"]
 )
-
 df["Coerenza_Trend"] = df[["1D","1W","1M","3M","6M"]].gt(0).sum(axis=1)
 df["Delta_RS_5D"]    = df["1W"]
 df = df.sort_values("Rsr_momentum", ascending=False)
@@ -394,18 +429,17 @@ def operativita(row):
 df["Operatività"] = df.apply(operativita, axis=1)
 
 # ========================
-# CALCOLO VOLUME SIGNAL
+# VOLUME SIGNAL
 # ========================
 vol_html  = {}
 vol_plain = {}
-
 _vol_errors = []
 for ticker in SECTORS:
     s_short  = compute_vwds(ohlcv, ticker, window=10)
     s_medium = compute_vwds(ohlcv, ticker, window=20)
     if np.isnan(s_short) and np.isnan(s_medium):
         _vol_errors.append(ticker)
-    h, p     = volume_signal(s_short, s_medium)
+    h, p = volume_signal(s_short, s_medium)
     vol_html[ticker]  = h
     vol_plain[ticker] = p
 
@@ -421,13 +455,14 @@ df["Vol Signal"] = df.index.map(vol_plain)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "📊 Fattori",
     "🔄 Rotazione Settoriale",
     "🫧 S&P 500 Bubble",
-    "📐 Valutazione P/E"
+    "📐 Valutazione P/E",
+    "📌 Tematici",
 ])
 
 # ========================
@@ -494,16 +529,11 @@ with tab1:
 
     def style_vol(val):
         v = str(val)
-        if "ACCUMULO" in v:
-            return "background-color:#0d2b0d; color:#00ff55; font-weight:bold"
-        if "DISTRIBUZ" in v:
-            return "background-color:#2b0d0d; color:#ff4422; font-weight:bold"
-        if "ESAURIM" in v:
-            return "background-color:#2b1a00; color:#ffaa00; font-weight:bold"
-        if "INVERSIONE" in v:
-            return "background-color:#0d1a2b; color:#44aaff; font-weight:bold"
-        if "INDECISO" in v:
-            return "background-color:#1a1a1a; color:#888888"
+        if "ACCUMULO"   in v: return "background-color:#0d2b0d; color:#00ff55; font-weight:bold"
+        if "DISTRIBUZ"  in v: return "background-color:#2b0d0d; color:#ff4422; font-weight:bold"
+        if "ESAURIM"    in v: return "background-color:#2b1a00; color:#ffaa00; font-weight:bold"
+        if "INVERSIONE" in v: return "background-color:#0d1a2b; color:#44aaff; font-weight:bold"
+        if "INDECISO"   in v: return "background-color:#1a1a1a; color:#888888"
         return ""
 
     styled = (
@@ -516,26 +546,14 @@ with tab1:
         styled,
         width="stretch",
         column_config={
-            "Vol Signal": st.column_config.TextColumn(
-                "Vol Signal",
-                width="medium",
-            )
+            "Vol Signal": st.column_config.TextColumn("Vol Signal", width="medium")
         }
     )
 
     st.markdown("""
-    <div style="
-        background:#0d0d0d;
-        border:1px solid #222;
-        border-radius:8px;
-        padding:12px 20px;
-        margin-top:8px;
-        font-size:0.82em;
-        color:#888;
-        display:flex;
-        gap:24px;
-        flex-wrap:wrap;
-    ">
+    <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                padding:12px 20px;margin-top:8px;font-size:0.82em;color:#888;
+                display:flex;gap:24px;flex-wrap:wrap;">
         <span><b style="color:#00ff55">[B+M+] ACCUMULO</b> — breve e medio positivi</span>
         <span><b style="color:#ffaa00">[B-M+] ESAURIM.</b> — breve si deteriora su medio positivo</span>
         <span><b style="color:#44aaff">[B+M-] INVERSIONE</b> — breve si rafforza su medio debole</span>
@@ -626,13 +644,8 @@ with tab4:
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
     rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
-
     cyc_score = rar_focus.loc[CYCLICALS]
     def_score = rar_focus.loc[DEFENSIVES]
-
-    cyc_breadth = (cyc_score > 0).sum()
-    def_breadth = (def_score > 0).sum()
-
     rotation_score = cyc_score.mean() - def_score.mean()
 
     if rotation_score > 1.5:
@@ -649,20 +662,14 @@ with tab4:
         comment = "Equilibrio tra ciclici e difensivi"
 
     st.markdown(f"""
-    <div style="
-        background:{bg};
-        padding:20px 40px;
-        border-radius:12px;
-        text-align:center;
-        margin-bottom:15px;
-    ">
+    <div style="background:{bg};padding:20px 40px;border-radius:12px;
+                text-align:center;margin-bottom:15px;">
         <h2 style="margin:0 0 8px 0;">{regime}</h2>
         <h3 style="margin:0; font-weight:normal;">Rotation Score: {rotation_score:.2f}</h3>
     </div>
     """, unsafe_allow_html=True)
 
     rotation_series = compute_rotation_score_series(prices)
-
     if not rotation_series.empty:
         cutoff_date  = rotation_series.index.max() - pd.Timedelta(days=365)
         rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
@@ -671,91 +678,38 @@ with tab4:
 
     fig_rs = go.Figure()
     fig_rs.add_trace(go.Scatter(
-        x=rotation_12m.index,
-        y=rotation_12m,
-        mode="lines",
-        line=dict(color="#DDDDDD", width=2),
-        name="Rotation Score",
-        fill='tozeroy',
-        fillcolor='rgba(100,100,100,0.2)'
+        x=rotation_12m.index, y=rotation_12m,
+        mode="lines", line=dict(color="#DDDDDD", width=2),
+        name="Rotation Score", fill='tozeroy', fillcolor='rgba(100,100,100,0.2)'
     ))
-    fig_rs.add_hline(y=1.5,  line_dash="dot",   line_color="#00AA00",
+    fig_rs.add_hline(y=1.5,  line_dash="dot",  line_color="#00AA00",
                      annotation_text="Risk On",  annotation_position="right")
-    fig_rs.add_hline(y=0.0,  line_dash="solid",  line_color="#666666")
-    fig_rs.add_hline(y=-1.5, line_dash="dot",    line_color="#AA0000",
+    fig_rs.add_hline(y=0.0,  line_dash="solid", line_color="#666666")
+    fig_rs.add_hline(y=-1.5, line_dash="dot",   line_color="#AA0000",
                      annotation_text="Risk Off", annotation_position="right")
     fig_rs.update_layout(
-        height=280,
-        margin=dict(l=40, r=40, t=20, b=40),
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        font_color="white",
-        showlegend=False,
+        height=280, margin=dict(l=40, r=40, t=20, b=40),
+        paper_bgcolor="#000000", plot_bgcolor="#000000",
+        font_color="white", showlegend=False,
         yaxis_title="Rotation Score",
-        xaxis_title="",
         yaxis=dict(gridcolor="#222222")
     )
     st.plotly_chart(fig_rs, width="stretch")
 
     st.markdown(f"""
-    <div style="
-        background:#0d0d0d;
-        padding:25px;
-        border-radius:10px;
-        font-size:1.05em;
-        line-height:1.7;
-    ">
-
-    <h3 style="color:#ff9900; margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
-
-    Il <b>Rotation Score</b> misura la forza relativa tra settori
-    <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY.
-
+    <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.7;">
+    <h3 style="color:#ff9900;margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
+    Il <b>Rotation Score</b> misura la forza relativa tra settori <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY.
     <ol style="margin:15px 0;">
         <li><b>Calcolo RSR medio</b>: media dei rendimenti relativi su 1M, 3M e 6M</li>
         <li><b>Performance Ciclici</b>: XLK, XLY, XLF, XLI, XLE, XLB</li>
         <li><b>Performance Difensivi</b>: XLP, XLV, XLU, XLRE</li>
         <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
     </ol>
-
-    <h3 style="color:#ff9900; margin-top:25px;">📈 Come Interpretare il Grafico</h3>
-
-    <table style="width:100%; border-collapse:collapse; margin:15px 0;">
-        <tr style="background:#1a1a1a;">
-            <td style="padding:10px; border:1px solid #333;"><b>Zona</b></td>
-            <td style="padding:10px; border:1px solid #333;"><b>Range</b></td>
-            <td style="padding:10px; border:1px solid #333;"><b>Significato</b></td>
-        </tr>
-        <tr>
-            <td style="padding:10px; border:1px solid #333; color:#00ff00;">🟢 RISK ON</td>
-            <td style="padding:10px; border:1px solid #333;">&gt; +1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Ciclici dominanti</td>
-        </tr>
-        <tr style="background:#0a0a0a;">
-            <td style="padding:10px; border:1px solid #333; color:#ffff00;">🟡 NEUTRAL</td>
-            <td style="padding:10px; border:1px solid #333;">-1.5 a +1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Fase di transizione</td>
-        </tr>
-        <tr>
-            <td style="padding:10px; border:1px solid #333; color:#ff0000;">🔴 RISK OFF</td>
-            <td style="padding:10px; border:1px solid #333;">&lt; -1.5</td>
-            <td style="padding:10px; border:1px solid #333;">Difensivi dominanti</td>
-        </tr>
-    </table>
-
-    <h3 style="color:#ff9900; margin-top:25px;">🎯 Situazione Attuale</h3>
-
-    <div style="background:#1a1a1a; padding:15px; border-radius:8px; margin:15px 0;">
+    <h3 style="color:#ff9900;margin-top:25px;">🎯 Situazione Attuale</h3>
+    <div style="background:#1a1a1a;padding:15px;border-radius:8px;margin:15px 0;">
         <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b>
     </div>
-
-    <h3 style="color:#ff9900; margin-top:25px;">💡 Come Usare Questo Indicatore</h3>
-
-    <ul style="margin:10px 0;">
-        <li><b>Linea in salita</b> → rotazione verso Risk On (favorire ciclici)</li>
-        <li><b>Linea in discesa</b> → rotazione verso Risk Off (favorire difensivi)</li>
-    </ul>
-
     </div>
     """, unsafe_allow_html=True)
 
@@ -764,22 +718,11 @@ with tab4:
 # TAB 5 — BUBBLE CHART S&P 500
 # ========================
 with tab5:
-
     tf_options = {
-        "1W":  5,
-        "1M":  21,
-        "3M":  63,
-        "6M":  126,
+        "1W":  5, "1M": 21, "3M": 63, "6M": 126,
         "YTD": (datetime.today() - datetime(datetime.today().year, 1, 1)).days
     }
-
-    tf_sel = st.radio(
-        "Timeframe",
-        options=list(tf_options.keys()),
-        index=1,
-        horizontal=True
-    )
-
+    tf_sel  = st.radio("Timeframe", options=list(tf_options.keys()), index=1, horizontal=True)
     tf_days = tf_options[tf_sel]
 
     with st.spinner(f"Caricamento dati S&P 500 ({tf_sel})… prima volta ~30s, poi in cache"):
@@ -804,35 +747,20 @@ with tab5:
 
     fig_bar = go.Figure()
     fig_bar.add_trace(go.Bar(
-        name="% Positive",
-        x=sector_stats["Sector"],
-        y=sector_stats["Pct_pos"],
+        name="% Positive", x=sector_stats["Sector"], y=sector_stats["Pct_pos"],
         marker_color="#00cc44",
         text=sector_stats["Pct_pos"].astype(str) + "%",
-        textposition="outside",
-        textfont=dict(size=10, color="#00cc44"),
+        textposition="outside", textfont=dict(size=10, color="#00cc44"),
     ))
-    fig_bar.add_hline(
-        y=50,
-        line_dash="dot",
-        line_color="#555555",
-        annotation_text="50%",
-        annotation_font_color="#888",
-        annotation_position="right"
-    )
+    fig_bar.add_hline(y=50, line_dash="dot", line_color="#555555",
+                      annotation_text="50%", annotation_font_color="#888", annotation_position="right")
     fig_bar.update_layout(
-        height=220,
-        paper_bgcolor="#000",
-        plot_bgcolor="#000",
+        height=220, paper_bgcolor="#000", plot_bgcolor="#000",
         font=dict(color="white", size=11),
-        title=dict(
-            text=f"% Titoli Positivi per Settore — {tf_sel}",
-            font=dict(size=13, color="#ff9900")
-        ),
+        title=dict(text=f"% Titoli Positivi per Settore — {tf_sel}", font=dict(size=13, color="#ff9900")),
         xaxis=dict(tickangle=-30, gridcolor="#111"),
         yaxis=dict(range=[0, 115], gridcolor="#111", ticksuffix="%"),
-        margin=dict(l=40, r=20, t=45, b=80),
-        showlegend=False,
+        margin=dict(l=40, r=20, t=45, b=80), showlegend=False,
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -841,8 +769,8 @@ with tab5:
     pct = round(pos / tot * 100, 1)
     colore = "#00ff55" if pct >= 50 else "#ff4422"
     st.markdown(
-        f'<div style="background:#0d0d0d; border:1px solid #222; border-radius:8px; '
-        f'padding:10px 20px; margin-bottom:10px; font-size:1.05em;">'
+        f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+        f'padding:10px 20px;margin-bottom:10px;font-size:1.05em;">'
         f'📊 Su timeframe <b>{tf_sel}</b>: '
         f'<b style="color:{colore}">{pos} titoli su {tot} ({pct}%)</b> '
         f'sono in territorio positivo nell\'S&P 500</div>',
@@ -850,14 +778,9 @@ with tab5:
     )
 
     sector_order = sector_stats["Sector"].tolist()
-    sp500_df["SectorRank"] = sp500_df["Sector"].map(
-        {s: i for i, s in enumerate(sector_order)}
-    )
+    sp500_df["SectorRank"] = sp500_df["Sector"].map({s: i for i, s in enumerate(sector_order)})
     sp500_df = sp500_df.sort_values("SectorRank")
-
-    colors = sp500_df["Return"].apply(
-        lambda r: "#00cc44" if r > 0 else "#ff3322"
-    )
+    colors_b = sp500_df["Return"].apply(lambda r: "#00cc44" if r > 0 else "#ff3322")
 
     np.random.seed(42)
     jitter = np.random.uniform(-0.35, 0.35, size=len(sp500_df))
@@ -866,18 +789,10 @@ with tab5:
     fig_bubble = go.Figure()
     fig_bubble.add_hline(y=0, line_color="#444444", line_width=1.5)
     fig_bubble.add_trace(go.Scatter(
-        x=x_vals,
-        y=sp500_df["Return"],
-        mode="markers",
-        marker=dict(
-            size=5,
-            color=colors,
-            opacity=0.75,
-            line=dict(width=0),
-        ),
+        x=x_vals, y=sp500_df["Return"], mode="markers",
+        marker=dict(size=5, color=colors_b, opacity=0.75, line=dict(width=0)),
         text=sp500_df["Ticker"] + "<br>" + sp500_df["Return"].astype(str) + "%",
-        hovertemplate="%{text}<extra></extra>",
-        showlegend=False,
+        hovertemplate="%{text}<extra></extra>", showlegend=False,
     ))
 
     tick_labels = []
@@ -890,272 +805,609 @@ with tab5:
         )
 
     fig_bubble.update_layout(
-        height=520,
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
+        height=520, paper_bgcolor="#000000", plot_bgcolor="#000000",
         font=dict(color="white", size=10),
-        title=dict(
-            text=f"S&P 500 — Ritorno {tf_sel} per Titolo e Settore",
-            font=dict(size=14, color="#ff9900")
-        ),
-        xaxis=dict(
-            tickmode="array",
-            tickvals=list(range(len(sector_order))),
-            ticktext=tick_labels,
-            tickangle=0,
-            gridcolor="#111111",
-            showline=False,
-        ),
-        yaxis=dict(
-            title="Ritorno %",
-            gridcolor="#1a1a1a",
-            zeroline=False,
-            ticksuffix="%",
-        ),
+        title=dict(text=f"S&P 500 — Ritorno {tf_sel} per Titolo e Settore", font=dict(size=14, color="#ff9900")),
+        xaxis=dict(tickmode="array", tickvals=list(range(len(sector_order))),
+                   ticktext=tick_labels, tickangle=0, gridcolor="#111111", showline=False),
+        yaxis=dict(title="Ritorno %", gridcolor="#1a1a1a", zeroline=False, ticksuffix="%"),
         margin=dict(l=60, r=20, t=50, b=120),
         hoverlabel=dict(bgcolor="#111", font_size=12),
     )
     st.plotly_chart(fig_bubble, use_container_width=True)
 
     with st.expander("📋 Tabella dettaglio settori", expanded=False):
-        display_stats = sector_stats[[
-            "Sector", "Totale", "Positive", "Negative", "Pct_pos", "Avg_ret"
-        ]].copy()
-        display_stats.columns = [
-            "Settore", "Totale", "Positive ↑", "Negative ↓", "% Positive", "Ritorno Medio %"
-        ]
-
+        display_stats = sector_stats[["Sector","Totale","Positive","Negative","Pct_pos","Avg_ret"]].copy()
+        display_stats.columns = ["Settore","Totale","Positive ↑","Negative ↓","% Positive","Ritorno Medio %"]
         def style_pct(val):
-            if val >= 60:
-                return "color:#00ff55; font-weight:bold"
-            if val <= 40:
-                return "color:#ff4422; font-weight:bold"
+            if val >= 60: return "color:#00ff55; font-weight:bold"
+            if val <= 40: return "color:#ff4422; font-weight:bold"
             return "color:#ffff44"
-
         st.dataframe(
             display_stats.style.map(style_pct, subset=["% Positive"]),
-            use_container_width=True,
-            hide_index=True
+            use_container_width=True, hide_index=True
         )
 
-with tab6:
 
+# ========================
+# TAB 6 — P/E
+# ========================
+with tab6:
     st.markdown(
-        '<h3 style="color:#ff9900; margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
-        '<p style="color:#666; font-size:0.85em; margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com · Aggiornato al caricamento</p>'
-    '<p style="color:#444; font-size:0.78em; margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b> — aggiornamento consigliato ogni <b style="color:#ff9900">6 mesi</b></p>',
+        '<h3 style="color:#ff9900;margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
+        '<p style="color:#666;font-size:0.85em;margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com</p>'
+        '<p style="color:#444;font-size:0.78em;margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b></p>',
         unsafe_allow_html=True
     )
 
-    # Periodo di riferimento storico da confrontare
     period_sel = st.radio(
         "Confronta con media storica",
-        options=["Last 1Y", "Last 3Y", "Last 5Y", "Last 10Y", "Last 20Y"],
-        index=2,
-        horizontal=True
+        options=["Last 1Y","Last 3Y","Last 5Y","Last 10Y","Last 20Y"],
+        index=2, horizontal=True
     )
 
-    # Carica dati storici dall'Excel
     try:
         pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
         pe_hist = pe_hist.set_index("Period")
     except FileNotFoundError:
-        st.warning("⚠️ File pe_historical.xlsx non trovato in questo repository.")
-        st.info(
-            "Carica il file pe_historical.xlsx nella stessa cartella del file .py su GitHub. "
-            "Deve avere un foglio chiamato PE_Historical con colonna Period come indice."
-        )
-        st.markdown("_Le altre tab funzionano normalmente — solo questa tab richiede il file Excel._")
+        st.warning("⚠️ File pe_historical.xlsx non trovato.")
         pe_hist = None
     except Exception as e:
         st.error(f"Errore lettura pe_historical.xlsx: {e}")
         pe_hist = None
 
     if pe_hist is None:
+        st.info("Le altre tab funzionano normalmente.")
+    else:
+        with st.spinner("Scarico P/E attuali..."):
+            pe_live = load_pe_live(SECTORS)
+
+        etf_sectors = {
+            "XLK":"Info Technology","XLY":"Cons Discretionary","XLF":"Financials",
+            "XLC":"Comm Services","XLV":"Health Care","XLP":"Cons Staples",
+            "XLI":"Industrials","XLE":"Energy","XLB":"Materials","XLU":"Utilities","XLRE":"Real Estate",
+        }
+
+        rows = []
+        for etf, sector_name in etf_sectors.items():
+            pe_now  = pe_live.get(etf)
+            avg_col = f"{etf}_AvgPE"
+            std_col = f"{etf}_StdDev"
+
+            if period_sel not in pe_hist.index:
+                continue
+
+            avg_pe  = pe_hist.loc[period_sel, avg_col] if avg_col in pe_hist.columns else None
+            std_dev = pe_hist.loc[period_sel, std_col] if std_col in pe_hist.columns else None
+
+            if pe_now and avg_pe and std_dev and std_dev > 0:
+                dev_live = round((pe_now - avg_pe) / std_dev, 2)
+            else:
+                dev_live = None
+
+            def valuation_label(dev):
+                if dev is None:           return "N/D",      "#888888"
+                if dev < 0:               return "Cheap",    "#00ff55"
+                if dev < 0.5:             return "Fair",     "#aaaaaa"
+                if dev < 1.5:             return "Moderato", "#ffff44"
+                if dev < 2.5:             return "Overvalued","#ffaa00"
+                return "Expensive", "#ff4422"
+
+            label, color = valuation_label(dev_live)
+            rows.append({
+                "ETF": etf, "Settore": sector_name,
+                "P/E Live": pe_now, f"Avg P/E ({period_sel})": avg_pe,
+                "Std Dev": std_dev, "Dev σ (live)": dev_live,
+                "Valutazione": label, "_color": color,
+            })
+
+        comp_df = pd.DataFrame(rows)
+
+        bar_colors_pe = []
+        for _, r in comp_df.iterrows():
+            d = r["Dev σ (live)"]
+            if d is None:     bar_colors_pe.append("#555555")
+            elif d < 0:       bar_colors_pe.append("#00ff55")
+            elif d < 0.5:     bar_colors_pe.append("#aaaaaa")
+            elif d < 1.5:     bar_colors_pe.append("#ffff44")
+            elif d < 2.5:     bar_colors_pe.append("#ffaa00")
+            else:             bar_colors_pe.append("#ff4422")
+
+        fig_pe = go.Figure()
+        fig_pe.add_trace(go.Bar(
+            x=comp_df["ETF"], y=comp_df["Dev σ (live)"],
+            marker_color=bar_colors_pe,
+            text=[f"{v:.2f}σ" if v is not None else "N/D" for v in comp_df["Dev σ (live)"]],
+            textposition="outside", textfont=dict(size=11, color="white"),
+            hovertemplate="<b>%{x}</b><br>Deviazione: %{y:.2f}σ<extra></extra>",
+        ))
+        fig_pe.add_hline(y=0,    line_color="#444444", line_width=1)
+        fig_pe.add_hline(y=1.5,  line_dash="dot", line_color="#ffaa00",
+                         annotation_text="Overvalued", annotation_font_color="#ffaa00", annotation_position="right")
+        fig_pe.add_hline(y=2.5,  line_dash="dot", line_color="#ff4422",
+                         annotation_text="Expensive",  annotation_font_color="#ff4422", annotation_position="right")
+        fig_pe.add_hline(y=-0.5, line_dash="dot", line_color="#00ff55",
+                         annotation_text="Cheap",      annotation_font_color="#00ff55", annotation_position="right")
+        fig_pe.update_layout(
+            height=320, paper_bgcolor="#000000", plot_bgcolor="#000000",
+            font=dict(color="white", size=11),
+            title=dict(text=f"Deviazione P/E Live vs Media {period_sel}  (σ)", font=dict(size=13, color="#ff9900")),
+            xaxis=dict(gridcolor="#111"), yaxis=dict(gridcolor="#1a1a1a", ticksuffix="σ"),
+            margin=dict(l=40, r=80, t=50, b=40), showlegend=False,
+        )
+        st.plotly_chart(fig_pe, use_container_width=True)
+
+        display_cols = ["ETF","Settore","P/E Live",f"Avg P/E ({period_sel})","Std Dev","Dev σ (live)","Valutazione"]
+        display_df   = comp_df[display_cols].copy()
+
+        def style_valuation(val):
+            colors_map = {
+                "Cheap":"color:#00ff55;font-weight:bold","Fair":"color:#aaaaaa",
+                "Moderato":"color:#ffff44;font-weight:bold","Overvalued":"color:#ffaa00;font-weight:bold",
+                "Expensive":"color:#ff4422;font-weight:bold","N/D":"color:#555555",
+            }
+            return colors_map.get(str(val), "")
+
+        def style_dev(val):
+            try:
+                v = float(val)
+                if v < 0:   return "color:#00ff55"
+                if v < 0.5: return "color:#aaaaaa"
+                if v < 1.5: return "color:#ffff44"
+                if v < 2.5: return "color:#ffaa00"
+                return "color:#ff4422"
+            except Exception:
+                return ""
+
+        st.dataframe(
+            display_df.style
+                .map(style_valuation, subset=["Valutazione"])
+                .map(style_dev, subset=["Dev σ (live)"])
+                .format({
+                    "P/E Live":                    lambda x: f"{x:.2f}" if x else "N/D",
+                    f"Avg P/E ({period_sel})":     lambda x: f"{x:.2f}" if x else "N/D",
+                    "Std Dev":                     lambda x: f"{x:.2f}" if x else "N/D",
+                    "Dev σ (live)":                lambda x: f"{x:.2f}σ" if x else "N/D",
+                }),
+            use_container_width=True, hide_index=True,
+        )
+
+        st.markdown("""
+        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                    padding:10px 20px;margin-top:8px;font-size:0.82em;color:#888;
+                    display:flex;gap:20px;flex-wrap:wrap;">
+            <span><b style="color:#00ff55">Cheap</b> — sotto la media storica</span>
+            <span><b style="color:#aaaaaa">Fair</b> — entro 0.5σ dalla media</span>
+            <span><b style="color:#ffff44">Moderato</b> — tra 0.5σ e 1.5σ</span>
+            <span><b style="color:#ffaa00">Overvalued</b> — tra 1.5σ e 2.5σ</span>
+            <span><b style="color:#ff4422">Expensive</b> — oltre 2.5σ dalla media</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ========================
+# TAB 7 — TEMATICI
+# ========================
+with tab7:
+
+    st.markdown(
+        '<h3 style="color:#ff9900;margin-bottom:2px;">📌 ETF Tematici</h3>'
+        '<p style="color:#555;font-size:0.82em;margin-top:0;">'
+        'Performance assoluta · Delta vs benchmark di gruppo · Coerenza intra-settoriale · Scatter quadranti</p>',
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Caricamento prezzi tematici…"):
+        th_prices = load_thematic_prices()
+
+    if th_prices.empty:
+        st.error("Impossibile scaricare i dati. Controlla la connessione.")
         st.stop()
 
-    # Carica P/E live
-    with st.spinner("Scarico P/E attuali..."):
-        pe_live = load_pe_live(SECTORS)
+    # ── CONTROLLI ────────────────────────────────────────────────────────────
+    c1, c2, c3 = st.columns([2, 2, 1])
+    with c1:
+        tf_label = st.selectbox(
+            "Timeframe analisi",
+            ["1D","1W","1M","3M","6M","YTD","1A","2A"],
+            index=4,
+            key="tem_tf_main"
+        )
+    with c2:
+        sector_opts = ["TUTTI"] + [s for s, _, _ in TEMATICI_STRUCT]
+        sel_sector  = st.selectbox("Filtra gruppo", sector_opts, key="tem_sector")
+    with c3:
+        show_bm = st.checkbox("Mostra benchmark", value=True, key="tem_bm")
 
-    # Costruisci tabella comparativa
-    etf_sectors = {
-        "XLK": "Info Technology",
-        "XLY": "Cons Discretionary",
-        "XLF": "Financials",
-        "XLC": "Comm Services",
-        "XLV": "Health Care",
-        "XLP": "Cons Staples",
-        "XLI": "Industrials",
-        "XLE": "Energy",
-        "XLB": "Materials",
-        "XLU": "Utilities",
-        "XLRE": "Real Estate",
-    }
+    tf_days_main = TF_DAYS[tf_label]
 
-    rows = []
-    for etf, sector_name in etf_sectors.items():
-        pe_now   = pe_live.get(etf)
-        avg_col  = f"{etf}_AvgPE"
-        std_col  = f"{etf}_StdDev"
-        dev_col  = f"{etf}_Deviation"
+    # ── BUILD DATAFRAME ───────────────────────────────────────────────────────
+    rows_tem = []
+    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
+        bm_ret = None
+        if bm_ticker in th_prices.columns:
+            bm_ret = safe_ret(th_prices[bm_ticker], tf_days_main)
 
-        if period_sel not in pe_hist.index:
+        for ticker in tickers:
+            if ticker not in th_prices.columns:
+                continue
+            s = th_prices[ticker].dropna()
+            if len(s) < 3:
+                continue
+
+            abs_ret = safe_ret(s, tf_days_main)
+            delta_bm = (abs_ret - bm_ret) if (abs_ret is not None and bm_ret is not None
+                                               and not np.isnan(abs_ret) and not np.isnan(bm_ret)) else np.nan
+
+            # Tutti i TF per tabella
+            row = {
+                "Gruppo":   sector,
+                "Ticker":   ticker,
+                "Tema":     TEMATICI_DESCRIPTIONS.get(ticker, ticker),
+                "BM":       bm_ticker,
+                "BM ret":   round(bm_ret, 2) if bm_ret and not np.isnan(bm_ret) else np.nan,
+                "1D":       round(safe_ret(s, 1),   2),
+                "1W":       round(safe_ret(s, 5),   2),
+                "1M":       round(safe_ret(s, 21),  2),
+                "3M":       round(safe_ret(s, 63),  2),
+                "6M":       round(safe_ret(s, 126), 2),
+                "YTD":      round(safe_ret(s, None),2),
+                "1A":       round(safe_ret(s, 252), 2),
+                "2A":       round(safe_ret(s, 504), 2),
+                "vs BM":    round(delta_bm, 2) if not np.isnan(delta_bm) else np.nan,
+            }
+            rows_tem.append(row)
+
+    tem_df = pd.DataFrame(rows_tem)
+
+    if tem_df.empty:
+        st.warning("Nessun dato disponibile per i ticker tematici.")
+        st.stop()
+
+    # ── SEZIONE 1: KPI + COERENZA DI GRUPPO ──────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"### 1 · Coerenza intra-gruppo — {tf_label}")
+
+    # KPI globali
+    valid_ret = tem_df[tf_label].dropna()
+    total_etf = len(valid_ret)
+    pos_count = (valid_ret > 0).sum()
+    pos_pct   = round(pos_count / total_etf * 100, 1) if total_etf > 0 else 0
+    top_row   = tem_df.dropna(subset=[tf_label]).nlargest(1, tf_label).iloc[0] if total_etf > 0 else None
+    bot_row   = tem_df.dropna(subset=[tf_label]).nsmallest(1, tf_label).iloc[0] if total_etf > 0 else None
+
+    k1, k2, k3, k4 = st.columns(4)
+    kpi_data = [
+        (k1, "ETF con dati",   str(total_etf),                                                  "#ff9900"),
+        (k2, f"Positivi {tf_label}", f"{pos_count}/{total_etf} ({pos_pct}%)",
+         "#00ff55" if pos_pct >= 50 else "#ff4422"),
+        (k3, f"Top {tf_label}",
+         f"{top_row['Ticker']} ({top_row[tf_label]:+.1f}%)" if top_row is not None else "—", "#00ff55"),
+        (k4, f"Worst {tf_label}",
+         f"{bot_row['Ticker']} ({bot_row[tf_label]:+.1f}%)" if bot_row is not None else "—", "#ff4422"),
+    ]
+    for col, label, val, color in kpi_data:
+        col.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+            f'padding:10px 14px;margin-bottom:6px;">'
+            f'<div style="color:#555;font-size:0.75em;letter-spacing:0.06em">{label}</div>'
+            f'<div style="color:{color};font-size:1.15em;font-weight:bold">{val}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Barre coerenza per gruppo
+    coerenza_data = []
+    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
+        grp = tem_df[(tem_df["Gruppo"] == sector)][tf_label].dropna()
+        if len(grp) == 0:
             continue
+        n_pos = (grp > 0).sum()
+        n_tot = len(grp)
+        pct   = round(n_pos / n_tot * 100, 1)
+        bm_r  = tem_df[tem_df["Gruppo"] == sector]["BM ret"].dropna()
+        bm_val = bm_r.iloc[0] if len(bm_r) > 0 else np.nan
+        coerenza_data.append({"Gruppo": sector, "Pct_pos": pct, "n_pos": n_pos,
+                               "n_tot": n_tot, "BM_ret": bm_val})
 
-        avg_pe  = pe_hist.loc[period_sel, avg_col]  if avg_col  in pe_hist.columns else None
-        std_dev = pe_hist.loc[period_sel, std_col]  if std_col  in pe_hist.columns else None
-        dev_ref = pe_hist.loc[period_sel, dev_col]  if dev_col  in pe_hist.columns else None
+    cdf = pd.DataFrame(coerenza_data).sort_values("Pct_pos", ascending=False)
 
-        # Calcola deviazione live = (PE_now - avg_pe) / std_dev
-        if pe_now and avg_pe and std_dev and std_dev > 0:
-            dev_live = round((pe_now - avg_pe) / std_dev, 2)
-        else:
-            dev_live = None
-
-        # Giudizio valutazione
-        def valuation_label(dev):
-            if dev is None:
-                return "N/D", "#888888"
-            if dev < 0:
-                return "Cheap", "#00ff55"
-            if dev < 0.5:
-                return "Fair", "#aaaaaa"
-            if dev < 1.5:
-                return "Moderato", "#ffff44"
-            if dev < 2.5:
-                return "Overvalued", "#ffaa00"
-            return "Expensive", "#ff4422"
-
-        label, color = valuation_label(dev_live)
-
-        rows.append({
-            "ETF":        etf,
-            "Settore":    sector_name,
-            "P/E Live":   pe_now,
-            f"Avg P/E ({period_sel})": avg_pe,
-            "Std Dev":    std_dev,
-            "Dev σ (live)": dev_live,
-            "Valutazione": label,
-            "_color":     color,
-        })
-
-    comp_df = pd.DataFrame(rows)
-
-    # ── GRAFICO BARRE — Dev σ per settore ────────────────────────────────────
-    bar_colors = []
-    for _, r in comp_df.iterrows():
-        d = r["Dev σ (live)"]
-        if d is None:
-            bar_colors.append("#555555")
-        elif d < 0:
-            bar_colors.append("#00ff55")
-        elif d < 0.5:
-            bar_colors.append("#aaaaaa")
-        elif d < 1.5:
-            bar_colors.append("#ffff44")
-        elif d < 2.5:
-            bar_colors.append("#ffaa00")
-        else:
-            bar_colors.append("#ff4422")
-
-    fig_pe = go.Figure()
-    fig_pe.add_trace(go.Bar(
-        x=comp_df["ETF"],
-        y=comp_df["Dev σ (live)"],
-        marker_color=bar_colors,
-        text=[f"{v:.2f}σ" if v is not None else "N/D" for v in comp_df["Dev σ (live)"]],
-        textposition="outside",
-        textfont=dict(size=11, color="white"),
-        hovertemplate="<b>%{x}</b><br>Deviazione: %{y:.2f}σ<extra></extra>",
+    bar_c = ["#00ff55" if p >= 60 else "#ffff44" if p >= 40 else "#ff4422" for p in cdf["Pct_pos"]]
+    fig_coh = go.Figure()
+    fig_coh.add_trace(go.Bar(
+        x=cdf["Gruppo"], y=cdf["Pct_pos"],
+        marker=dict(color=bar_c, line=dict(color="#333", width=1)),
+        text=[f"{int(r['n_pos'])}/{int(r['n_tot'])}" for _, r in cdf.iterrows()],
+        textposition="outside", textfont=dict(color="white", size=10),
+        name="% positivi", hovertemplate="<b>%{x}</b><br>%{y:.1f}% positivi<extra></extra>",
     ))
 
-    # Linee di riferimento
-    fig_pe.add_hline(y=0,   line_color="#444444", line_width=1)
-    fig_pe.add_hline(y=1.5, line_dash="dot", line_color="#ffaa00",
-                     annotation_text="Overvalued", annotation_font_color="#ffaa00",
-                     annotation_position="right")
-    fig_pe.add_hline(y=2.5, line_dash="dot", line_color="#ff4422",
-                     annotation_text="Expensive",  annotation_font_color="#ff4422",
-                     annotation_position="right")
-    fig_pe.add_hline(y=-0.5, line_dash="dot", line_color="#00ff55",
-                     annotation_text="Cheap",      annotation_font_color="#00ff55",
-                     annotation_position="right")
+    if show_bm:
+        # Overlay benchmark come scatter
+        bm_valid = cdf.dropna(subset=["BM_ret"])
+        fig_coh.add_trace(go.Scatter(
+            x=bm_valid["Gruppo"], y=bm_valid["BM_ret"],
+            mode="markers", marker=dict(symbol="diamond", size=10, color="#ff9900",
+                                        line=dict(color="#fff", width=1)),
+            name=f"Benchmark {tf_label}%",
+            hovertemplate="<b>%{x}</b><br>BM: %{y:.2f}%<extra></extra>",
+        ))
 
-    fig_pe.update_layout(
-        height=320,
-        paper_bgcolor="#000000",
-        plot_bgcolor="#000000",
-        font=dict(color="white", size=11),
-        title=dict(
-            text=f"Deviazione P/E Live vs Media {period_sel}  (σ)",
-            font=dict(size=13, color="#ff9900")
-        ),
-        xaxis=dict(gridcolor="#111"),
-        yaxis=dict(gridcolor="#1a1a1a", ticksuffix="σ"),
-        margin=dict(l=40, r=80, t=50, b=40),
-        showlegend=False,
+    fig_coh.add_hline(y=50, line_dash="dot", line_color="#555",
+                      annotation_text="50%", annotation_font_color="#888", annotation_position="right")
+    fig_coh.update_layout(
+        height=260, paper_bgcolor="#000", plot_bgcolor="#000",
+        font=dict(color="white", size=10),
+        title=dict(text=f"% ETF tematici positivi per gruppo — {tf_label}  |  ◆ = ritorno benchmark",
+                   font=dict(size=11, color="#666")),
+        xaxis=dict(tickangle=-20, gridcolor="#111"),
+        yaxis=dict(range=[0, 120], gridcolor="#111", ticksuffix="%"),
+        legend=dict(font=dict(size=9), bgcolor="rgba(0,0,0,0)", orientation="h", y=1.12),
+        margin=dict(l=40, r=80, t=45, b=80),
     )
-    st.plotly_chart(fig_pe, use_container_width=True)
+    st.plotly_chart(fig_coh, use_container_width=True)
 
-    # ── TABELLA DETTAGLIO ─────────────────────────────────────────────────────
-    display_cols = ["ETF", "Settore", "P/E Live", f"Avg P/E ({period_sel})", "Std Dev", "Dev σ (live)", "Valutazione"]
-    display_df   = comp_df[display_cols].copy()
+    # ── SEZIONE 2: TABELLA PERFORMANCE (stile Fattori) ────────────────────────
+    st.markdown("---")
+    st.markdown("### 2 · Performance per timeframe")
 
-    def style_valuation(val):
-        colors_map = {
-            "Cheap":     "color:#00ff55; font-weight:bold",
-            "Fair":      "color:#aaaaaa",
-            "Moderato":  "color:#ffff44; font-weight:bold",
-            "Overvalued":"color:#ffaa00; font-weight:bold",
-            "Expensive": "color:#ff4422; font-weight:bold",
-            "N/D":       "color:#555555",
-        }
-        return colors_map.get(str(val), "")
+    tf_cols    = ["1D","1W","1M","3M","6M","YTD","1A","2A"]
+    disp_cols  = ["Gruppo","Ticker","Tema"] + tf_cols + ["vs BM"]
 
-    def style_dev(val):
+    view_df = tem_df.copy()
+    if sel_sector != "TUTTI":
+        view_df = view_df[view_df["Gruppo"] == sel_sector]
+
+    view_df = view_df[disp_cols].copy()
+
+    # highlight max per colonna TF (verde) e min (rosso)
+    def highlight_best(s):
+        styles = [""] * len(s)
+        valid  = s.dropna()
+        if valid.empty:
+            return styles
+        max_v = valid.max()
+        min_v = valid.min()
+        for i, v in enumerate(s):
+            if pd.isna(v):
+                styles[i] = "color:#333"
+            elif v == max_v:
+                styles[i] = "background-color:#003300;color:#00FF00;font-weight:bold"
+            elif v == min_v:
+                styles[i] = "background-color:#330000;color:#ff4422;font-weight:bold"
+            elif v > 0:
+                styles[i] = "color:#88cc88"
+            else:
+                styles[i] = "color:#cc6644"
+        return styles
+
+    def color_vs_bm(val):
         try:
             v = float(val)
-            if v < 0:     return "color:#00ff55"
-            if v < 0.5:   return "color:#aaaaaa"
-            if v < 1.5:   return "color:#ffff44"
-            if v < 2.5:   return "color:#ffaa00"
-            return "color:#ff4422"
-        except:
-            return ""
+            if np.isnan(v):   return "color:#333"
+            if v > 2:         return "color:#00ff55;font-weight:bold"
+            if v > 0:         return "color:#88cc88"
+            if v > -2:        return "color:#cc6644"
+            return "color:#ff4422;font-weight:bold"
+        except Exception:
+            return "color:#333"
 
-    st.dataframe(
-        display_df.style
-            .map(style_valuation, subset=["Valutazione"])
-            .map(style_dev,       subset=["Dev σ (live)"])
-            .format({
-                "P/E Live":              lambda x: f"{x:.2f}" if x else "N/D",
-                f"Avg P/E ({period_sel})": lambda x: f"{x:.2f}" if x else "N/D",
-                "Std Dev":               lambda x: f"{x:.2f}" if x else "N/D",
-                "Dev σ (live)":          lambda x: f"{x:.2f}σ" if x else "N/D",
-            }),
-        use_container_width=True,
-        hide_index=True,
+    def fmt_pct(x):
+        try:
+            if pd.isna(x) or np.isnan(float(x)):
+                return "—"
+            return f"{float(x):+.1f}%"
+        except Exception:
+            return "—"
+
+    styled_tem = (
+        view_df.style
+        .apply(highlight_best, subset=tf_cols)
+        .map(color_vs_bm, subset=["vs BM"])
+        .format({c: fmt_pct for c in tf_cols + ["vs BM"]})
     )
 
-    # ── LEGENDA ───────────────────────────────────────────────────────────────
+    st.dataframe(styled_tem, use_container_width=True, hide_index=True,
+                 column_config={
+                     "Gruppo": st.column_config.TextColumn("Gruppo", width="medium"),
+                     "Tema":   st.column_config.TextColumn("Tema",   width="medium"),
+                     "vs BM":  st.column_config.TextColumn(f"vs BM ({tf_label})", width="small"),
+                 })
+
+    st.markdown(
+        f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;'
+        f'padding:8px 16px;margin-top:4px;font-size:0.78em;color:#666;">'
+        f'<b style="color:#00ff55">Verde</b> = top performer per colonna · '
+        f'<b style="color:#ff4422">Rosso</b> = worst performer per colonna · '
+        f'<b style="color:#ff9900">vs BM</b> = delta ritorno tematico − benchmark gruppo su {tf_label}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # ── SEZIONE 3: TOP/BOTTOM 5 ───────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"### 3 · Top & Bottom 5 — {tf_label}  (tutti i gruppi)")
+
+    ranked = tem_df.dropna(subset=[tf_label]).sort_values(tf_label, ascending=False)
+    top5   = ranked.head(5)
+    bot5   = ranked.tail(5).sort_values(tf_label)
+
+    c_top, c_bot = st.columns(2)
+
+    def mini_bar(df_slice, ascending=False, title=""):
+        colors_mb = ["#00ff55" if v >= 0 else "#ff4422" for v in df_slice[tf_label]]
+        fig_mb = go.Figure(go.Bar(
+            x=df_slice[tf_label],
+            y=df_slice["Ticker"] + " · " + df_slice["Tema"],
+            orientation="h",
+            marker=dict(color=colors_mb, line=dict(color="#333", width=1)),
+            text=[f"{v:+.1f}%" for v in df_slice[tf_label]],
+            textposition="outside",
+            textfont=dict(color="white", size=10),
+            hovertemplate="<b>%{y}</b><br>%{x:.1f}%<extra></extra>",
+        ))
+        fig_mb.add_vline(x=0, line_color="#444", line_width=1)
+        fig_mb.update_layout(
+            height=200, paper_bgcolor="#000", plot_bgcolor="#000",
+            font=dict(color="white", size=9),
+            title=dict(text=title, font=dict(size=11, color="#ff9900")),
+            xaxis=dict(gridcolor="#111", ticksuffix="%"),
+            yaxis=dict(gridcolor="#111", autorange="reversed" if not ascending else True),
+            margin=dict(l=10, r=60, t=35, b=20),
+            showlegend=False,
+        )
+        return fig_mb
+
+    with c_top:
+        st.plotly_chart(mini_bar(top5, title=f"🏆 Top 5"), use_container_width=True)
+    with c_bot:
+        st.plotly_chart(mini_bar(bot5, ascending=True, title=f"💀 Bottom 5"), use_container_width=True)
+
+    # ── SEZIONE 4: SCATTER QUADRANTI ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 4 · Scatter quadranti — performance assoluta vs delta benchmark")
+
+    sc_tf_opts = ["1D","1W","1M","3M","6M","YTD","1A","2A"]
+    sc_c1, sc_c2 = st.columns([2, 1])
+    with sc_c1:
+        sc_tf = st.selectbox("Timeframe scatter", sc_tf_opts,
+                             index=sc_tf_opts.index(tf_label), key="tem_scatter_tf")
+    with sc_c2:
+        label_mode = st.radio("Etichette", ["Ticker","Tema"], horizontal=True, key="tem_sc_lbl")
+
+    # Ricalcola delta BM sul TF scatter scelto
+    rows_sc = []
+    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
+        bm_r = None
+        if bm_ticker in th_prices.columns:
+            bm_r = safe_ret(th_prices[bm_ticker], TF_DAYS[sc_tf])
+
+        for ticker in tickers:
+            if ticker not in th_prices.columns:
+                continue
+            s = th_prices[ticker].dropna()
+            abs_r = safe_ret(s, TF_DAYS[sc_tf])
+            if abs_r is None or np.isnan(abs_r):
+                continue
+            delta = (abs_r - bm_r) if (bm_r is not None and not np.isnan(bm_r)) else np.nan
+            rows_sc.append({
+                "Gruppo": sector,
+                "Ticker": ticker,
+                "Tema":   TEMATICI_DESCRIPTIONS.get(ticker, ticker),
+                "abs_ret": abs_r,
+                "delta_bm": delta,
+            })
+
+    sc_df = pd.DataFrame(rows_sc).dropna(subset=["abs_ret","delta_bm"])
+
+    if sc_df.empty:
+        st.info("Dati insufficienti per lo scatter su questo timeframe.")
+    else:
+        # Colori per gruppo
+        group_colors = {
+            s: c for s, c in zip(
+                [g for g, _, _ in TEMATICI_STRUCT],
+                ["#ff9900","#00ff55","#44aaff","#ff4422","#ffff44",
+                 "#bb44ff","#00ffcc","#ff66cc","#88cc88","#cc8844",
+                 "#4488ff","#ff8844"]
+            )
+        }
+
+        fig_sc = go.Figure()
+
+        # Quadrant fill zones (subtle)
+        x_range = [sc_df["abs_ret"].min() * 1.3, sc_df["abs_ret"].max() * 1.3]
+        y_range = [sc_df["delta_bm"].min() * 1.3, sc_df["delta_bm"].max() * 1.3]
+
+        for sector in sc_df["Gruppo"].unique():
+            sub = sc_df[sc_df["Gruppo"] == sector]
+            labels = sub["Ticker"] if label_mode == "Ticker" else sub["Tema"]
+            color  = group_colors.get(sector, "#aaaaaa")
+
+            fig_sc.add_trace(go.Scatter(
+                x=sub["abs_ret"],
+                y=sub["delta_bm"],
+                mode="markers+text",
+                name=sector,
+                marker=dict(size=10, color=color, opacity=0.85,
+                            line=dict(color="#111", width=1)),
+                text=labels,
+                textposition="top center",
+                textfont=dict(size=8, color="#cccccc"),
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    f"Gruppo: {sector}<br>"
+                    f"Ret {sc_tf}: %{{x:.1f}}%<br>"
+                    f"vs BM: %{{y:.1f}}%"
+                    "<extra></extra>"
+                ),
+                customdata=sub[["Gruppo","Ticker","Tema"]].values,
+            ))
+
+        # Assi e quadrant labels
+        fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
+        fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
+
+        # Quadrant annotations
+        pad_x = (sc_df["abs_ret"].max() - sc_df["abs_ret"].min()) * 0.08
+        pad_y = (sc_df["delta_bm"].max() - sc_df["delta_bm"].min()) * 0.08
+        q_x_pos = sc_df["abs_ret"].max()   - pad_x
+        q_x_neg = sc_df["abs_ret"].min()   + pad_x
+        q_y_pos = sc_df["delta_bm"].max()  - pad_y
+        q_y_neg = sc_df["delta_bm"].min()  + pad_y
+
+        quadrants = [
+            (q_x_pos, q_y_pos, "LEADER",      "#00ff55", "top right"),
+            (q_x_neg, q_y_pos, "ALPHA PURO",  "#44aaff", "top left"),
+            (q_x_pos, q_y_neg, "BETA PURO",   "#ffaa00", "bottom right"),
+            (q_x_neg, q_y_neg, "EVITARE",     "#ff4422", "bottom left"),
+        ]
+        for qx, qy, qlabel, qcolor, qanchor in quadrants:
+            fig_sc.add_annotation(
+                x=qx, y=qy, text=qlabel, showarrow=False,
+                font=dict(color=qcolor, size=10, family="Courier New"),
+                opacity=0.45, xanchor=qanchor.split()[1], yanchor=qanchor.split()[0]
+            )
+
+        fig_sc.update_layout(
+            height=500,
+            paper_bgcolor="#000000",
+            plot_bgcolor="#000000",
+            font=dict(color="white", size=10),
+            title=dict(
+                text=(f"Scatter {sc_tf} — asse X: ritorno assoluto  |  asse Y: delta vs benchmark gruppo  |  "
+                      f"quadranti: LEADER (alto-dx) · ALPHA PURO (alto-sx) · BETA PURO (basso-dx) · EVITARE (basso-sx)"),
+                font=dict(size=10, color="#666")
+            ),
+            xaxis=dict(title=f"Ritorno assoluto {sc_tf} (%)", gridcolor="#1a1a1a",
+                       ticksuffix="%", zeroline=False),
+            yaxis=dict(title=f"Delta vs benchmark ({sc_tf}) %", gridcolor="#1a1a1a",
+                       ticksuffix="%", zeroline=False),
+            legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0.5)",
+                        bordercolor="#333", borderwidth=1,
+                        orientation="v", x=1.01, y=1),
+            margin=dict(l=60, r=160, t=50, b=60),
+            hoverlabel=dict(bgcolor="#111", font_size=11),
+        )
+        st.plotly_chart(fig_sc, use_container_width=True)
+
+        # Legenda quadranti
+        st.markdown("""
+        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                    padding:10px 20px;margin-top:4px;font-size:0.80em;color:#888;
+                    display:flex;gap:24px;flex-wrap:wrap;">
+            <span><b style="color:#00ff55">LEADER</b> — ritorno positivo E sovraperforma il benchmark</span>
+            <span><b style="color:#44aaff">ALPHA PURO</b> — ritorno negativo ma batte il benchmark (difensivo relativo)</span>
+            <span><b style="color:#ffaa00">BETA PURO</b> — ritorno positivo ma sotto il benchmark (cavalca l'onda settoriale)</span>
+            <span><b style="color:#ff4422">EVITARE</b> — ritorno negativo E sottoperforma il benchmark</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── LEGENDA FINALE ────────────────────────────────────────────────────────
     st.markdown("""
-    <div style="background:#0d0d0d; border:1px solid #222; border-radius:8px;
-                padding:10px 20px; margin-top:8px; font-size:0.82em; color:#888;
-                display:flex; gap:20px; flex-wrap:wrap;">
-        <span><b style="color:#00ff55">Cheap</b> — sotto la media storica</span>
-        <span><b style="color:#aaaaaa">Fair</b> — entro 0.5σ dalla media</span>
-        <span><b style="color:#ffff44">Moderato</b> — tra 0.5σ e 1.5σ</span>
-        <span><b style="color:#ffaa00">Overvalued</b> — tra 1.5σ e 2.5σ</span>
-        <span><b style="color:#ff4422">Expensive</b> — oltre 2.5σ dalla media</span>
+    <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
+                padding:10px 20px;margin-top:16px;font-size:0.78em;color:#555;">
+        <b style="color:#ff9900">vs BM</b> = differenza ritorno tematico − ritorno benchmark di gruppo (stesso TF) ·
+        I benchmark sono ETF globali Xtrackers (XDWT.DE, XDWC.DE…) tranne Immobiliare (EPRA.MI) e Cross-Sector (SWDA.MI)
     </div>
     """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
