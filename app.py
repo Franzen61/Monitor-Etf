@@ -349,15 +349,19 @@ def rsr(asset_ret, benchmark_ret):
     return ((1 + asset_ret/100) / (1 + benchmark_ret/100) - 1) * 100
 
 def safe_ret(series, days):
-    s = series.dropna()
-    if days is None:
-        ytd = s[s.index.year == datetime.today().year]
-        if len(ytd) < 2:
+    """Always returns float or np.nan — never None."""
+    try:
+        s = series.dropna()
+        if days is None:
+            ytd = s[s.index.year == datetime.today().year]
+            if len(ytd) < 2:
+                return np.nan
+            return float((ytd.iloc[-1] / ytd.iloc[0] - 1) * 100)
+        if len(s) <= days:
             return np.nan
-        return (ytd.iloc[-1] / ytd.iloc[0] - 1) * 100
-    if len(s) <= days:
+        return float((s.iloc[-1] / s.iloc[-days - 1] - 1) * 100)
+    except Exception:
         return np.nan
-    return (s.iloc[-1] / s.iloc[-days - 1] - 1) * 100
 
 
 # ========================
@@ -1069,8 +1073,13 @@ with tab7:
     st.markdown(f"### 1 · Coerenza intra-gruppo — {tf_label}")
 
     # KPI globali
-    valid_ret = tem_df[tf_label].dropna()
-    total_etf = len(valid_ret)
+    valid_ret  = tem_df[tf_label].dropna()
+    total_etf  = len(valid_ret)
+    total_all  = len(tem_df)
+    missing_n  = total_all - total_etf
+    # identify which tickers are missing on this TF
+    missing_tickers = tem_df[tem_df[tf_label].isna()]["Ticker"].tolist()
+
     pos_count = (valid_ret > 0).sum()
     pos_pct   = round(pos_count / total_etf * 100, 1) if total_etf > 0 else 0
     top_row   = tem_df.dropna(subset=[tf_label]).nlargest(1, tf_label).iloc[0] if total_etf > 0 else None
@@ -1093,6 +1102,16 @@ with tab7:
             f'<div style="color:#555;font-size:0.75em;letter-spacing:0.06em">{label}</div>'
             f'<div style="color:{color};font-size:1.15em;font-weight:bold">{val}</div>'
             f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Nota ETF esclusi per storico insufficiente
+    if missing_n > 0:
+        st.markdown(
+            f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
+            f'padding:6px 14px;margin-bottom:8px;font-size:0.78em;color:#aa7700;">'
+            f'⚠️ <b>{missing_n} ETF esclusi</b> per storico insufficiente su <b>{tf_label}</b>: '
+            f'{", ".join(missing_tickers)}</div>',
             unsafe_allow_html=True,
         )
 
@@ -1121,31 +1140,46 @@ with tab7:
         textposition="outside", textfont=dict(color="white", size=10),
         name="% positivi", hovertemplate="<b>%{x}</b><br>%{y:.1f}% positivi<extra></extra>",
     ))
-
-    if show_bm:
-        # Overlay benchmark come scatter
-        bm_valid = cdf.dropna(subset=["BM_ret"])
-        fig_coh.add_trace(go.Scatter(
-            x=bm_valid["Gruppo"], y=bm_valid["BM_ret"],
-            mode="markers", marker=dict(symbol="diamond", size=10, color="#ff9900",
-                                        line=dict(color="#fff", width=1)),
-            name=f"Benchmark {tf_label}%",
-            hovertemplate="<b>%{x}</b><br>BM: %{y:.2f}%<extra></extra>",
-        ))
-
     fig_coh.add_hline(y=50, line_dash="dot", line_color="#555",
                       annotation_text="50%", annotation_font_color="#888", annotation_position="right")
     fig_coh.update_layout(
-        height=260, paper_bgcolor="#000", plot_bgcolor="#000",
+        height=240, paper_bgcolor="#000", plot_bgcolor="#000",
         font=dict(color="white", size=10),
-        title=dict(text=f"% ETF tematici positivi per gruppo — {tf_label}  |  ◆ = ritorno benchmark",
+        title=dict(text=f"% ETF tematici positivi per gruppo — {tf_label}",
                    font=dict(size=11, color="#666")),
         xaxis=dict(tickangle=-20, gridcolor="#111"),
         yaxis=dict(range=[0, 120], gridcolor="#111", ticksuffix="%"),
-        legend=dict(font=dict(size=9), bgcolor="rgba(0,0,0,0)", orientation="h", y=1.12),
-        margin=dict(l=40, r=80, t=45, b=80),
+        margin=dict(l=40, r=80, t=35, b=80),
+        showlegend=False,
     )
     st.plotly_chart(fig_coh, use_container_width=True)
+
+    # Riga benchmark separata — scala omogenea, nessuna ambiguità
+    if show_bm:
+        bm_valid = cdf.dropna(subset=["BM_ret"]).copy()
+        if not bm_valid.empty:
+            bm_colors = ["#00ff55" if v >= 0 else "#ff4422" for v in bm_valid["BM_ret"]]
+            fig_bm = go.Figure()
+            fig_bm.add_trace(go.Bar(
+                x=bm_valid["Gruppo"], y=bm_valid["BM_ret"],
+                marker=dict(color=bm_colors, opacity=0.75, line=dict(color="#333", width=1)),
+                text=[f"{v:+.1f}%" for v in bm_valid["BM_ret"]],
+                textposition="outside", textfont=dict(color="#ff9900", size=9),
+                hovertemplate="<b>%{x}</b><br>BM ret: %{y:.2f}%<extra></extra>",
+            ))
+            fig_bm.add_hline(y=0, line_color="#444", line_width=1)
+            fig_bm.update_layout(
+                height=160, paper_bgcolor="#000", plot_bgcolor="#000",
+                font=dict(color="white", size=10),
+                title=dict(text=f"Ritorno benchmark di gruppo — {tf_label}",
+                           font=dict(size=11, color="#666")),
+                xaxis=dict(tickangle=-20, gridcolor="#111", categoryorder="array",
+                           categoryarray=bm_valid["Gruppo"].tolist()),
+                yaxis=dict(gridcolor="#111", ticksuffix="%"),
+                margin=dict(l=40, r=80, t=35, b=80),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_bm, use_container_width=True)
 
     # ── SEZIONE 2: TABELLA PERFORMANCE (stile Fattori) ────────────────────────
     st.markdown("---")
@@ -1194,9 +1228,12 @@ with tab7:
 
     def fmt_pct(x):
         try:
-            if pd.isna(x) or np.isnan(float(x)):
+            if x is None:
                 return "—"
-            return f"{float(x):+.1f}%"
+            f = float(x)
+            if np.isnan(f):
+                return "—"
+            return f"{f:+.1f}%"
         except Exception:
             return "—"
 
@@ -1268,17 +1305,19 @@ with tab7:
     st.markdown("### 4 · Scatter quadranti — performance assoluta vs delta benchmark")
 
     sc_tf_opts = ["1D","1W","1M","3M","6M","YTD","1A","2A"]
-    sc_c1, sc_c2 = st.columns([2, 1])
+    sc_c1, sc_c2, sc_c3 = st.columns([2, 1, 1])
     with sc_c1:
         sc_tf = st.selectbox("Timeframe scatter", sc_tf_opts,
                              index=sc_tf_opts.index(tf_label), key="tem_scatter_tf")
     with sc_c2:
         label_mode = st.radio("Etichette", ["Ticker","Tema"], horizontal=True, key="tem_sc_lbl")
+    with sc_c3:
+        filter_scatter = st.checkbox("Solo gruppo selezionato", value=False, key="tem_sc_filter")
 
-    # Ricalcola delta BM sul TF scatter scelto
+    # Ricalcola delta BM sul TF scatter scelto — includi BM ret per tooltip arricchito
     rows_sc = []
     for sector, tickers, bm_ticker in TEMATICI_STRUCT:
-        bm_r = None
+        bm_r = np.nan
         if bm_ticker in th_prices.columns:
             bm_r = safe_ret(th_prices[bm_ticker], TF_DAYS[sc_tf])
 
@@ -1287,18 +1326,24 @@ with tab7:
                 continue
             s = th_prices[ticker].dropna()
             abs_r = safe_ret(s, TF_DAYS[sc_tf])
-            if abs_r is None or np.isnan(abs_r):
+            if np.isnan(abs_r):
                 continue
-            delta = (abs_r - bm_r) if (bm_r is not None and not np.isnan(bm_r)) else np.nan
+            delta = (abs_r - bm_r) if not np.isnan(bm_r) else np.nan
             rows_sc.append({
-                "Gruppo": sector,
-                "Ticker": ticker,
-                "Tema":   TEMATICI_DESCRIPTIONS.get(ticker, ticker),
-                "abs_ret": abs_r,
+                "Gruppo":   sector,
+                "Ticker":   ticker,
+                "Tema":     TEMATICI_DESCRIPTIONS.get(ticker, ticker),
+                "BM":       bm_ticker,
+                "BM_ret":   bm_r,
+                "abs_ret":  abs_r,
                 "delta_bm": delta,
             })
 
     sc_df = pd.DataFrame(rows_sc).dropna(subset=["abs_ret","delta_bm"])
+
+    # Applica filtro gruppo se richiesto
+    if filter_scatter and sel_sector != "TUTTI":
+        sc_df = sc_df[sc_df["Gruppo"] == sel_sector]
 
     if sc_df.empty:
         st.info("Dati insufficienti per lo scatter su questo timeframe.")
@@ -1324,6 +1369,23 @@ with tab7:
             labels = sub["Ticker"] if label_mode == "Ticker" else sub["Tema"]
             color  = group_colors.get(sector, "#aaaaaa")
 
+            # build per-point customdata for enriched tooltip
+            bm_label = dict(TEMATICI_STRUCT)[sector] if False else [
+                bm for g, _, bm in TEMATICI_STRUCT if g == sector
+            ][0] if any(g == sector for g, _, _ in TEMATICI_STRUCT) else "—"
+
+            hover_text = []
+            for _, r in sub.iterrows():
+                lbl = r["Ticker"] if label_mode == "Ticker" else r["Tema"]
+                bm_str = f"{r['BM_ret']:+.1f}%" if not np.isnan(r["BM_ret"]) else "n/d"
+                hover_text.append(
+                    f"<b>{lbl}</b><br>"
+                    f"Gruppo: {sector}<br>"
+                    f"Ret {sc_tf}: {r['abs_ret']:+.1f}%<br>"
+                    f"BM ({r['BM']}): {bm_str}<br>"
+                    f"vs BM: {r['delta_bm']:+.1f}%"
+                )
+
             fig_sc.add_trace(go.Scatter(
                 x=sub["abs_ret"],
                 y=sub["delta_bm"],
@@ -1334,14 +1396,8 @@ with tab7:
                 text=labels,
                 textposition="top center",
                 textfont=dict(size=8, color="#cccccc"),
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    f"Gruppo: {sector}<br>"
-                    f"Ret {sc_tf}: %{{x:.1f}}%<br>"
-                    f"vs BM: %{{y:.1f}}%"
-                    "<extra></extra>"
-                ),
-                customdata=sub[["Gruppo","Ticker","Tema"]].values,
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=hover_text,
             ))
 
         # Assi e quadrant labels
