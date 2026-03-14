@@ -1215,25 +1215,23 @@ with tab7:
 
         fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
         fig_coh.update_layout(
-            height=420,
+            height=500,
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             font=dict(color="white", size=9),
             title=dict(
-                text=(
-                    f"Ritorno benchmark — {tf_label}"
-                    + ("  |  ◆ colore = breadth tematici" if show_bm else "")
-                ),
-                font=dict(size=10, color="#555")
+                text="◆ colore = breadth tematici" if show_bm else "",
+                font=dict(size=9, color="#555")
             ),
             xaxis=dict(tickangle=-25, gridcolor="#0a0a0a",
                        tickfont=dict(size=8)),
             yaxis=dict(range=[y_bot, y_top], gridcolor="#111",
                        ticksuffix="%", zeroline=False,
-                       tickfont=dict(size=8)),
+                       tickfont=dict(size=8),
+                       title=dict(text=f"Ritorno BM {tf_label}", font=dict(size=8, color="#555"))),
             legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
-                        orientation="h", y=1.12, x=0),
-            margin=dict(l=45, r=20, t=45, b=60),
+                        orientation="h", y=1.06, x=0),
+            margin=dict(l=50, r=40, t=35, b=60),
             barmode="overlay",
         )
         st.plotly_chart(fig_coh, use_container_width=True)
