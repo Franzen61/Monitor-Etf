@@ -702,17 +702,22 @@ with tab4:
     else:
         rotation_12m = rotation_series
 
+    # Soglie dinamiche: 0.75 deviazioni standard sulla serie completa
+    # Questo mantiene le linee visivamente significative indipendentemente dalla scala
+    _rs_std    = float(rotation_series.std()) if len(rotation_series) > 5 else 5.0
+    _threshold = round(_rs_std * 0.75, 2)
+
     fig_rs = go.Figure()
     fig_rs.add_trace(go.Scatter(
         x=rotation_12m.index, y=rotation_12m,
         mode="lines", line=dict(color="#DDDDDD", width=2),
         name="Rotation Score", fill='tozeroy', fillcolor='rgba(100,100,100,0.2)'
     ))
-    fig_rs.add_hline(y=150,  line_dash="dot",  line_color="#00AA00",
-                     annotation_text="Risk On",  annotation_position="right")
-    fig_rs.add_hline(y=0.0,  line_dash="solid", line_color="#666666")
-    fig_rs.add_hline(y=-150, line_dash="dot",   line_color="#AA0000",
-                     annotation_text="Risk Off", annotation_position="right")
+    fig_rs.add_hline(y=_threshold,  line_dash="dot",  line_color="#00AA00",
+                     annotation_text=f"Risk On (+{_threshold:.1f})",  annotation_position="right")
+    fig_rs.add_hline(y=0.0,         line_dash="solid", line_color="#666666")
+    fig_rs.add_hline(y=-_threshold, line_dash="dot",   line_color="#AA0000",
+                     annotation_text=f"Risk Off (-{_threshold:.1f})", annotation_position="right")
     fig_rs.update_layout(
         height=280, margin=dict(l=40, r=40, t=20, b=40),
         paper_bgcolor="#000000", plot_bgcolor="#000000",
