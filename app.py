@@ -167,17 +167,68 @@ def load_ohlcv(tickers):
     return raw
 
 
-@st.cache_data(ttl=60*60*4)
-def load_pe_live(tickers):
-    pe_live = {}
-    for t in tickers:
+# URL worldperatio per ogni settore — stessa metodologia del pe_historical.xlsx
+WORLDPE_URLS = {
+    "XLK":  "https://worldperatio.com/sector/sp-500-information-technology",
+    "XLY":  "https://worldperatio.com/sector/sp-500-consumer-discretionary",
+    "XLF":  "https://worldperatio.com/sector/sp-500-financials",
+    "XLC":  "https://worldperatio.com/sector/sp-500-communication-services",
+    "XLV":  "https://worldperatio.com/sector/sp-500-health-care",
+    "XLP":  "https://worldperatio.com/sector/sp-500-consumer-staples",
+    "XLI":  "https://worldperatio.com/sector/sp-500-industrials",
+    "XLE":  "https://worldperatio.com/sector/sp-500-energy",
+    "XLB":  "https://worldperatio.com/sector/sp-500-materials",
+    "XLU":  "https://worldperatio.com/sector/sp-500-utilities",
+    "XLRE": "https://worldperatio.com/sector/sp-500-real-estate",
+}
+
+
+@st.cache_data(ttl=60*60*6)
+def load_pe_live_worldperatio(tickers):
+    """
+    Scarica il P/E live da worldperatio.com — stessa fonte e metodologia
+    del pe_historical.xlsx (outlier excluded, log-normalized).
+    Fallback su yfinance se la pagina non è raggiungibile.
+    """
+    import requests
+    import re
+    from bs4 import BeautifulSoup
+
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    result  = {}
+    _failed = []
+
+    for ticker in tickers:
+        url = WORLDPE_URLS.get(ticker)
+        if not url:
+            result[ticker] = None
+            continue
         try:
-            info = yf.Ticker(t).info
-            pe = info.get("trailingPE") or info.get("forwardPE")
-            pe_live[t] = round(pe, 2) if pe else None
+            resp = requests.get(url, headers=headers, timeout=12)
+            resp.raise_for_status()
+            text = BeautifulSoup(resp.text, "html.parser").get_text()
+            # Pattern stabile: "P/E Ratio\n  36.46\n  13 March 2026"
+            match = re.search(r"P/E Ratio\s*\n\s*([\d.]+)", text)
+            if match:
+                result[ticker] = float(match.group(1))
+            else:
+                result[ticker] = None
+                _failed.append(ticker)
         except Exception:
-            pe_live[t] = None
-    return pe_live
+            result[ticker] = None
+            _failed.append(ticker)
+
+    # Fallback yfinance per i ticker che worldperatio non ha restituito
+    if _failed:
+        for t in _failed:
+            try:
+                info = yf.Ticker(t).info
+                pe = info.get("trailingPE") or info.get("forwardPE")
+                result[t] = round(pe, 2) if pe else None
+            except Exception:
+                result[t] = None
+
+    return result, _failed  # restituisce anche lista fallback per warning UI
 
 
 # FIX #4 — cache lettura xlsx P/E (evita rilettura da disco ad ogni interazione radio)
@@ -866,7 +917,7 @@ with tab5:
 with tab6:
     st.markdown(
         '<h3 style="color:#ff9900;margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
-        '<p style="color:#666;font-size:0.85em;margin-top:0;">P/E live da yfinance · Medie storiche da worldperatio.com</p>'
+        '<p style="color:#666;font-size:0.85em;margin-top:0;">P/E live da worldperatio.com · Medie storiche da worldperatio.com · stessa metodologia</p>'
         '<p style="color:#444;font-size:0.78em;margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b></p>',
         unsafe_allow_html=True
     )
@@ -877,14 +928,24 @@ with tab6:
         index=2, horizontal=True
     )
 
-    # FIX #4 — lettura xlsx ora tramite funzione cachata (no rilettura da disco ad ogni radio change)
+    # FIX #4 — lettura xlsx ora tramite funzione cachata
     pe_hist = load_pe_historical()
 
     if pe_hist is None:
         st.warning("⚠️ File pe_historical.xlsx non trovato. Le altre tab funzionano normalmente.")
     else:
-        with st.spinner("Scarico P/E attuali..."):
-            pe_live = load_pe_live(SECTORS)
+        with st.spinner("Scarico P/E live da worldperatio.com..."):
+            pe_live, _pe_fallback = load_pe_live_worldperatio(SECTORS)
+
+        # Warning se alcuni ticker hanno usato il fallback yfinance
+        if _pe_fallback:
+            st.markdown(
+                f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
+                f'padding:6px 14px;margin-bottom:8px;font-size:0.78em;color:#aa7700;">'
+                f'⚠️ worldperatio non raggiungibile per: <b>{", ".join(_pe_fallback)}</b> — '
+                f'usato fallback yfinance (fonte eterogenea, interpretare con cautela)</div>',
+                unsafe_allow_html=True
+            )
 
         etf_sectors = {
             "XLK":"Info Technology","XLY":"Cons Discretionary","XLF":"Financials",
