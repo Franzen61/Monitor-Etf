@@ -448,6 +448,91 @@ def compute_rotation_score_series(prices):
     return rotation_score.dropna()
 
 
+def compute_risk_off_episodes(series, threshold, confirm_days=3):
+    """
+    Identifica episodi Risk Off sulla serie del Rotation Score.
+
+    Regola anti-whipsaw:
+    - Un episodio INIZIA quando il RS chiude sotto -threshold
+      per confirm_days consecutivi.
+    - Un episodio TERMINA quando il RS chiude sopra -threshold
+      per confirm_days consecutivi.
+
+    Restituisce lista di dict con:
+      - start:      data primo giorno sotto soglia (pre-conferma)
+      - confirmed:  data in cui la conferma è completata
+      - end:        data uscita confermata (None se episodio aperto)
+      - duration:   giorni totali sotto soglia (da start a end/oggi)
+      - rs_min:     valore minimo RS durante l'episodio
+      - rs_min_date:data del minimo
+    """
+    if series.empty:
+        return []
+
+    neg_threshold = -abs(threshold)
+    below = (series < neg_threshold).astype(int)
+
+    episodes = []
+    in_episode  = False
+    ep_start    = None
+    ep_confirmed= None
+    consec_below = 0
+    consec_above = 0
+
+    for date, val in series.items():
+        is_below = val < neg_threshold
+
+        if not in_episode:
+            if is_below:
+                consec_below += 1
+                if consec_below == 1:
+                    ep_start = date          # primo giorno sotto soglia
+                if consec_below >= confirm_days:
+                    in_episode   = True
+                    ep_confirmed = date
+                    consec_above = 0
+            else:
+                consec_below = 0
+                ep_start     = None
+        else:
+            if not is_below:
+                consec_above += 1
+                if consec_above >= confirm_days:
+                    # episodio chiuso
+                    ep_slice = series[ep_start:date]
+                    episodes.append({
+                        "start":       ep_start,
+                        "confirmed":   ep_confirmed,
+                        "end":         date,
+                        "open":        False,
+                        "duration":    (date - ep_start).days,
+                        "rs_min":      round(float(ep_slice.min()), 2),
+                        "rs_min_date": ep_slice.idxmin(),
+                    })
+                    in_episode   = False
+                    consec_below = 0
+                    consec_above = 0
+                    ep_start     = None
+            else:
+                consec_above = 0
+
+    # Episodio ancora aperto
+    if in_episode and ep_start is not None:
+        last_date = series.index[-1]
+        ep_slice  = series[ep_start:]
+        episodes.append({
+            "start":       ep_start,
+            "confirmed":   ep_confirmed,
+            "end":         None,
+            "open":        True,
+            "duration":    (last_date - ep_start).days,
+            "rs_min":      round(float(ep_slice.min()), 2),
+            "rs_min_date": ep_slice.idxmin(),
+        })
+
+    return episodes
+
+
 # ========================
 # LOAD SECTORAL DATA
 # ========================
@@ -523,7 +608,7 @@ df["Vol Signal"] = df.index.map(vol_plain)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "📊 Fattori",
@@ -531,6 +616,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🫧 S&P 500 Bubble",
     "📐 Valutazione P/E",
     "📌 Tematici",
+    "🧪 Backtest RS",
 ])
 
 # ========================
@@ -790,6 +876,94 @@ with tab4:
         yaxis=dict(gridcolor="#222222")
     )
     st.plotly_chart(fig_rs, width="stretch")
+
+    # ── EPISODI RISK OFF ─────────────────────────────────────────────────────
+    with st.expander("🔬 Episodi Risk Off — analisi storica", expanded=False):
+
+        confirm_sel = st.radio(
+            "Giorni conferma anti-whipsaw",
+            [2, 3, 5],
+            index=1, horizontal=True,
+            key="rs_confirm_days",
+            help="Numero di giorni consecutivi sotto soglia necessari per confermare un episodio"
+        )
+
+        episodes = compute_risk_off_episodes(
+            rotation_series, _threshold, confirm_days=confirm_sel
+        )
+
+        if not episodes:
+            st.info("Nessun episodio Risk Off identificato con i parametri correnti.")
+        else:
+            st.markdown(
+                f'<div style="color:#555;font-size:0.78em;margin-bottom:8px;">'
+                f'Soglia: RS &lt; <b style="color:#AA0000">-{_threshold:.1f}</b> · '
+                f'Conferma: <b>{confirm_sel}</b> giorni consecutivi · '
+                f'Episodi identificati: <b style="color:#ff9900">{len(episodes)}</b>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+            rows_ep = []
+            for i, ep in enumerate(episodes, 1):
+                stato = "🔴 APERTO" if ep["open"] else "✅ chiuso"
+                end_str = "in corso" if ep["open"] else ep["end"].strftime("%d/%m/%Y")
+                rows_ep.append({
+                    "#":           i,
+                    "Inizio":      ep["start"].strftime("%d/%m/%Y"),
+                    "Confermato":  ep["confirmed"].strftime("%d/%m/%Y"),
+                    "Fine":        end_str,
+                    "Durata (gg)": ep["duration"],
+                    "RS minimo":   ep["rs_min"],
+                    "Data minimo": ep["rs_min_date"].strftime("%d/%m/%Y"),
+                    "Stato":       stato,
+                })
+
+            ep_df = pd.DataFrame(rows_ep)
+
+            def style_ep(row):
+                if "APERTO" in str(row["Stato"]):
+                    return ["background-color:#1a0000; color:#ff4422"] * len(row)
+                return ["color:#aaaaaa"] * len(row)
+
+            def style_rs_min(val):
+                try:
+                    v = float(val)
+                    if v < -7:  return "color:#ff4422;font-weight:bold"
+                    if v < -5:  return "color:#ffaa00;font-weight:bold"
+                    return "color:#888888"
+                except Exception:
+                    return ""
+
+            st.dataframe(
+                ep_df.style
+                    .apply(style_ep, axis=1)
+                    .map(style_rs_min, subset=["RS minimo"]),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Durata (gg)": st.column_config.NumberColumn("Durata (gg)", format="%d"),
+                    "RS minimo":   st.column_config.NumberColumn("RS minimo",   format="%.2f"),
+                }
+            )
+
+            # Statistiche aggregate
+            closed = [e for e in episodes if not e["open"]]
+            if closed:
+                durate   = [e["duration"] for e in closed]
+                minimi   = [e["rs_min"]   for e in closed]
+                st.markdown(
+                    f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+                    f'padding:10px 20px;margin-top:8px;font-size:0.82em;color:#888;'
+                    f'display:flex;gap:28px;flex-wrap:wrap;">'
+                    f'<span>Episodi chiusi: <b style="color:#ff9900">{len(closed)}</b></span>'
+                    f'<span>Durata media: <b style="color:#ff9900">{int(sum(durate)/len(durate))} gg</b></span>'
+                    f'<span>Durata max: <b style="color:#ff9900">{max(durate)} gg</b></span>'
+                    f'<span>RS minimo storico: <b style="color:#ff4422">{min(minimi):.2f}</b></span>'
+                    f'<span>RS minimo medio: <b style="color:#ffaa00">{sum(minimi)/len(minimi):.2f}</b></span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
     st.markdown(f"""
     <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.7;">
@@ -1721,3 +1895,241 @@ with tab7:
         I benchmark sono ETF globali Xtrackers (XDWT.DE, XDWC.DE…) tranne Immobiliare (EPRA.MI) e Cross-Sector (SWDA.MI)
     </div>
     """, unsafe_allow_html=True)
+
+
+# ========================
+# TAB 8 — BACKTEST RS
+# ========================
+with tab8:
+    import json
+
+    st.markdown(
+        '<h3 style="color:#ff9900;margin-bottom:4px;">🧪 Backtest Rotation Score — Episodi Risk Off</h3>'
+        '<p style="color:#555;font-size:0.82em;margin-top:0;">'
+        'Dataset storico 2021–2026 · 5 episodi identificati · Soglia dinamica ~-3.5 · Conferma 5 giorni</p>',
+        unsafe_allow_html=True
+    )
+
+    # Carica JSON
+    try:
+        with open("backtest_patterns.json", "r", encoding="utf-8") as f:
+            bt = json.load(f)
+        bt_ok = True
+    except FileNotFoundError:
+        st.warning("⚠️ File backtest_patterns.json non trovato nel repo.")
+        bt_ok = False
+    except Exception as e:
+        st.error(f"Errore lettura backtest_patterns.json: {e}")
+        bt_ok = False
+
+    if bt_ok:
+
+        # ── KPI AGGREGATE ─────────────────────────────────────────────────────
+        stats = bt["statistiche_aggregate"]
+        k1, k2, k3, k4, k5 = st.columns(5)
+        kpi_bt = [
+            (k1, "Win Rate",           stats["win_rate"],                          "#00ff55"),
+            (k2, "Payoff medio +40gg", f"+{stats['spy_perf_40_media_positivi']:.1f}%", "#00ff55"),
+            (k3, "Payoff medio +20gg", f"+{stats['spy_perf_20_media_positivi']:.1f}%", "#88cc88"),
+            (k4, "Durata media ep.",   f"{stats['durata_media_gg']:.0f} gg",       "#ff9900"),
+            (k5, "RS min medio",       f"{stats['rs_min_medio']:.2f}",             "#ff4422"),
+        ]
+        for col, label, val, color in kpi_bt:
+            col.markdown(
+                f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+                f'padding:10px 14px;margin-bottom:10px;">'
+                f'<div style="color:#555;font-size:0.72em;letter-spacing:0.06em">{label}</div>'
+                f'<div style="color:{color};font-size:1.15em;font-weight:bold">{val}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;'
+            f'padding:8px 16px;margin-bottom:16px;font-size:0.80em;color:#666;">'
+            f'⏱ <b style="color:#ff9900">Timing critico</b>: {bt["statistiche_aggregate"]["nota_timing"]}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        # ── REGOLE OPERATIVE ──────────────────────────────────────────────────
+        st.markdown("### 📋 Regole operative")
+        ro = bt["regola_operativa"]
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            st.markdown(
+                f'<div style="background:#0d2b0d;border:1px solid #00cc44;border-radius:8px;'
+                f'padding:14px 16px;">'
+                f'<div style="color:#00ff55;font-size:0.72em;letter-spacing:0.08em;'
+                f'text-transform:uppercase;margin-bottom:6px;">✅ Segnale POSITIVO</div>'
+                f'<div style="color:#ccc;font-size:0.85em;line-height:1.6;">{ro["segnale_positivo"]}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        with col_r2:
+            st.markdown(
+                f'<div style="background:#2b0d0d;border:1px solid #cc2200;border-radius:8px;'
+                f'padding:14px 16px;">'
+                f'<div style="color:#ff4422;font-size:0.72em;letter-spacing:0.08em;'
+                f'text-transform:uppercase;margin-bottom:6px;">❌ Segnale NEGATIVO</div>'
+                f'<div style="color:#ccc;font-size:0.85em;line-height:1.6;">{ro["segnale_negativo"]}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+        # ── TABELLA EPISODI ───────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 1 · Episodi storici")
+
+        colori_pattern = {"A": "#ff4422", "B": "#ffaa00", "C": "#44aaff", "D": "#ffff44"}
+        colori_esito   = {
+            "positivo_forte": "#00ff55",
+            "positivo":       "#88cc88",
+            "positivo_lento": "#ffaa00",
+            "negativo":       "#ff4422",
+        }
+
+        rows_bt = []
+        for ep in bt["episodi"]:
+            ind = ep["indicatori"]
+            top = ep["top_successivo"]
+            rows_bt.append({
+                "Ep":           ep["id"],
+                "Pattern":      ep["pattern"],
+                "RS inizio":    ep["rs_inizio"],
+                "RS bottom":    ep["rs_bottom_date"],
+                "RS min":       ep["rs_min"],
+                "Durata (gg)":  ep["durata_gg"],
+                "SPY bottom":   ep["spy_bottom_date"],
+                "Δ RS→SPY(gg)": ep["delta_rs_spy_gg"],
+                "SPY +20gg":    ep["spy_perf_20"],
+                "SPY +40gg":    ep["spy_perf_40"],
+                "VIX":          ind["vix"],
+                "MOVE":         ind["move"] if ind["move"] else "n/d",
+                "IEF-SHY":      ind["ief_shy"],
+                "Top qualità":  top["qualita"],
+                "Esito":        ep["esito"],
+            })
+
+        bt_df = pd.DataFrame(rows_bt)
+
+        def style_pattern_col(val):
+            c = colori_pattern.get(str(val), "#888")
+            return f"color:{c};font-weight:bold"
+
+        def style_esito_col(val):
+            c = colori_esito.get(str(val), "#888")
+            return f"color:{c};font-weight:bold"
+
+        def style_delta(val):
+            try:
+                v = float(val)
+                if v < 0:  return "color:#44aaff;font-weight:bold"
+                if v > 40: return "color:#ff4422"
+                return "color:#888"
+            except Exception:
+                return ""
+
+        def style_rs_min_bt(val):
+            try:
+                v = float(val)
+                if v < -8: return "color:#ff4422;font-weight:bold"
+                if v < -6: return "color:#ffaa00;font-weight:bold"
+                return "color:#888"
+            except Exception:
+                return ""
+
+        def style_top_qualita(val):
+            if str(val) == "VERO":    return "color:#00ff55;font-weight:bold"
+            if str(val) == "TECNICO": return "color:#ffaa00;font-weight:bold"
+            return ""
+
+        st.dataframe(
+            bt_df.style
+                .map(style_pattern_col,  subset=["Pattern"])
+                .map(style_esito_col,    subset=["Esito"])
+                .map(style_delta,        subset=["Δ RS→SPY(gg)"])
+                .map(style_rs_min_bt,    subset=["RS min"])
+                .map(style_top_qualita,  subset=["Top qualità"])
+                .format({
+                    "RS min":    "{:.2f}",
+                    "SPY +20gg": "{:+.2f}%",
+                    "SPY +40gg": "{:+.2f}%",
+                    "IEF-SHY":   "{:.2f}",
+                }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ── PATTERN CARDS ─────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 2 · Pattern di riferimento")
+
+        pattern_cols = st.columns(4)
+        pattern_order = ["A", "B", "C", "D"]
+        for i, pid in enumerate(pattern_order):
+            p = bt["pattern"][pid]
+            cond = p["condizioni"]
+            cond_str = " · ".join([f"{k.upper()} {v}" for k, v in cond.items()])
+            color = colori_pattern[pid]
+            with pattern_cols[i]:
+                st.markdown(
+                    f'<div style="background:#0d0d0d;border:1px solid {color}33;'
+                    f'border-top:3px solid {color};border-radius:8px;padding:14px;height:100%;">'
+                    f'<div style="color:{color};font-size:1.1em;font-weight:bold;'
+                    f'margin-bottom:6px;">Pattern {pid}</div>'
+                    f'<div style="color:#ff9900;font-size:0.82em;font-weight:bold;'
+                    f'margin-bottom:8px;">{p["nome"]}</div>'
+                    f'<div style="color:#555;font-size:0.72em;margin-bottom:8px;">{cond_str}</div>'
+                    f'<div style="color:#aaa;font-size:0.78em;line-height:1.5;'
+                    f'margin-bottom:8px;">{p["descrizione"]}</div>'
+                    f'<div style="color:{color};font-size:0.75em;font-style:italic;">'
+                    f'↗ {p["payoff_atteso"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+        # ── NOTE EPISODI ──────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 3 · Note analitiche per episodio")
+
+        for ep in bt["episodi"]:
+            color = colori_pattern.get(ep["pattern"], "#888")
+            esito_color = colori_esito.get(ep["esito"], "#888")
+            with st.expander(
+                f"Ep.{ep['id']} — {ep['rs_inizio']}  |  Pattern {ep['pattern']}  |  "
+                f"RS min: {ep['rs_min']}  |  SPY +40gg: {ep['spy_perf_40']:+.2f}%",
+                expanded=False
+            ):
+                st.markdown(
+                    f'<div style="background:#080808;border-left:3px solid {color};'
+                    f'padding:12px 16px;border-radius:0 6px 6px 0;'
+                    f'font-size:0.85em;color:#aaa;line-height:1.7;">'
+                    f'{ep["note"]}'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+        # ── REGOLA QUALITÀ TOP ────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 4 · Regola qualità top")
+        rqt = bt["regola_qualita_top"]
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+            f'padding:14px 20px;font-size:0.85em;line-height:1.8;">'
+            f'<b style="color:#00ff55">Top VERO</b>: {rqt["top_vero"]}<br>'
+            f'<b style="color:#ffaa00">Top TECNICO</b>: {rqt["top_tecnico"]}<br>'
+            f'<span style="color:#555">{rqt["implicazione"]}</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        # ── FOOTER AGGIORNAMENTO ─────────────────────────────────────────────
+        st.markdown(
+            f'<div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;'
+            f'padding:8px 16px;margin-top:16px;font-size:0.75em;color:#444;">'
+            f'📅 Dati aggiornati al: <b style="color:#ff9900">{bt["metadata"]["aggiornato"]}</b> · '
+            f'Per aggiornare: modifica <b>backtest_patterns.json</b> nel repo e fai commit'
+            f'</div>',
+            unsafe_allow_html=True
+        )
