@@ -91,16 +91,16 @@ WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 TEMATICI_STRUCT = [
     ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","ISPY.MI","ECAR.MI"],   "XDWT.DE"),
     ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
-    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],                "XDWF.DE"),
+    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],              "XDWF.DE"),
     ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE"],                                  "XWTS.DE"),
     ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
     ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],               "XDWI.DE"),
-    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],    "XDWM.DE"),
-    ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                       "XDW0.DE"),
-    ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],  "XDWU.DE"),
-    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS"],                        "EPRA.MI"),
-    ("INTRAS./ALTERNATIVI",     ["LVO.MI","BUYB.PA","HODLX.PA","GOAT.PA","FOOD.MI"],  "SWDA.MI"),
+    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],              "XDWI.DE"),
+    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],   "XDWM.DE"),
+    ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                        "XDW0.DE"),
+    ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],   "XDWU.DE"),
+    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS"],                         "EPRA.MI"),
+    ("INTRAS./ALTERNATIVI",     ["LVO.MI","BUYB.PA","HODLX.PA","GOAT.PA","FOOD.MI"],   "SWDA.MI"),
 ]
 
 TEMATICI_DESCRIPTIONS = {
@@ -121,7 +121,7 @@ TEMATICI_DESCRIPTIONS = {
     "WNDY.DE": "eolico",              "RENW.MI": "rinnovabili (2)",
     "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
     "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",
-    "DPAY.MI": "pagamenti digitali",   "XSGI.MI": "infrast. globali",
+    "DPAY.MI": "pagamenti digitali",  "XSGI.MI": "infrast. globali",
     "WOOE.AS": "legname",
     "HODLX.PA":"basket crypto",       "GOAT.PA": "global moat",     "FOOD.MI": "futuro del cibo",
 }
@@ -178,6 +178,18 @@ def load_pe_live(tickers):
         except Exception:
             pe_live[t] = None
     return pe_live
+
+
+# FIX #4 — cache lettura xlsx P/E (evita rilettura da disco ad ogni interazione radio)
+@st.cache_data(ttl=60*60*12)
+def load_pe_historical():
+    try:
+        pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
+        return pe_hist.set_index("Period")
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=60*60*6)
@@ -367,6 +379,7 @@ def safe_ret(series, days):
 
 # ========================
 # ROTATION SCORE SERIES
+# FIX #1 — rimosso * 100: scala ora coerente con soglie ±1.5 del pannello KPI
 # ========================
 def compute_rotation_score_series(prices):
     ret_1m = prices.pct_change(21, fill_method=None)
@@ -380,7 +393,8 @@ def compute_rotation_score_series(prices):
     rar_mean = (rar_1m + rar_3m + rar_6m) / 3
     cyc  = rar_mean[CYCLICAL].mean(axis=1)
     def_ = rar_mean[DEFENSIVE].mean(axis=1)
-    rotation_score = (cyc - def_) * 100
+    # FIX #1: rimosso (cyc - def_) * 100 — scala incompatibile con soglie ±1.5
+    rotation_score = (cyc - def_)
     return rotation_score.dropna()
 
 
@@ -420,9 +434,8 @@ def situazione(row):
 
 df["Situazione"] = df.apply(situazione, axis=1)
 
+# FIX #2 — rimosso ramo "NEUTRAL" irraggiungibile (situazione() non lo emette mai)
 def operativita(row):
-    if row["Delta_RS_5D"] > 0.02 and row["Situazione"] == "NEUTRAL":
-        return "🔭 ALERT"
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
         return "🔥 LEADER"
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4:
@@ -622,11 +635,17 @@ with tab3:
                 return ["background-color:#1e1e1e;color:#ccc"] * len(row)
             return ["background-color:#000;color:white"] * len(row)
 
-        def highlight_max(s):
-            max_val = s.max()
+        # FIX #3 — aggiunta evidenziazione minimo in rosso (simmetrico con massimo verde)
+        def highlight_extremes(s):
+            valid = s.dropna()
+            if valid.empty:
+                return [""] * len(s)
+            max_val = valid.max()
+            min_val = valid.min()
             return [
-                "background-color:#003300;color:#00FF00;font-weight:bold"
-                if v == max_val else ""
+                "background-color:#003300;color:#00FF00;font-weight:bold" if v == max_val
+                else "background-color:#330000;color:#ff4422;font-weight:bold" if v == min_val
+                else ""
                 for v in s
             ]
 
@@ -634,7 +653,7 @@ with tab3:
             f.round(2)
             .style
             .apply(style_row, axis=1)
-            .apply(highlight_max, subset=[c for c in f.columns if c != "Prezzo"])
+            .apply(highlight_extremes, subset=[c for c in f.columns if c != "Prezzo"])
             .format({"Prezzo": "{:.2f}", **{c: "{:+.2f}%" for c in f.columns if c != "Prezzo"}}),
             width="stretch"
         )
@@ -709,7 +728,7 @@ with tab4:
         <li><b>Calcolo RSR medio</b>: media dei rendimenti relativi su 1M, 3M e 6M</li>
         <li><b>Performance Ciclici</b>: XLK, XLY, XLF, XLI, XLE, XLB</li>
         <li><b>Performance Difensivi</b>: XLP, XLV, XLU, XLRE</li>
-        <li><b>Rotation Score</b> = Ciclici - Difensivi</li>
+        <li><b>Rotation Score</b> = Ciclici − Difensivi (scala coerente con soglie ±1.5)</li>
     </ol>
     <h3 style="color:#ff9900;margin-top:25px;">🎯 Situazione Attuale</h3>
     <div style="background:#1a1a1a;padding:15px;border-radius:8px;margin:15px 0;">
@@ -851,18 +870,11 @@ with tab6:
         index=2, horizontal=True
     )
 
-    try:
-        pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
-        pe_hist = pe_hist.set_index("Period")
-    except FileNotFoundError:
-        st.warning("⚠️ File pe_historical.xlsx non trovato.")
-        pe_hist = None
-    except Exception as e:
-        st.error(f"Errore lettura pe_historical.xlsx: {e}")
-        pe_hist = None
+    # FIX #4 — lettura xlsx ora tramite funzione cachata (no rilettura da disco ad ogni radio change)
+    pe_hist = load_pe_historical()
 
     if pe_hist is None:
-        st.info("Le altre tab funzionano normalmente.")
+        st.warning("⚠️ File pe_historical.xlsx non trovato. Le altre tab funzionano normalmente.")
     else:
         with st.spinner("Scarico P/E attuali..."):
             pe_live = load_pe_live(SECTORS)
@@ -891,10 +903,10 @@ with tab6:
                 dev_live = None
 
             def valuation_label(dev):
-                if dev is None:           return "N/D",      "#888888"
-                if dev < 0:               return "Cheap",    "#00ff55"
-                if dev < 0.5:             return "Fair",     "#aaaaaa"
-                if dev < 1.5:             return "Moderato", "#ffff44"
+                if dev is None:           return "N/D",       "#888888"
+                if dev < 0:               return "Cheap",     "#00ff55"
+                if dev < 0.5:             return "Fair",      "#aaaaaa"
+                if dev < 1.5:             return "Moderato",  "#ffff44"
                 if dev < 2.5:             return "Overvalued","#ffaa00"
                 return "Expensive", "#ff4422"
 
@@ -1044,7 +1056,6 @@ with tab7:
             delta_bm = (abs_ret - bm_ret) if (abs_ret is not None and bm_ret is not None
                                                and not np.isnan(abs_ret) and not np.isnan(bm_ret)) else np.nan
 
-            # Tutti i TF per tabella
             row = {
                 "Gruppo":   sector,
                 "Ticker":   ticker,
@@ -1073,7 +1084,6 @@ with tab7:
     st.markdown("---")
     st.markdown(f"### 1 · Coerenza intra-gruppo — {tf_label}")
 
-    # KPI globali
     valid_ret  = tem_df[tf_label].dropna()
     total_etf  = len(valid_ret)
     total_all  = len(tem_df)
@@ -1130,7 +1140,7 @@ with tab7:
             "n_pos": n_pos, "n_tot": n_tot, "BM_ret": bm_val,
         })
 
-    cdf_plot = pd.DataFrame(coerenza_data)  # ordine originale TEMATICI_STRUCT
+    cdf_plot = pd.DataFrame(coerenza_data)
 
     # ── LAYOUT DUE COLONNE ───────────────────────────────────────────────────
     col_chart, col_panel = st.columns([3, 2])
@@ -1151,7 +1161,6 @@ with tab7:
 
         fig_coh = go.Figure()
 
-        # Stem lines from 0 to BM value (visual anchor)
         for _, r in cdf_plot.iterrows():
             if np.isnan(r["BM_ret"]):
                 continue
@@ -1166,7 +1175,6 @@ with tab7:
                 opacity=0.45,
             )
 
-        # Barre BM sottili (overlay su stem per valore esatto)
         fig_coh.add_trace(go.Bar(
             x=cdf_plot["Gruppo"],
             y=cdf_plot["BM_ret"].fillna(0),
@@ -1185,7 +1193,6 @@ with tab7:
             ),
         ))
 
-        # Diamante — posizionato al valore BM, breadth solo in tooltip
         if show_bm:
             breadth_col = [
                 "#00ff55" if r["Pct_pos"] >= 60
@@ -1221,16 +1228,14 @@ with tab7:
             plot_bgcolor="#000",
             font=dict(color="white", size=9),
             title=dict(
-                text=f"Ritorno benchmark {tf_label}  |  ◆ = breadth tematici (verde ≥60% · giallo 40-60% · rosso &lt;40%)" if show_bm else f"Ritorno benchmark {tf_label}",
+                text=f"Ritorno benchmark {tf_label}  |  ◆ = breadth tematici (verde ≥60% · giallo 40-60% · rosso <40%)" if show_bm else f"Ritorno benchmark {tf_label}",
                 font=dict(size=9, color="#555"),
                 x=0, xanchor="left",
             ),
-            xaxis=dict(tickangle=-25, gridcolor="#0a0a0a",
-                       tickfont=dict(size=8)),
+            xaxis=dict(tickangle=-25, gridcolor="#0a0a0a", tickfont=dict(size=8)),
             yaxis=dict(range=[y_bot, y_top], gridcolor="#111",
                        ticksuffix="%", zeroline=False,
-                       tickfont=dict(size=8),
-                       title=None),
+                       tickfont=dict(size=8), title=None),
             legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)",
                         orientation="h", y=1.02, x=1, xanchor="right"),
             margin=dict(l=45, r=40, t=30, b=60),
@@ -1241,7 +1246,6 @@ with tab7:
     # ── PANNELLO INTERPRETATIVO ───────────────────────────────────────────────
     with col_panel:
 
-        # Calcola regime globale
         n_bm_pos     = (cdf_plot["BM_ret"] > 0).sum()
         n_bm_tot     = cdf_plot["BM_ret"].dropna().__len__()
         global_breadth = round(pos_pct, 1)
@@ -1264,9 +1268,6 @@ with tab7:
             regime_color = "#ff4422"
             regime_icon  = "🔴"
 
-        # Leader = BM_ret > 0, ordinati desc, max 5
-        # Correzione = BM_ret < 0, ordinati asc (più negativo prima), max 5
-        # Meno forti = se tutti positivi, bottom 3 con nota
         sorted_cdf   = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
         bm_positivi  = sorted_cdf[sorted_cdf["BM_ret"] >  0]
         bm_negativi  = sorted_cdf[sorted_cdf["BM_ret"] <= 0].sort_values("BM_ret")
@@ -1274,7 +1275,6 @@ with tab7:
         all_positive = len(bm_negativi) == 0
         all_negative = len(bm_positivi) == 0
 
-        # Leader: se esistono positivi mostra top 3 positivi, altrimenti "meno peggio"
         if not all_negative:
             leader_df    = bm_positivi.head(3)
             leader_title = "▲ Leader benchmark"
@@ -1284,7 +1284,6 @@ with tab7:
             leader_title = "▲ Meno peggio"
             leader_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti i benchmark negativi su {tf_label}</div>'
 
-        # Correzione: se esistono negativi mostra top 3 negativi, altrimenti "meno forti"
         if not all_positive:
             corr_df    = bm_negativi.head(3)
             corr_title = "▼ Benchmark in correzione"
@@ -1294,7 +1293,6 @@ with tab7:
             corr_title = "▼ Gruppi meno forti"
             corr_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti i benchmark positivi su {tf_label}</div>'
 
-        # Divergenze: barra verde + breadth rossa (fragile) o barra rossa + breadth verde (difensivo)
         divergenze = []
         for _, r in cdf_plot.iterrows():
             if np.isnan(r["BM_ret"]):
@@ -1315,7 +1313,6 @@ with tab7:
                     f'→ <i>tematici reggono nonostante il benchmark</i>'
                 )
 
-        # Render pannello
         leader_html = "".join([
             f'<div style="display:flex;justify-content:space-between;'
             f'padding:3px 0;border-bottom:1px solid #1a1a1a;">'
@@ -1334,6 +1331,7 @@ with tab7:
             f'{r["BM_ret"]:+.1f}%</span></div>'
             for _, r in corr_df.iterrows()
         ]) or '<span style="color:#444;font-style:italic;font-size:0.80em">—</span>'
+
         div_html = (
             "<br>".join(divergenze)
             if divergenze
@@ -1344,8 +1342,6 @@ with tab7:
         st.markdown(
             f'<div style="background:#080808;border:1px solid #222;border-radius:10px;'
             f'padding:16px 18px;height:100%;font-family:monospace;">'
-
-            # Header regime
             f'<div style="border-bottom:1px solid #222;padding-bottom:10px;margin-bottom:12px;">'
             f'<div style="color:#555;font-size:0.70em;letter-spacing:0.1em;'
             f'text-transform:uppercase;">Regime tematico — {tf_label}</div>'
@@ -1356,33 +1352,26 @@ with tab7:
             f'Breadth globale: {global_breadth}% &nbsp;·&nbsp; '
             f'BM medio: {avg_bm_ret:+.1f}%</div>'
             f'</div>'
-
-            # Leader
             f'<div style="margin-bottom:12px;">'
             f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
             f'text-transform:uppercase;margin-bottom:4px;">{leader_title}</div>'
             f'{leader_note}'
             f'{leader_html}</div>'
-
-            # Correzione / meno forti
             f'<div style="margin-bottom:12px;">'
             f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
             f'text-transform:uppercase;margin-bottom:4px;">{corr_title}</div>'
             f'{corr_note}'
             f'{corr_html}</div>'
-
-            # Divergenze
             f'<div>'
             f'<div style="color:#555;font-size:0.68em;letter-spacing:0.08em;'
             f'text-transform:uppercase;margin-bottom:6px;">⚡ Divergenze rilevate</div>'
             f'<div style="font-size:0.78em;line-height:1.7;">{div_html}</div>'
             f'</div>'
-
             f'</div>',
             unsafe_allow_html=True,
         )
 
-    # ── SEZIONE 2: TABELLA PERFORMANCE (stile Fattori) ────────────────────────
+    # ── SEZIONE 2: TABELLA PERFORMANCE ────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 2 · Performance per timeframe")
 
@@ -1395,7 +1384,6 @@ with tab7:
 
     view_df = view_df[disp_cols].copy()
 
-    # highlight max per colonna TF (verde) e min (rosso)
     def highlight_best(s):
         styles = [""] * len(s)
         valid  = s.dropna()
@@ -1497,9 +1485,9 @@ with tab7:
         return fig_mb
 
     with c_top:
-        st.plotly_chart(mini_bar(top5, title=f"🏆 Top 5"), use_container_width=True)
+        st.plotly_chart(mini_bar(top5, title="🏆 Top 5"), use_container_width=True)
     with c_bot:
-        st.plotly_chart(mini_bar(bot5, ascending=True, title=f"💀 Bottom 5"), use_container_width=True)
+        st.plotly_chart(mini_bar(bot5, ascending=True, title="💀 Bottom 5"), use_container_width=True)
 
     # ── SEZIONE 4: SCATTER QUADRANTI ─────────────────────────────────────────
     st.markdown("---")
@@ -1515,7 +1503,6 @@ with tab7:
     with sc_c3:
         filter_scatter = st.checkbox("Solo gruppo selezionato", value=False, key="tem_sc_filter")
 
-    # Ricalcola delta BM sul TF scatter scelto — includi BM ret per tooltip arricchito
     rows_sc = []
     for sector, tickers, bm_ticker in TEMATICI_STRUCT:
         bm_r = np.nan
@@ -1542,14 +1529,12 @@ with tab7:
 
     sc_df = pd.DataFrame(rows_sc).dropna(subset=["abs_ret","delta_bm"])
 
-    # Applica filtro gruppo se richiesto
     if filter_scatter and sel_sector != "TUTTI":
         sc_df = sc_df[sc_df["Gruppo"] == sel_sector]
 
     if sc_df.empty:
         st.info("Dati insufficienti per lo scatter su questo timeframe.")
     else:
-        # Colori per gruppo
         group_colors = {
             s: c for s, c in zip(
                 [g for g, _, _ in TEMATICI_STRUCT],
@@ -1561,19 +1546,10 @@ with tab7:
 
         fig_sc = go.Figure()
 
-        # Quadrant fill zones (subtle)
-        x_range = [sc_df["abs_ret"].min() * 1.3, sc_df["abs_ret"].max() * 1.3]
-        y_range = [sc_df["delta_bm"].min() * 1.3, sc_df["delta_bm"].max() * 1.3]
-
         for sector in sc_df["Gruppo"].unique():
             sub = sc_df[sc_df["Gruppo"] == sector]
             labels = sub["Ticker"] if label_mode == "Ticker" else sub["Tema"]
             color  = group_colors.get(sector, "#aaaaaa")
-
-            # build per-point customdata for enriched tooltip
-            bm_label = dict(TEMATICI_STRUCT)[sector] if False else [
-                bm for g, _, bm in TEMATICI_STRUCT if g == sector
-            ][0] if any(g == sector for g, _, _ in TEMATICI_STRUCT) else "—"
 
             hover_text = []
             for _, r in sub.iterrows():
@@ -1601,23 +1577,21 @@ with tab7:
                 customdata=hover_text,
             ))
 
-        # Assi e quadrant labels
         fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
         fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
 
-        # Quadrant annotations
         pad_x = (sc_df["abs_ret"].max() - sc_df["abs_ret"].min()) * 0.08
         pad_y = (sc_df["delta_bm"].max() - sc_df["delta_bm"].min()) * 0.08
-        q_x_pos = sc_df["abs_ret"].max()   - pad_x
-        q_x_neg = sc_df["abs_ret"].min()   + pad_x
-        q_y_pos = sc_df["delta_bm"].max()  - pad_y
-        q_y_neg = sc_df["delta_bm"].min()  + pad_y
+        q_x_pos = sc_df["abs_ret"].max()  - pad_x
+        q_x_neg = sc_df["abs_ret"].min()  + pad_x
+        q_y_pos = sc_df["delta_bm"].max() - pad_y
+        q_y_neg = sc_df["delta_bm"].min() + pad_y
 
         quadrants = [
-            (q_x_pos, q_y_pos, "LEADER",      "#00ff55", "top right"),
-            (q_x_neg, q_y_pos, "ALPHA PURO",  "#44aaff", "top left"),
-            (q_x_pos, q_y_neg, "BETA PURO",   "#ffaa00", "bottom right"),
-            (q_x_neg, q_y_neg, "EVITARE",     "#ff4422", "bottom left"),
+            (q_x_pos, q_y_pos, "LEADER",     "#00ff55", "top right"),
+            (q_x_neg, q_y_pos, "ALPHA PURO", "#44aaff", "top left"),
+            (q_x_pos, q_y_neg, "BETA PURO",  "#ffaa00", "bottom right"),
+            (q_x_neg, q_y_neg, "EVITARE",    "#ff4422", "bottom left"),
         ]
         for qx, qy, qlabel, qcolor, qanchor in quadrants:
             fig_sc.add_annotation(
@@ -1648,7 +1622,6 @@ with tab7:
         )
         st.plotly_chart(fig_sc, use_container_width=True)
 
-        # Legenda quadranti
         st.markdown("""
         <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
                     padding:10px 20px;margin-top:4px;font-size:0.80em;color:#888;
