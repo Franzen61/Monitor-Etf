@@ -811,104 +811,103 @@ with tab5:
         sp500_df = load_sp500_data(tf_days)
 
     if sp500_df.empty:
-        st.error("Impossibile caricare i dati. Riprova tra qualche minuto.")
-        st.stop()
-
-    sector_stats = (
-        sp500_df.groupby("Sector")
-        .apply(lambda g: pd.Series({
-            "Totale":   len(g),
-            "Positive": (g["Return"] > 0).sum(),
-            "Negative": (g["Return"] <= 0).sum(),
-            "Pct_pos":  round((g["Return"] > 0).mean() * 100, 1),
-            "Avg_ret":  round(g["Return"].mean(), 2),
-        }), include_groups=False)
-        .reset_index()
-        .sort_values("Pct_pos", ascending=False)
-    )
-
-    fig_bar = go.Figure()
-    fig_bar.add_trace(go.Bar(
-        name="% Positive", x=sector_stats["Sector"], y=sector_stats["Pct_pos"],
-        marker_color="#00cc44",
-        text=sector_stats["Pct_pos"].astype(str) + "%",
-        textposition="outside", textfont=dict(size=10, color="#00cc44"),
-    ))
-    fig_bar.add_hline(y=50, line_dash="dot", line_color="#555555",
-                      annotation_text="50%", annotation_font_color="#888", annotation_position="right")
-    fig_bar.update_layout(
-        height=220, paper_bgcolor="#000", plot_bgcolor="#000",
-        font=dict(color="white", size=11),
-        title=dict(text=f"% Titoli Positivi per Settore — {tf_sel}", font=dict(size=13, color="#ff9900")),
-        xaxis=dict(tickangle=-30, gridcolor="#111"),
-        yaxis=dict(range=[0, 115], gridcolor="#111", ticksuffix="%"),
-        margin=dict(l=40, r=20, t=45, b=80), showlegend=False,
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    tot = len(sp500_df)
-    pos = (sp500_df["Return"] > 0).sum()
-    pct = round(pos / tot * 100, 1)
-    colore = "#00ff55" if pct >= 50 else "#ff4422"
-    st.markdown(
-        f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
-        f'padding:10px 20px;margin-bottom:10px;font-size:1.05em;">'
-        f'📊 Su timeframe <b>{tf_sel}</b>: '
-        f'<b style="color:{colore}">{pos} titoli su {tot} ({pct}%)</b> '
-        f'sono in territorio positivo nell\'S&P 500</div>',
-        unsafe_allow_html=True
-    )
-
-    sector_order = sector_stats["Sector"].tolist()
-    sp500_df["SectorRank"] = sp500_df["Sector"].map({s: i for i, s in enumerate(sector_order)})
-    sp500_df = sp500_df.sort_values("SectorRank")
-    colors_b = sp500_df["Return"].apply(lambda r: "#00cc44" if r > 0 else "#ff3322")
-
-    np.random.seed(42)
-    jitter = np.random.uniform(-0.35, 0.35, size=len(sp500_df))
-    x_vals = sp500_df["SectorRank"] + jitter
-
-    fig_bubble = go.Figure()
-    fig_bubble.add_hline(y=0, line_color="#444444", line_width=1.5)
-    fig_bubble.add_trace(go.Scatter(
-        x=x_vals, y=sp500_df["Return"], mode="markers",
-        marker=dict(size=5, color=colors_b, opacity=0.75, line=dict(width=0)),
-        text=sp500_df["Ticker"] + "<br>" + sp500_df["Return"].astype(str) + "%",
-        hovertemplate="%{text}<extra></extra>", showlegend=False,
-    ))
-
-    tick_labels = []
-    for _, row in sector_stats.iterrows():
-        short = row["Sector"].replace(" & ", "/").replace(" ", "<br>")
-        tick_labels.append(
-            f"{short}<br>"
-            f"<span style='color:#00cc44'>{int(row['Positive'])}↑</span> "
-            f"<span style='color:#ff3322'>{int(row['Negative'])}↓</span>"
+        st.error("Impossibile caricare i dati S&P 500. Riprova tra qualche minuto.")
+    else:
+        sector_stats = (
+            sp500_df.groupby("Sector")
+            .apply(lambda g: pd.Series({
+                "Totale":   len(g),
+                "Positive": (g["Return"] > 0).sum(),
+                "Negative": (g["Return"] <= 0).sum(),
+                "Pct_pos":  round((g["Return"] > 0).mean() * 100, 1),
+                "Avg_ret":  round(g["Return"].mean(), 2),
+            }), include_groups=False)
+            .reset_index()
+            .sort_values("Pct_pos", ascending=False)
         )
 
-    fig_bubble.update_layout(
-        height=520, paper_bgcolor="#000000", plot_bgcolor="#000000",
-        font=dict(color="white", size=10),
-        title=dict(text=f"S&P 500 — Ritorno {tf_sel} per Titolo e Settore", font=dict(size=14, color="#ff9900")),
-        xaxis=dict(tickmode="array", tickvals=list(range(len(sector_order))),
-                   ticktext=tick_labels, tickangle=0, gridcolor="#111111", showline=False),
-        yaxis=dict(title="Ritorno %", gridcolor="#1a1a1a", zeroline=False, ticksuffix="%"),
-        margin=dict(l=60, r=20, t=50, b=120),
-        hoverlabel=dict(bgcolor="#111", font_size=12),
-    )
-    st.plotly_chart(fig_bubble, use_container_width=True)
-
-    with st.expander("📋 Tabella dettaglio settori", expanded=False):
-        display_stats = sector_stats[["Sector","Totale","Positive","Negative","Pct_pos","Avg_ret"]].copy()
-        display_stats.columns = ["Settore","Totale","Positive ↑","Negative ↓","% Positive","Ritorno Medio %"]
-        def style_pct(val):
-            if val >= 60: return "color:#00ff55; font-weight:bold"
-            if val <= 40: return "color:#ff4422; font-weight:bold"
-            return "color:#ffff44"
-        st.dataframe(
-            display_stats.style.map(style_pct, subset=["% Positive"]),
-            use_container_width=True, hide_index=True
+        fig_bar = go.Figure()
+        fig_bar.add_trace(go.Bar(
+            name="% Positive", x=sector_stats["Sector"], y=sector_stats["Pct_pos"],
+            marker_color="#00cc44",
+            text=sector_stats["Pct_pos"].astype(str) + "%",
+            textposition="outside", textfont=dict(size=10, color="#00cc44"),
+        ))
+        fig_bar.add_hline(y=50, line_dash="dot", line_color="#555555",
+                          annotation_text="50%", annotation_font_color="#888", annotation_position="right")
+        fig_bar.update_layout(
+            height=220, paper_bgcolor="#000", plot_bgcolor="#000",
+            font=dict(color="white", size=11),
+            title=dict(text=f"% Titoli Positivi per Settore — {tf_sel}", font=dict(size=13, color="#ff9900")),
+            xaxis=dict(tickangle=-30, gridcolor="#111"),
+            yaxis=dict(range=[0, 115], gridcolor="#111", ticksuffix="%"),
+            margin=dict(l=40, r=20, t=45, b=80), showlegend=False,
         )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        tot = len(sp500_df)
+        pos = (sp500_df["Return"] > 0).sum()
+        pct = round(pos / tot * 100, 1)
+        colore = "#00ff55" if pct >= 50 else "#ff4422"
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+            f'padding:10px 20px;margin-bottom:10px;font-size:1.05em;">'
+            f'📊 Su timeframe <b>{tf_sel}</b>: '
+            f'<b style="color:{colore}">{pos} titoli su {tot} ({pct}%)</b> '
+            f'sono in territorio positivo nell\'S&P 500</div>',
+            unsafe_allow_html=True
+        )
+
+        sector_order = sector_stats["Sector"].tolist()
+        sp500_df["SectorRank"] = sp500_df["Sector"].map({s: i for i, s in enumerate(sector_order)})
+        sp500_df = sp500_df.sort_values("SectorRank")
+        colors_b = sp500_df["Return"].apply(lambda r: "#00cc44" if r > 0 else "#ff3322")
+
+        np.random.seed(42)
+        jitter = np.random.uniform(-0.35, 0.35, size=len(sp500_df))
+        x_vals = sp500_df["SectorRank"] + jitter
+
+        fig_bubble = go.Figure()
+        fig_bubble.add_hline(y=0, line_color="#444444", line_width=1.5)
+        fig_bubble.add_trace(go.Scatter(
+            x=x_vals, y=sp500_df["Return"], mode="markers",
+            marker=dict(size=5, color=colors_b, opacity=0.75, line=dict(width=0)),
+            text=sp500_df["Ticker"] + "<br>" + sp500_df["Return"].astype(str) + "%",
+            hovertemplate="%{text}<extra></extra>", showlegend=False,
+        ))
+
+        tick_labels = []
+        for _, row in sector_stats.iterrows():
+            short = row["Sector"].replace(" & ", "/").replace(" ", "<br>")
+            tick_labels.append(
+                f"{short}<br>"
+                f"<span style='color:#00cc44'>{int(row['Positive'])}↑</span> "
+                f"<span style='color:#ff3322'>{int(row['Negative'])}↓</span>"
+            )
+
+        fig_bubble.update_layout(
+            height=520, paper_bgcolor="#000000", plot_bgcolor="#000000",
+            font=dict(color="white", size=10),
+            title=dict(text=f"S&P 500 — Ritorno {tf_sel} per Titolo e Settore", font=dict(size=14, color="#ff9900")),
+            xaxis=dict(tickmode="array", tickvals=list(range(len(sector_order))),
+                       ticktext=tick_labels, tickangle=0, gridcolor="#111111", showline=False),
+            yaxis=dict(title="Ritorno %", gridcolor="#1a1a1a", zeroline=False, ticksuffix="%"),
+            margin=dict(l=60, r=20, t=50, b=120),
+            hoverlabel=dict(bgcolor="#111", font_size=12),
+        )
+        st.plotly_chart(fig_bubble, use_container_width=True)
+
+        with st.expander("📋 Tabella dettaglio settori", expanded=False):
+            display_stats = sector_stats[["Sector","Totale","Positive","Negative","Pct_pos","Avg_ret"]].copy()
+            display_stats.columns = ["Settore","Totale","Positive ↑","Negative ↓","% Positive","Ritorno Medio %"]
+            def style_pct(val):
+                if val >= 60: return "color:#00ff55; font-weight:bold"
+                if val <= 40: return "color:#ff4422; font-weight:bold"
+                return "color:#ffff44"
+            st.dataframe(
+                display_stats.style.map(style_pct, subset=["% Positive"]),
+                use_container_width=True, hide_index=True
+            )
 
 
 # ========================
