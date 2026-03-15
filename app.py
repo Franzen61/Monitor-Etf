@@ -448,6 +448,91 @@ def compute_rotation_score_series(prices):
     return rotation_score.dropna()
 
 
+def compute_risk_off_episodes(series, threshold, confirm_days=3):
+    """
+    Identifica episodi Risk Off sulla serie del Rotation Score.
+
+    Regola anti-whipsaw:
+    - Un episodio INIZIA quando il RS chiude sotto -threshold
+      per confirm_days consecutivi.
+    - Un episodio TERMINA quando il RS chiude sopra -threshold
+      per confirm_days consecutivi.
+
+    Restituisce lista di dict con:
+      - start:      data primo giorno sotto soglia (pre-conferma)
+      - confirmed:  data in cui la conferma è completata
+      - end:        data uscita confermata (None se episodio aperto)
+      - duration:   giorni totali sotto soglia (da start a end/oggi)
+      - rs_min:     valore minimo RS durante l'episodio
+      - rs_min_date:data del minimo
+    """
+    if series.empty:
+        return []
+
+    neg_threshold = -abs(threshold)
+    below = (series < neg_threshold).astype(int)
+
+    episodes = []
+    in_episode  = False
+    ep_start    = None
+    ep_confirmed= None
+    consec_below = 0
+    consec_above = 0
+
+    for date, val in series.items():
+        is_below = val < neg_threshold
+
+        if not in_episode:
+            if is_below:
+                consec_below += 1
+                if consec_below == 1:
+                    ep_start = date          # primo giorno sotto soglia
+                if consec_below >= confirm_days:
+                    in_episode   = True
+                    ep_confirmed = date
+                    consec_above = 0
+            else:
+                consec_below = 0
+                ep_start     = None
+        else:
+            if not is_below:
+                consec_above += 1
+                if consec_above >= confirm_days:
+                    # episodio chiuso
+                    ep_slice = series[ep_start:date]
+                    episodes.append({
+                        "start":       ep_start,
+                        "confirmed":   ep_confirmed,
+                        "end":         date,
+                        "open":        False,
+                        "duration":    (date - ep_start).days,
+                        "rs_min":      round(float(ep_slice.min()), 2),
+                        "rs_min_date": ep_slice.idxmin(),
+                    })
+                    in_episode   = False
+                    consec_below = 0
+                    consec_above = 0
+                    ep_start     = None
+            else:
+                consec_above = 0
+
+    # Episodio ancora aperto
+    if in_episode and ep_start is not None:
+        last_date = series.index[-1]
+        ep_slice  = series[ep_start:]
+        episodes.append({
+            "start":       ep_start,
+            "confirmed":   ep_confirmed,
+            "end":         None,
+            "open":        True,
+            "duration":    (last_date - ep_start).days,
+            "rs_min":      round(float(ep_slice.min()), 2),
+            "rs_min_date": ep_slice.idxmin(),
+        })
+
+    return episodes
+
+
 # ========================
 # LOAD SECTORAL DATA
 # ========================
@@ -790,6 +875,94 @@ with tab4:
         yaxis=dict(gridcolor="#222222")
     )
     st.plotly_chart(fig_rs, width="stretch")
+
+    # ── EPISODI RISK OFF ─────────────────────────────────────────────────────
+    with st.expander("🔬 Episodi Risk Off — analisi storica", expanded=False):
+
+        confirm_sel = st.radio(
+            "Giorni conferma anti-whipsaw",
+            [2, 3, 5],
+            index=1, horizontal=True,
+            key="rs_confirm_days",
+            help="Numero di giorni consecutivi sotto soglia necessari per confermare un episodio"
+        )
+
+        episodes = compute_risk_off_episodes(
+            rotation_series, _threshold, confirm_days=confirm_sel
+        )
+
+        if not episodes:
+            st.info("Nessun episodio Risk Off identificato con i parametri correnti.")
+        else:
+            st.markdown(
+                f'<div style="color:#555;font-size:0.78em;margin-bottom:8px;">'
+                f'Soglia: RS &lt; <b style="color:#AA0000">-{_threshold:.1f}</b> · '
+                f'Conferma: <b>{confirm_sel}</b> giorni consecutivi · '
+                f'Episodi identificati: <b style="color:#ff9900">{len(episodes)}</b>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+            rows_ep = []
+            for i, ep in enumerate(episodes, 1):
+                stato = "🔴 APERTO" if ep["open"] else "✅ chiuso"
+                end_str = "in corso" if ep["open"] else ep["end"].strftime("%d/%m/%Y")
+                rows_ep.append({
+                    "#":           i,
+                    "Inizio":      ep["start"].strftime("%d/%m/%Y"),
+                    "Confermato":  ep["confirmed"].strftime("%d/%m/%Y"),
+                    "Fine":        end_str,
+                    "Durata (gg)": ep["duration"],
+                    "RS minimo":   ep["rs_min"],
+                    "Data minimo": ep["rs_min_date"].strftime("%d/%m/%Y"),
+                    "Stato":       stato,
+                })
+
+            ep_df = pd.DataFrame(rows_ep)
+
+            def style_ep(row):
+                if "APERTO" in str(row["Stato"]):
+                    return ["background-color:#1a0000; color:#ff4422"] * len(row)
+                return ["color:#aaaaaa"] * len(row)
+
+            def style_rs_min(val):
+                try:
+                    v = float(val)
+                    if v < -7:  return "color:#ff4422;font-weight:bold"
+                    if v < -5:  return "color:#ffaa00;font-weight:bold"
+                    return "color:#888888"
+                except Exception:
+                    return ""
+
+            st.dataframe(
+                ep_df.style
+                    .apply(style_ep, axis=1)
+                    .map(style_rs_min, subset=["RS minimo"]),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Durata (gg)": st.column_config.NumberColumn("Durata (gg)", format="%d"),
+                    "RS minimo":   st.column_config.NumberColumn("RS minimo",   format="%.2f"),
+                }
+            )
+
+            # Statistiche aggregate
+            closed = [e for e in episodes if not e["open"]]
+            if closed:
+                durate   = [e["duration"] for e in closed]
+                minimi   = [e["rs_min"]   for e in closed]
+                st.markdown(
+                    f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+                    f'padding:10px 20px;margin-top:8px;font-size:0.82em;color:#888;'
+                    f'display:flex;gap:28px;flex-wrap:wrap;">'
+                    f'<span>Episodi chiusi: <b style="color:#ff9900">{len(closed)}</b></span>'
+                    f'<span>Durata media: <b style="color:#ff9900">{int(sum(durate)/len(durate))} gg</b></span>'
+                    f'<span>Durata max: <b style="color:#ff9900">{max(durate)} gg</b></span>'
+                    f'<span>RS minimo storico: <b style="color:#ff4422">{min(minimi):.2f}</b></span>'
+                    f'<span>RS minimo medio: <b style="color:#ffaa00">{sum(minimi)/len(minimi):.2f}</b></span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
     st.markdown(f"""
     <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.7;">
