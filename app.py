@@ -747,20 +747,33 @@ with tab4:
     """, unsafe_allow_html=True)
 
     rotation_series = compute_rotation_score_series(prices)
-    if not rotation_series.empty:
-        cutoff_date  = rotation_series.index.max() - pd.Timedelta(days=365)
-        rotation_12m = rotation_series[rotation_series.index >= cutoff_date]
-    else:
-        rotation_12m = rotation_series
 
-    # Soglie dinamiche: 0.75 deviazioni standard sulla serie completa
-    # Questo mantiene le linee visivamente significative indipendentemente dalla scala
+    # Selettore TF — max disponibile dipende dal loader (6 anni di prezzi)
+    tf_rot = st.radio(
+        "Storico grafico",
+        ["1A", "2A", "3A", "5A", "Max"],
+        index=0, horizontal=True,
+        key="tf_rotation"
+    )
+    _tf_rot_days = {"1A": 365, "2A": 730, "3A": 1095, "5A": 1825, "Max": 99999}
+
+    if not rotation_series.empty:
+        cutoff_date  = rotation_series.index.max() - pd.Timedelta(days=_tf_rot_days[tf_rot])
+        rotation_plot = rotation_series[rotation_series.index >= cutoff_date]
+    else:
+        rotation_plot = rotation_series
+
+    # Soglie dinamiche calcolate sulla serie COMPLETA (non sul plot window)
+    # così rimangono stabili al variare del TF selezionato
     _rs_std    = float(rotation_series.std()) if len(rotation_series) > 5 else 5.0
     _threshold = round(_rs_std * 0.75, 2)
 
+    # Altezza grafico adattiva: più storia = più spazio verticale utile
+    _chart_height = 280 if tf_rot == "1A" else 340
+
     fig_rs = go.Figure()
     fig_rs.add_trace(go.Scatter(
-        x=rotation_12m.index, y=rotation_12m,
+        x=rotation_plot.index, y=rotation_plot,
         mode="lines", line=dict(color="#DDDDDD", width=2),
         name="Rotation Score", fill='tozeroy', fillcolor='rgba(100,100,100,0.2)'
     ))
@@ -770,7 +783,7 @@ with tab4:
     fig_rs.add_hline(y=-_threshold, line_dash="dot",   line_color="#AA0000",
                      annotation_text=f"Risk Off (-{_threshold:.1f})", annotation_position="right")
     fig_rs.update_layout(
-        height=280, margin=dict(l=40, r=40, t=20, b=40),
+        height=_chart_height, margin=dict(l=40, r=40, t=20, b=40),
         paper_bgcolor="#000000", plot_bgcolor="#000000",
         font_color="white", showlegend=False,
         yaxis_title="Rotation Score",
