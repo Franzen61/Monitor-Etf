@@ -379,7 +379,7 @@ def safe_ret(series, days):
 
 # ========================
 # ROTATION SCORE SERIES
-# FIX #1 — rimosso * 100: scala ora coerente con soglie ±1.5 del pannello KPI
+# Scala * 100 — coerente con soglie KPI e hlines a ±150
 # ========================
 def compute_rotation_score_series(prices):
     ret_1m = prices.pct_change(21, fill_method=None)
@@ -393,8 +393,7 @@ def compute_rotation_score_series(prices):
     rar_mean = (rar_1m + rar_3m + rar_6m) / 3
     cyc  = rar_mean[CYCLICAL].mean(axis=1)
     def_ = rar_mean[DEFENSIVE].mean(axis=1)
-    # FIX #1: rimosso (cyc - def_) * 100 — scala incompatibile con soglie ±1.5
-    rotation_score = (cyc - def_)
+    rotation_score = (cyc - def_) * 100
     return rotation_score.dropna()
 
 
@@ -672,6 +671,9 @@ with tab4:
     def_score = rar_focus.loc[DEFENSIVES]
     rotation_score = cyc_score.mean() - def_score.mean()
 
+    # rotation_score dal pannello KPI è in scala RSR (es. -2.59)
+    # la serie storica è * 100, quindi le soglie del grafico sono ±150
+    # le soglie KPI restano ±1.5 perché rotation_score qui NON è moltiplicato per 100
     if rotation_score > 1.5:
         regime  = "🟢 ROTATION: RISK ON"
         bg      = "#003300"
@@ -706,10 +708,10 @@ with tab4:
         mode="lines", line=dict(color="#DDDDDD", width=2),
         name="Rotation Score", fill='tozeroy', fillcolor='rgba(100,100,100,0.2)'
     ))
-    fig_rs.add_hline(y=1.5,  line_dash="dot",  line_color="#00AA00",
+    fig_rs.add_hline(y=150,  line_dash="dot",  line_color="#00AA00",
                      annotation_text="Risk On",  annotation_position="right")
     fig_rs.add_hline(y=0.0,  line_dash="solid", line_color="#666666")
-    fig_rs.add_hline(y=-1.5, line_dash="dot",   line_color="#AA0000",
+    fig_rs.add_hline(y=-150, line_dash="dot",   line_color="#AA0000",
                      annotation_text="Risk Off", annotation_position="right")
     fig_rs.update_layout(
         height=280, margin=dict(l=40, r=40, t=20, b=40),
@@ -728,7 +730,7 @@ with tab4:
         <li><b>Calcolo RSR medio</b>: media dei rendimenti relativi su 1M, 3M e 6M</li>
         <li><b>Performance Ciclici</b>: XLK, XLY, XLF, XLI, XLE, XLB</li>
         <li><b>Performance Difensivi</b>: XLP, XLV, XLU, XLRE</li>
-        <li><b>Rotation Score</b> = Ciclici − Difensivi (scala coerente con soglie ±1.5)</li>
+        <li><b>Rotation Score</b> = (Ciclici − Difensivi) × 100</li>
     </ol>
     <h3 style="color:#ff9900;margin-top:25px;">🎯 Situazione Attuale</h3>
     <div style="background:#1a1a1a;padding:15px;border-radius:8px;margin:15px 0;">
