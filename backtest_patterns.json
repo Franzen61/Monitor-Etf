@@ -1,10 +1,10 @@
 {
   "metadata": {
     "titolo": "Backtest Rotation Score — Episodi Risk Off",
-    "versione": "1.0",
-    "aggiornato": "2026-03-15",
+    "versione": "1.1",
+    "aggiornato": "2026-03-16",
     "autore": "Franco",
-    "note": "Dataset costruito su serie storica 2021-2026. Soglia Risk Off dinamica (~-3.5). Conferma anti-whipsaw: 5 giorni consecutivi. Performance SPY calcolata da bottom SPY (non bottom RS)."
+    "note": "Dataset costruito su serie storica 2021-2026. Soglia Risk Off dinamica (~-3.5). Conferma anti-whipsaw: 5 giorni consecutivi. Performance SPY calcolata da bottom SPY (non bottom RS). v1.1: corretti RSI per date 21/07/2021, 24/10/2022, 04/02/2025."
   },
 
   "definizioni": {
@@ -74,7 +74,7 @@
     "segnale_positivo": "RS < -5 con VIX > 20 → attendi conferma bottom RS → entry ciclici o SPY con orizzonte 40 giorni lavorativi",
     "segnale_negativo": "RS < -5 con VIX < 20 e nessuna causa esogena → non entrare — probabile bear market in sviluppo con ulteriore leg down",
     "payoff_medio_casi_positivi": "+8.7% a +40gg (4 episodi su 5)",
-    "nota_timing": "Il bottom RS arriva IN MEDIA 33 giorni PRIMA del bottom SPY. Non usare il bottom RS come segnale di ingresso su SPY — usarlo come segnale di ingresso su ciclici."
+    "nota_timing": "In media il RS tocca il fondo 24 giorni prima del bottom SPY. Non usare il bottom RS come segnale di ingresso su SPY — usarlo come segnale di ingresso su ciclici."
   },
 
   "episodi": [
@@ -97,10 +97,10 @@
         "vix": 22.5,
         "move": 67.58,
         "ief_shy": 30.77,
-        "rsi_spy": 45.13,
-        "rsi_ciclici": 38.71,
-        "rsi_difensivi": 61.87,
-        "spread_cic_dif": -23.16
+        "rsi_spy": 57.90,
+        "rsi_ciclici": 53.45,
+        "rsi_difensivi": 61.40,
+        "spread_cic_dif": -7.95
       },
       "top_successivo": {
         "data": "2021-10-18",
@@ -110,7 +110,7 @@
         "spread": 18.77,
         "qualita": "VERO"
       },
-      "note": "Rotazione silenziosa estiva. MOVE bassissimo (67) — nessuno stress obbligazionario. Nonostante Pattern B ha dato esito positivo perché non era bear market strutturale."
+      "note": "Rotazione silenziosa estiva. MOVE bassissimo (67) — nessuno stress obbligazionario. Spread DIF-CIC corretto a -7.95 (precedente lettura errata a -23.16) — dominanza difensiva presente ma meno estrema. Nonostante Pattern B ha dato esito positivo perché non era bear market strutturale."
     },
     {
       "id": 2,
@@ -139,12 +139,12 @@
       "top_successivo": {
         "data": "2022-10-24",
         "rs_valore": null,
-        "rsi_ciclici": 54.00,
-        "rsi_difensivi": 50.14,
-        "spread": 3.86,
-        "qualita": "TECNICO"
+        "rsi_ciclici": 55.07,
+        "rsi_difensivi": 32.98,
+        "spread": 22.09,
+        "qualita": "VERO"
       },
-      "note": "UNICO CASO NEGATIVO. Bear market strutturale in sviluppo — Fed stringe aggressivamente. VIX=16 nonostante RS a -8.68 segnalava mercato non in panico ma in de-risking ordinato. Il bottom SPY vero arrivò a ottobre 2022 (ep.3). NON entrare con VIX < 20 senza causa esogena identificabile."
+      "note": "UNICO CASO NEGATIVO. Bear market strutturale in sviluppo — Fed stringe aggressivamente. VIX=16 nonostante RS a -8.68 segnalava mercato non in panico ma in de-risking ordinato. Il bottom SPY vero arrivò a ottobre 2022 (ep.3). NON entrare con VIX < 20 senza causa esogena identificabile. Top successivo VERO (corretto dopo rilettura RSI ottobre 2022: spread +22.09) — il bear market bottom era un genuino cambio di regime."
     },
     {
       "id": 3,
@@ -173,12 +173,12 @@
       "top_successivo": {
         "data": "2022-10-24",
         "rs_valore": null,
-        "rsi_ciclici": 54.00,
-        "rsi_difensivi": 50.14,
-        "spread": 3.86,
-        "qualita": "TECNICO"
+        "rsi_ciclici": 55.07,
+        "rsi_difensivi": 32.98,
+        "spread": 22.09,
+        "qualita": "VERO"
       },
-      "note": "CAPITOLAZIONE VERA. Unico episodio con RS LEADING su SPY (-14gg). MOVE=151 — stress obbligazionario estremo. Bottom definitivo del bear market 2022. Miglior payoff del dataset (+13.96% a 40gg). Top successivo tecnico — cambio regime non ancora consolidato."
+      "note": "CAPITOLAZIONE VERA. Unico episodio con RS LEADING su SPY (-14gg). MOVE=151 — stress obbligazionario estremo. Bottom definitivo del bear market 2022. Miglior payoff del dataset (+13.96% a 40gg). Top successivo VERO (corretto dopo rilettura RSI ottobre 2022: spread +22.09) — cambio di regime pienamente confermato."
     },
     {
       "id": 4,
@@ -199,20 +199,20 @@
         "vix": 13.88,
         "move": 112.69,
         "ief_shy": 14.36,
-        "rsi_spy": 33.55,
-        "rsi_ciclici": 34.02,
-        "rsi_difensivi": 51.08,
-        "spread_cic_dif": -17.06
+        "rsi_spy": 50.80,
+        "rsi_ciclici": 34.18,
+        "rsi_difensivi": 50.80,
+        "spread_cic_dif": -16.62
       },
       "top_successivo": {
         "data": "2025-02-04",
         "rs_valore": 7.05,
-        "rsi_ciclici": 38.02,
-        "rsi_difensivi": 56.76,
-        "spread": -18.74,
-        "qualita": "TECNICO"
+        "rsi_ciclici": 62.66,
+        "rsi_difensivi": 56.72,
+        "spread": 5.94,
+        "qualita": "VERO"
       },
-      "note": "SHOCK TECNICO carry trade yen. VIX=13.88 minimo del dataset. RS bottom ad agosto ma SPY bottom a ottobre (+58gg delta) — doppio minimo SPY. Episodio più lungo (70gg) per inerzia del RS. Top successivo TECNICO con spread negativo (-18.74) — rimbalzo senza cambio di regime confermato."
+      "note": "SHOCK TECNICO carry trade yen. VIX=13.88 minimo del dataset. RS bottom ad agosto ma SPY bottom a ottobre (+58gg delta) — doppio minimo SPY. Episodio più lungo (70gg) per inerzia del RS. Top successivo VERO (corretto dopo rilettura RSI febbraio 2025: spread +5.94) — il rimbalzo post-carry era un genuino regime risk-on, interrotto poi da shock esogeno Liberation Day aprile 2025."
     },
     {
       "id": 5,
@@ -246,7 +246,7 @@
         "spread": 17.76,
         "qualita": "VERO"
       },
-      "note": "Liberation Day dazi. VIX=33.82 ma MOVE=129 — stress equity elevato, bond meno estremo del 2022. IEF-SHY=11.93 minimo storico — curva strutturalmente compressa. Spread CIC-DIF quasi neutro (-2.74) — sell-off indiscriminato. Top successivo VERO (lug 2025) — primo cambio di regime confermato post-episodio."
+      "note": "Liberation Day dazi. VIX=33.82 ma MOVE=129 — stress equity elevato, bond meno estremo del 2022. IEF-SHY=11.93 minimo storico — curva strutturalmente compressa. Spread CIC-DIF quasi neutro (-2.74) — sell-off indiscriminato. Top successivo VERO (lug 2025, spread +17.76) — cambio di regime confermato."
     }
   ],
 
@@ -264,6 +264,9 @@
     "rs_min_storico": -8.69,
     "rs_min_medio": -7.93,
     "delta_rs_spy_medio_gg": 24,
-    "nota_timing": "In media il RS tocca il fondo 24 giorni prima del bottom SPY. Usare il bottom RS come segnale su ciclici, non su SPY."
+    "qualita_top_veri": 5,
+    "qualita_top_tecnici": 0,
+    "nota_qualita_top": "Dopo correzione RSI: tutti i 5 top successivi agli episodi sono VERI — nessun rimbalzo puramente tecnico nel dataset. Ogni episodio Risk Off è stato seguito da un genuino cambio di regime.",
+    "nota_timing": "In media il RS tocca il fondo 24 giorni prima del bottom SPY. Non usare il bottom RS come segnale di ingresso su SPY — usarlo come segnale di ingresso su ciclici."
   }
 }
