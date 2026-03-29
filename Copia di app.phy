@@ -95,7 +95,7 @@ TEMATICI_STRUCT = [
     ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE"],                                  "XWTS.DE"),
     ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
     ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],              "XDWI.DE"),
+    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],             "XDWI.DE"),
     ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],   "XDWM.DE"),
     ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                        "XDW0.DE"),
     ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],   "XDWU.DE"),
@@ -153,10 +153,15 @@ def load_prices(tickers):
     return close.dropna(how="all")
 
 
+# MODIFICA 1 — lookback portato da 60 a 90 giorni
+# Motivazione: compute_vwds usa cl.shift(1) per prev_close, quindi
+# la prima riga di ogni serie diventa NaN. Con 60 giorni e window=20
+# il margine era già stretto; 90 giorni garantisce robustezza anche
+# su ETF europei con giorni di chiusura asincroni rispetto agli USA.
 @st.cache_data(ttl=60*60)
 def load_ohlcv(tickers):
     end = datetime.today()
-    start = end - timedelta(days=60)
+    start = end - timedelta(days=90)   # era: 60
     raw = yf.download(
         tickers,
         start=start,
@@ -207,7 +212,6 @@ def load_pe_live_worldperatio(tickers):
             resp = requests.get(url, headers=headers, timeout=12)
             resp.raise_for_status()
             text = BeautifulSoup(resp.text, "html.parser").get_text()
-            # Pattern stabile: "P/E Ratio\n  36.46\n  13 March 2026"
             match = re.search(r"P/E Ratio\s*\n\s*([\d.]+)", text)
             if match:
                 result[ticker] = float(match.group(1))
@@ -218,7 +222,6 @@ def load_pe_live_worldperatio(tickers):
             result[ticker] = None
             _failed.append(ticker)
 
-    # Fallback yfinance per i ticker che worldperatio non ha restituito
     if _failed:
         for t in _failed:
             try:
@@ -228,10 +231,9 @@ def load_pe_live_worldperatio(tickers):
             except Exception:
                 result[t] = None
 
-    return result, _failed  # restituisce anche lista fallback per warning UI
+    return result, _failed
 
 
-# FIX #4 — cache lettura xlsx P/E (evita rilettura da disco ad ogni interazione radio)
 @st.cache_data(ttl=60*60*12)
 def load_pe_historical():
     try:
@@ -320,8 +322,62 @@ def load_thematic_prices():
 # ========================
 # VOLUME SIGNAL
 # ========================
-def compute_vwds(ohlcv_raw, ticker, window):
+
+# MODIFICA 2 — compute_vwds riscritta con logica ibrida direzionale + posizionale
+#
+# PROBLEMA ORIGINALE:
+#   buy_ratio = (cl - lo) / (hi - lo)
+#   Un titolo che chiude nella metà inferiore del range intra-day veniva
+#   classificato come pressione di vendita anche se il prezzo era salito
+#   rispetto alla chiusura precedente. Su mercati in trend questo produceva
+#   sistematicamente falsi segnali DISTRIBUZIONE.
+#
+# NUOVA LOGICA — due componenti ortogonali, sommate con pesi:
+#
+#   [A] Componente DIREZIONALE (peso w_dir=0.60) — OBV-style
+#       Confronta close vs close precedente (prev_close).
+#       Segno: +1 se salita, -1 se discesa.
+#       Forza: variazione % assoluta, cappata a 5% per isolare outlier da gap.
+#       Normalizzata sul max della finestra → range [-1, +1].
+#       Volume pesato per questa forza normalizzata.
+#
+#   [B] Componente POSIZIONALE (peso w_pos=0.40) — range intra-day
+#       Mantiene il concetto originale ma centrato su 0.5:
+#       pos_signal = (cl - lo) / (hi - lo) → trasformato in [-1, +1] via (ratio - 0.5) * 2.
+#       Cattura la pressione intra-sessione (dove chiude nel range).
+#       Peso ridotto per evitare che domini il segnale su candele con range stretto.
+#
+#   COMPOSIZIONE:
+#       buy_total  = w_dir * buy_vol_dir  + w_pos * buy_vol_pos
+#       sell_total = w_dir * sell_vol_dir + w_pos * sell_vol_pos
+#       score      = (buy_total - sell_total) / (buy_total + sell_total)  ∈ [-1, +1]
+#
+# GESTIONE NaN:
+#   - Prima riga sempre NaN per prev_close mancante: ignorata automaticamente
+#     dalle operazioni vettoriali (where/clip su NaN restituisce 0 o NaN
+#     che non contribuisce alle somme).
+#   - rng=0 (doji perfetti): fillna(0.5) → pos_signal=0, contributo neutro.
+#   - Serie troppo corte: guard clause min(3, window//3).
+#   - Qualsiasi eccezione residua: return np.nan (comportamento invariato).
+#
+def compute_vwds(ohlcv_raw, ticker, window, w_dir=0.60, w_pos=0.40):
+    """
+    Volume-Weighted Directional Score ibrido.
+
+    Parametri
+    ----------
+    ohlcv_raw : DataFrame (MultiIndex o singolo ticker)
+    ticker    : str
+    window    : int  — finestra in giorni (10 = breve, 20 = medio)
+    w_dir     : float — peso componente direzionale (default 0.60)
+    w_pos     : float — peso componente posizionale intra-day (default 0.40)
+
+    Ritorna
+    -------
+    float in [-1, +1] oppure np.nan se dati insufficienti
+    """
     try:
+        # ── Estrazione colonne ────────────────────────────────────────────────
         if isinstance(ohlcv_raw.columns, pd.MultiIndex):
             hi = ohlcv_raw["High"][ticker].dropna()
             lo = ohlcv_raw["Low"][ticker].dropna()
@@ -333,27 +389,76 @@ def compute_vwds(ohlcv_raw, ticker, window):
             cl = ohlcv_raw["Close"].dropna()
             vo = ohlcv_raw["Volume"].dropna()
 
-        idx = hi.index.intersection(lo.index).intersection(cl.index).intersection(vo.index)
+        # ── Allineamento indici e slicing sulla finestra ──────────────────────
+        idx = (hi.index
+               .intersection(lo.index)
+               .intersection(cl.index)
+               .intersection(vo.index))
         hi, lo, cl, vo = hi[idx], lo[idx], cl[idx], vo[idx]
         hi = hi.iloc[-window:]
         lo = lo.iloc[-window:]
         cl = cl.iloc[-window:]
         vo = vo.iloc[-window:]
 
-        if len(cl) < window // 2:
+        # Guard: almeno 3 barre valide oppure window//3 (es. 3 su finestra 10)
+        if len(cl) < max(3, window // 3):
             return np.nan
 
-        rng = hi - lo
-        rng = rng.replace(0, np.nan)
-        buy_ratio  = (cl - lo) / rng
-        buy_ratio  = buy_ratio.fillna(0.5).clip(0, 1)
-        buy_vol  = vo * buy_ratio
-        sell_vol = vo * (1 - buy_ratio)
-        total = buy_vol.sum() + sell_vol.sum()
-        if total == 0:
+        # ── [A] COMPONENTE DIREZIONALE ────────────────────────────────────────
+        prev_cl = cl.shift(1)
+
+        # Variazione percentuale rispetto alla chiusura precedente
+        # replace(0) evita divisione per zero su strumenti con prezzo nullo
+        pct_chg = (cl - prev_cl) / prev_cl.replace(0, np.nan)
+
+        # Segno della direzione (+1 / -1 / 0)
+        direction = np.sign(cl - prev_cl)
+
+        # Forza = |pct_chg| cappata al 5% — limita l'impatto di gap estremi
+        # (es. earnings surprise, split) che distorcerebbero la normalizzazione
+        strength = pct_chg.abs().clip(upper=0.05)
+
+        # Segnale direzionale grezzo: segno * forza
+        dir_signal = direction * strength
+
+        # Normalizzazione sul massimo della finestra → range [-1, +1]
+        # Se tutti i valori sono zero (mercato piatto) → segnale neutro
+        max_strength = strength.max()
+        if pd.isna(max_strength) or max_strength == 0:
+            dir_signal_norm = pd.Series(0.0, index=dir_signal.index)
+        else:
+            dir_signal_norm = (dir_signal / max_strength).fillna(0.0)
+
+        # Volume pesato per la componente direzionale
+        # NaN in dir_signal_norm (prima riga) → clip li porta a 0 → nessun contributo
+        buy_vol_dir  = vo * dir_signal_norm.clip(lower=0)
+        sell_vol_dir = vo * dir_signal_norm.clip(upper=0).abs()
+
+        # ── [B] COMPONENTE POSIZIONALE ────────────────────────────────────────
+        rng = (hi - lo).replace(0, np.nan)
+
+        # Posizione della chiusura nel range [0, 1]
+        # fillna(0.5): doji o range nullo → contributo neutro
+        pos_ratio = ((cl - lo) / rng).fillna(0.5).clip(0, 1)
+
+        # Centrato su 0 e scalato a [-1, +1]
+        # 0.5 → 0 (neutro), 1.0 → +1 (close al massimo), 0.0 → -1 (close al minimo)
+        pos_signal = (pos_ratio - 0.5) * 2
+
+        buy_vol_pos  = vo * pos_signal.clip(lower=0)
+        sell_vol_pos = vo * pos_signal.clip(upper=0).abs()
+
+        # ── COMPOSIZIONE PESATA ───────────────────────────────────────────────
+        buy_total  = (w_dir * buy_vol_dir  + w_pos * buy_vol_pos).sum()
+        sell_total = (w_dir * sell_vol_dir + w_pos * sell_vol_pos).sum()
+
+        total = buy_total + sell_total
+        if total == 0 or pd.isna(total):
             return np.nan
-        score = (buy_vol.sum() - sell_vol.sum()) / total
-        return round(score, 3)
+
+        score = (buy_total - sell_total) / total
+        return round(float(score), 3)
+
     except Exception:
         return np.nan
 
@@ -430,7 +535,6 @@ def safe_ret(series, days):
 
 # ========================
 # ROTATION SCORE SERIES
-# Scala * 100 — coerente con soglie KPI e hlines a ±150
 # ========================
 def compute_rotation_score_series(prices):
     ret_1m = prices.pct_change(21, fill_method=None)
@@ -449,33 +553,15 @@ def compute_rotation_score_series(prices):
 
 
 def compute_risk_off_episodes(series, threshold, confirm_days=3):
-    """
-    Identifica episodi Risk Off sulla serie del Rotation Score.
-
-    Regola anti-whipsaw:
-    - Un episodio INIZIA quando il RS chiude sotto -threshold
-      per confirm_days consecutivi.
-    - Un episodio TERMINA quando il RS chiude sopra -threshold
-      per confirm_days consecutivi.
-
-    Restituisce lista di dict con:
-      - start:      data primo giorno sotto soglia (pre-conferma)
-      - confirmed:  data in cui la conferma è completata
-      - end:        data uscita confermata (None se episodio aperto)
-      - duration:   giorni totali sotto soglia (da start a end/oggi)
-      - rs_min:     valore minimo RS durante l'episodio
-      - rs_min_date:data del minimo
-    """
     if series.empty:
         return []
 
     neg_threshold = -abs(threshold)
-    below = (series < neg_threshold).astype(int)
 
     episodes = []
-    in_episode  = False
-    ep_start    = None
-    ep_confirmed= None
+    in_episode   = False
+    ep_start     = None
+    ep_confirmed = None
     consec_below = 0
     consec_above = 0
 
@@ -486,7 +572,7 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
             if is_below:
                 consec_below += 1
                 if consec_below == 1:
-                    ep_start = date          # primo giorno sotto soglia
+                    ep_start = date
                 if consec_below >= confirm_days:
                     in_episode   = True
                     ep_confirmed = date
@@ -498,7 +584,6 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
             if not is_below:
                 consec_above += 1
                 if consec_above >= confirm_days:
-                    # episodio chiuso
                     ep_slice = series[ep_start:date]
                     episodes.append({
                         "start":       ep_start,
@@ -516,7 +601,6 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
             else:
                 consec_above = 0
 
-    # Episodio ancora aperto
     if in_episode and ep_start is not None:
         last_date = series.index[-1]
         ep_slice  = series[ep_start:]
@@ -569,7 +653,6 @@ def situazione(row):
 
 df["Situazione"] = df.apply(situazione, axis=1)
 
-# FIX #2 — rimosso ramo "NEUTRAL" irraggiungibile (situazione() non lo emette mai)
 def operativita(row):
     if row["Classifica"] <= 3 and row["Coerenza_Trend"] >= 4 and row["Delta_RS_5D"] > 0:
         return "🔥 LEADER"
@@ -771,7 +854,6 @@ with tab3:
                 return ["background-color:#1e1e1e;color:#ccc"] * len(row)
             return ["background-color:#000;color:white"] * len(row)
 
-        # FIX #3 — aggiunta evidenziazione minimo in rosso (simmetrico con massimo verde)
         def highlight_extremes(s):
             valid = s.dropna()
             if valid.empty:
@@ -808,9 +890,6 @@ with tab4:
     def_score = rar_focus.loc[DEFENSIVES]
     rotation_score = cyc_score.mean() - def_score.mean()
 
-    # rotation_score dal pannello KPI è in scala RSR (es. -2.59)
-    # la serie storica è * 100, quindi le soglie del grafico sono ±150
-    # le soglie KPI restano ±1.5 perché rotation_score qui NON è moltiplicato per 100
     if rotation_score > 1.5:
         regime  = "🟢 ROTATION: RISK ON"
         bg      = "#003300"
@@ -834,7 +913,6 @@ with tab4:
 
     rotation_series = compute_rotation_score_series(prices)
 
-    # Selettore TF — max disponibile dipende dal loader (6 anni di prezzi)
     tf_rot = st.radio(
         "Storico grafico",
         ["1A", "2A", "3A", "5A", "Max"],
@@ -849,12 +927,9 @@ with tab4:
     else:
         rotation_plot = rotation_series
 
-    # Soglie dinamiche calcolate sulla serie COMPLETA (non sul plot window)
-    # così rimangono stabili al variare del TF selezionato
     _rs_std    = float(rotation_series.std()) if len(rotation_series) > 5 else 5.0
     _threshold = round(_rs_std * 0.75, 2)
 
-    # Altezza grafico adattiva: più storia = più spazio verticale utile
     _chart_height = 280 if tf_rot == "1A" else 340
 
     fig_rs = go.Figure()
@@ -877,7 +952,6 @@ with tab4:
     )
     st.plotly_chart(fig_rs, width="stretch")
 
-    # ── EPISODI RISK OFF ─────────────────────────────────────────────────────
     with st.expander("🔬 Episodi Risk Off — analisi storica", expanded=False):
 
         confirm_sel = st.radio(
@@ -947,7 +1021,6 @@ with tab4:
                 }
             )
 
-            # Statistiche aggregate
             closed = [e for e in episodes if not e["open"]]
             if closed:
                 durate   = [e["duration"] for e in closed]
@@ -1114,7 +1187,6 @@ with tab6:
         index=2, horizontal=True
     )
 
-    # FIX #4 — lettura xlsx ora tramite funzione cachata
     pe_hist = load_pe_historical()
 
     if pe_hist is None:
@@ -1123,7 +1195,6 @@ with tab6:
         with st.spinner("Scarico P/E live da worldperatio.com..."):
             pe_live, _pe_fallback = load_pe_live_worldperatio(SECTORS)
 
-        # Warning se alcuni ticker hanno usato il fallback yfinance
         if _pe_fallback:
             st.markdown(
                 f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
@@ -1275,7 +1346,6 @@ with tab7:
         st.error("Impossibile scaricare i dati. Controlla la connessione.")
         st.stop()
 
-    # ── CONTROLLI ────────────────────────────────────────────────────────────
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
         tf_label = st.selectbox(
@@ -1292,7 +1362,6 @@ with tab7:
 
     tf_days_main = TF_DAYS[tf_label]
 
-    # ── BUILD DATAFRAME ───────────────────────────────────────────────────────
     rows_tem = []
     for sector, tickers, bm_ticker in TEMATICI_STRUCT:
         bm_ret = None
@@ -1334,7 +1403,6 @@ with tab7:
         st.warning("Nessun dato disponibile per i ticker tematici.")
         st.stop()
 
-    # ── SEZIONE 1: KPI + COERENZA DI GRUPPO ──────────────────────────────────
     st.markdown("---")
     st.markdown(f"### 1 · Coerenza intra-gruppo — {tf_label}")
 
@@ -1378,7 +1446,6 @@ with tab7:
             unsafe_allow_html=True,
         )
 
-    # ── BUILD coerenza_data ───────────────────────────────────────────────────
     coerenza_data = []
     for sector, tickers, bm_ticker in TEMATICI_STRUCT:
         grp = tem_df[tem_df["Gruppo"] == sector][tf_label].dropna()
@@ -1396,7 +1463,6 @@ with tab7:
 
     cdf_plot = pd.DataFrame(coerenza_data)
 
-    # ── LAYOUT DUE COLONNE ───────────────────────────────────────────────────
     col_chart, col_panel = st.columns([3, 2])
 
     with col_chart:
@@ -1497,7 +1563,6 @@ with tab7:
         )
         st.plotly_chart(fig_coh, use_container_width=True)
 
-    # ── PANNELLO INTERPRETATIVO ───────────────────────────────────────────────
     with col_panel:
 
         n_bm_pos     = (cdf_plot["BM_ret"] > 0).sum()
@@ -1625,7 +1690,6 @@ with tab7:
             unsafe_allow_html=True,
         )
 
-    # ── SEZIONE 2: TABELLA PERFORMANCE ────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 2 · Performance per timeframe")
 
@@ -1704,7 +1768,6 @@ with tab7:
         unsafe_allow_html=True
     )
 
-    # ── SEZIONE 3: TOP/BOTTOM 5 ───────────────────────────────────────────────
     st.markdown("---")
     st.markdown(f"### 3 · Top & Bottom 5 — {tf_label}  (tutti i gruppi)")
 
@@ -1743,7 +1806,6 @@ with tab7:
     with c_bot:
         st.plotly_chart(mini_bar(bot5, ascending=True, title="💀 Bottom 5"), use_container_width=True)
 
-    # ── SEZIONE 4: SCATTER QUADRANTI ─────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 4 · Scatter quadranti — performance assoluta vs delta benchmark")
 
@@ -1887,7 +1949,6 @@ with tab7:
         </div>
         """, unsafe_allow_html=True)
 
-    # ── LEGENDA FINALE ────────────────────────────────────────────────────────
     st.markdown("""
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
                 padding:10px 20px;margin-top:16px;font-size:0.78em;color:#555;">
@@ -1910,7 +1971,6 @@ with tab8:
         unsafe_allow_html=True
     )
 
-    # Carica JSON
     try:
         with open("backtest_patterns.json", "r", encoding="utf-8") as f:
             bt = json.load(f)
@@ -1924,7 +1984,6 @@ with tab8:
 
     if bt_ok:
 
-        # ── KPI AGGREGATE ─────────────────────────────────────────────────────
         stats = bt["statistiche_aggregate"]
         k1, k2, k3, k4, k5 = st.columns(5)
         kpi_bt = [
@@ -1952,7 +2011,6 @@ with tab8:
             unsafe_allow_html=True
         )
 
-        # ── REGOLE OPERATIVE ──────────────────────────────────────────────────
         st.markdown("### 📋 Regole operative")
         ro = bt["regola_operativa"]
         col_r1, col_r2 = st.columns(2)
@@ -1977,7 +2035,6 @@ with tab8:
                 unsafe_allow_html=True
             )
 
-        # ── TABELLA EPISODI ───────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 1 · Episodi storici")
 
@@ -2061,7 +2118,6 @@ with tab8:
             hide_index=True,
         )
 
-        # ── PATTERN CARDS ─────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 2 · Pattern di riferimento")
 
@@ -2089,7 +2145,6 @@ with tab8:
                     unsafe_allow_html=True
                 )
 
-        # ── NOTE EPISODI ──────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 3 · Note analitiche per episodio")
 
@@ -2110,7 +2165,6 @@ with tab8:
                     unsafe_allow_html=True
                 )
 
-        # ── REGOLA QUALITÀ TOP ────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 4 · Regola qualità top")
         rqt = bt["regola_qualita_top"]
@@ -2124,7 +2178,6 @@ with tab8:
             unsafe_allow_html=True
         )
 
-        # ── FOOTER AGGIORNAMENTO ─────────────────────────────────────────────
         st.markdown(
             f'<div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;'
             f'padding:8px 16px;margin-top:16px;font-size:0.75em;color:#444;">'
