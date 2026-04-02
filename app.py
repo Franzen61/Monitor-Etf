@@ -248,19 +248,53 @@ def load_pe_historical():
 
 @st.cache_data(ttl=60*60*6)
 def load_sp500_data(timeframe_days: int):
+    import requests
+    from io import StringIO
+
+    wiki = None
+
+    # Tentativo 1 — Wikipedia con StringIO (evita il parsing diretto di resp.text)
     try:
-        import requests
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         resp = requests.get(
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-            headers=headers
+            headers=headers, timeout=15
         )
-        tables = pd.read_html(resp.text, header=0)
-        wiki = tables[0][["Symbol", "GICS Sector"]].copy()
-        wiki.columns = ["Ticker", "Sector"]
-        wiki["Ticker"] = wiki["Ticker"].str.replace(".", "-", regex=False)
-    except Exception as e:
-        st.error(f"Errore Wikipedia: {e}")
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text), attrs={"id": "constituents"})
+        if tables:
+            raw = tables[0]
+            # colonne possibili a seconda della versione Wikipedia
+            sym_col  = next((c for c in raw.columns if "Symbol"  in str(c) or "Ticker" in str(c)), None)
+            sec_col  = next((c for c in raw.columns if "Sector"  in str(c) or "GICS"   in str(c)), None)
+            if sym_col and sec_col:
+                wiki = raw[[sym_col, sec_col]].copy()
+                wiki.columns = ["Ticker", "Sector"]
+                wiki["Ticker"] = wiki["Ticker"].str.replace(".", "-", regex=False)
+    except Exception:
+        pass
+
+    # Tentativo 2 — fallback su primo table se constituents non trovato
+    if wiki is None:
+        try:
+            tables = pd.read_html(StringIO(resp.text), header=0)
+            raw = tables[0]
+            sym_col = next((c for c in raw.columns if "Symbol" in str(c) or "Ticker" in str(c)), raw.columns[0])
+            sec_col = next((c for c in raw.columns if "Sector" in str(c) or "GICS"   in str(c)), raw.columns[3])
+            wiki = raw[[sym_col, sec_col]].copy()
+            wiki.columns = ["Ticker", "Sector"]
+            wiki["Ticker"] = wiki["Ticker"].astype(str).str.replace(".", "-", regex=False)
+        except Exception as e:
+            st.error(f"Errore caricamento lista S&P 500: {e}")
+            return pd.DataFrame()
+
+    if wiki is None or wiki.empty:
+        st.error("Lista S&P 500 non disponibile. Riprova tra qualche minuto.")
         return pd.DataFrame()
 
     tickers = wiki["Ticker"].tolist()
@@ -547,6 +581,39 @@ def compute_vol_multiplier(vol_confirmation):
         return 0.75
     else:
         return 0.5
+
+
+# ========================
+# INT.4 — DERIVATA BANDA ADATTIVA
+# ========================
+def compute_band_derivative(adaptive_threshold_series, window=10):
+    if adaptive_threshold_series.empty or len(adaptive_threshold_series) < window + 2:
+        return pd.Series(dtype=float), {
+            "deriv": float('nan'), "stato": "N/D", "color": "#888888",
+            "soglia_stretta": float('nan'), "soglia_larga": float('nan'), "deriv_std": float('nan'),
+        }
+    deriv     = adaptive_threshold_series.pct_change(window).dropna() * 100
+    deriv_std = float(deriv.std())
+    s_str     = -0.5 * deriv_std
+    s_lar     =  0.5 * deriv_std
+    deriv_now = float(deriv.iloc[-1]) if not deriv.empty else float('nan')
+    import math
+    if math.isnan(deriv_now):
+        stato, color = "N/D", "#888888"
+    elif deriv_now < s_str * 2:
+        stato, color = "STRETTA RAPIDA", "#ff4422"
+    elif deriv_now < s_str:
+        stato, color = "STRETTA", "#ffaa00"
+    elif deriv_now > s_lar * 2:
+        stato, color = "LARGA RAPIDA", "#44aaff"
+    elif deriv_now > s_lar:
+        stato, color = "LARGA", "#888888"
+    else:
+        stato, color = "STABILE", "#aaaaaa"
+    return deriv, {
+        "deriv": deriv_now, "stato": stato, "color": color,
+        "soglia_stretta": s_str, "soglia_larga": s_lar, "deriv_std": deriv_std,
+    }
 
 
 # ========================
@@ -907,6 +974,18 @@ with tab4:
     vol_mult  = compute_vol_multiplier(vol_conf)
     rotation_score_adjusted = rotation_score_v2_scalar * vol_mult
 
+    # ── Serie storiche + Int.4 (anticipate per il 4 box header) ─────
+    rotation_series_v1        = compute_rotation_score_series(prices)
+    rotation_series_v2        = compute_rotation_score_series_v2(prices).dropna()
+    adaptive_threshold_series = compute_adaptive_threshold(rotation_series_v2)
+    _rs_std_v1    = float(rotation_series_v1.std()) if len(rotation_series_v1) > 5 else 5.0
+    _threshold_v1 = round(_rs_std_v1 * 0.75, 2)
+    _threshold_v2_now = (
+        float(adaptive_threshold_series.iloc[-1])
+        if not adaptive_threshold_series.empty else _threshold_v1
+    )
+    band_deriv_series, band_stato = compute_band_derivative(adaptive_threshold_series, window=10)
+
     # ── Regime label ──────────────────────────────────────────────────
     if rotation_score_adjusted > 1.5:
         regime  = "🟢 ROTATION: RISK ON"
@@ -931,8 +1010,8 @@ with tab4:
         vol_conf_label = "❌ VOLUME CONTRADDICE"
         vol_conf_color = "#ff4422"
 
-    # ── Header: 3 box ────────────────────────────────────────────────
-    col_box1, col_box2, col_box3 = st.columns(3)
+    # ── Header: 4 box ────────────────────────────────────────────────
+    col_box1, col_box2, col_box3, col_box4 = st.columns(4)
 
     with col_box1:
         st.markdown(f"""
@@ -987,25 +1066,30 @@ with tab4:
         </div>
         """, unsafe_allow_html=True)
 
+    with col_box4:
+        _bd_stato = band_stato["stato"] if "band_stato" in dir() else "N/D"
+        _bd_color = band_stato["color"] if "band_stato" in dir() else "#888"
+        _bd_deriv = band_stato["deriv"] if "band_stato" in dir() else float("nan")
+        _bd_std   = band_stato.get("deriv_std", float("nan"))
+        _bd_deriv_str = f"{_bd_deriv:+.2f}%" if not (isinstance(_bd_deriv, float) and _bd_deriv != _bd_deriv) else "N/D"
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;padding:16px 24px;
+                    border-radius:12px;text-align:center;">
+            <div style="font-size:0.72em;color:#888;letter-spacing:0.08em;
+                        text-transform:uppercase;margin-bottom:6px;">Banda — Velocità</div>
+            <div style="font-size:1.0em;font-weight:bold;color:{band_stato['color']};margin-top:4px;">
+                {band_stato['stato']}
+            </div>
+            <div style="font-size:0.85em;color:#aaa;margin-top:6px;">
+                Δ banda 10gg: <b style="color:{band_stato['color']}">{band_stato['deriv']:+.2f}%</b>
+            </div>
+            <div style="font-size:0.72em;color:#555;margin-top:4px;">
+                σ derivata: {band_stato['deriv_std']:.2f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-
-    # ── Serie storiche ────────────────────────────────────────────────
-    rotation_series_v1 = compute_rotation_score_series(prices)
-    rotation_series_v2 = compute_rotation_score_series_v2(prices).dropna()
-
-    # Soglia adattiva sulla serie v2 (Intervento 2)
-    adaptive_threshold_series = compute_adaptive_threshold(rotation_series_v2)
-
-    # Soglia fissa v1
-    _rs_std_v1    = float(rotation_series_v1.std()) if len(rotation_series_v1) > 5 else 5.0
-    _threshold_v1 = round(_rs_std_v1 * 0.75, 2)
-
-    # Soglia adattiva corrente
-    _threshold_v2_now = (
-        float(adaptive_threshold_series.iloc[-1])
-        if not adaptive_threshold_series.empty
-        else _threshold_v1
-    )
 
     # ── Timeframe selector ────────────────────────────────────────────
     tf_rot = st.radio(
@@ -1156,16 +1240,66 @@ with tab4:
         )
         st.plotly_chart(fig_v2, use_container_width=True)
 
+    # ── Int.4 — grafico derivata banda adattiva ──────────────────────
+    if not band_deriv_series.empty:
+        plot_deriv = slice_series(band_deriv_series, days_sel)
+        if not plot_deriv.empty:
+            import math as _m4
+            _s_str = band_stato["soglia_stretta"]
+            _s_lar = band_stato["soglia_larga"]
+            _s_ok  = not _m4.isnan(_s_str)
+            _l_ok  = not _m4.isnan(_s_lar)
+            bar_colors_d = []
+            for _v in plot_deriv:
+                if _s_ok and _v < _s_str * 2:   bar_colors_d.append("#ff4422")
+                elif _s_ok and _v < _s_str:      bar_colors_d.append("#ffaa00")
+                elif _l_ok and _v > _s_lar * 2:  bar_colors_d.append("#44aaff")
+                elif _v > 0:                      bar_colors_d.append("#555555")
+                else:                             bar_colors_d.append("#333333")
+            fig_d4 = go.Figure()
+            fig_d4.add_trace(go.Bar(
+                x=plot_deriv.index, y=plot_deriv,
+                marker_color=bar_colors_d,
+                hovertemplate="Delta banda: %{y:+.2f}%<extra></extra>",
+            ))
+            fig_d4.add_hline(y=0, line_color="#555", line_width=1)
+            if _s_ok:
+                fig_d4.add_hline(y=_s_str, line_dash="dot", line_color="#ffaa00",
+                    annotation_text="stretta", annotation_font=dict(size=8, color="#ffaa00"),
+                    annotation_position="right")
+                fig_d4.add_hline(y=_s_str * 2, line_dash="dot", line_color="#ff4422",
+                    annotation_text="stretta rapida", annotation_font=dict(size=8, color="#ff4422"),
+                    annotation_position="right")
+            if _l_ok:
+                fig_d4.add_hline(y=_s_lar * 2, line_dash="dot", line_color="#44aaff",
+                    annotation_text="larga rapida", annotation_font=dict(size=8, color="#44aaff"),
+                    annotation_position="right")
+            fig_d4.update_layout(
+                height=155,
+                margin=dict(l=40, r=110, t=22, b=30),
+                paper_bgcolor="#000", plot_bgcolor="#000",
+                font_color="white", showlegend=False,
+                title=dict(
+                    text="Int.4 — Velocita banda adattiva (10gg)  |  rosso=stringe [pericolo imminente] · grigio=stabile · blu=allarga [segnale ritarda]",
+                    font=dict(size=9, color="#555"), x=0, xanchor="left"
+                ),
+                yaxis=dict(gridcolor="#1a1a1a", ticksuffix="%", title=""),
+                xaxis=dict(gridcolor="#1a1a1a"),
+            )
+            st.plotly_chart(fig_d4, use_container_width=True)
+
     # ── Legenda interventi ────────────────────────────────────────────
+    _bd_leg_str = f"{band_stato['stato']} ({band_stato['deriv']:+.2f}%)"
     st.markdown(f"""
     <div style="background:#080808;border:1px solid #1a1a1a;border-radius:8px;
                 padding:12px 20px;margin-top:2px;font-size:0.80em;color:#666;
                 display:flex;gap:28px;flex-wrap:wrap;">
         <span><b style="color:#ff9900">Int.1</b> — peso 1W=15% leading edge · pesi 15·25·35·25</span>
-        <span><b style="color:#ff9900">Int.2</b> — soglia adattiva rolling(252)×0.75
-              · ora: ±{_threshold_v2_now:.2f} vs fissa ±{_threshold_v1:.2f}</span>
-        <span><b style="color:#ff9900">Int.3</b> — vol mult ×{vol_mult}
+        <span><b style="color:#ff9900">Int.2</b> — soglia adattiva rolling(252)x0.75
+              · ora: +/-{_threshold_v2_now:.2f} vs fissa +/-{_threshold_v1:.2f}</span>
+        <span><b style="color:#ff9900">Int.3</b> — vol mult x{vol_mult}
               (score {vol_conf:+.2f}) · <span style="color:{vol_conf_color}">{vol_conf_label}</span></span>
+        <span><b style="color:#ff9900">Int.4</b> — banda: <span style="color:{band_stato['color']}">{_bd_leg_str}</span></span>
     </div>
     """, unsafe_allow_html=True)
 
