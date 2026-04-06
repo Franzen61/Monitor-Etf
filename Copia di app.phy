@@ -85,6 +85,18 @@ FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
 
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 
+# ── ROS 2.0 weights (Intervento 1) ──────────────────────────────────────────
+WEIGHTS_V2 = {"1W": 0.15, "1M": 0.25, "3M": 0.35, "6M": 0.25}
+
+# ── Vol Confirmation score map (Intervento 3) ────────────────────────────────
+VOL_SCORE_MAP = {
+    "[B+M+] ACCUMULO":   +1.0,
+    "[B+M-] INVERSIONE": +0.3,
+    "[B~ M~] INDECISO":   0.0,
+    "[B-M+] ESAURIM.":   -0.3,
+    "[B-M-] DISTRIBUZ":  -1.0,
+}
+
 # ========================
 # STRUTTURA ETF TEMATICI
 # ========================
@@ -153,15 +165,10 @@ def load_prices(tickers):
     return close.dropna(how="all")
 
 
-# MODIFICA 1 — lookback portato da 60 a 90 giorni
-# Motivazione: compute_vwds usa cl.shift(1) per prev_close, quindi
-# la prima riga di ogni serie diventa NaN. Con 60 giorni e window=20
-# il margine era già stretto; 90 giorni garantisce robustezza anche
-# su ETF europei con giorni di chiusura asincroni rispetto agli USA.
 @st.cache_data(ttl=60*60)
 def load_ohlcv(tickers):
     end = datetime.today()
-    start = end - timedelta(days=90)   # era: 60
+    start = end - timedelta(days=90)
     raw = yf.download(
         tickers,
         start=start,
@@ -172,7 +179,6 @@ def load_ohlcv(tickers):
     return raw
 
 
-# URL worldperatio per ogni settore — stessa metodologia del pe_historical.xlsx
 WORLDPE_URLS = {
     "XLK":  "https://worldperatio.com/sector/sp-500-information-technology",
     "XLY":  "https://worldperatio.com/sector/sp-500-consumer-discretionary",
@@ -190,11 +196,6 @@ WORLDPE_URLS = {
 
 @st.cache_data(ttl=60*60*6)
 def load_pe_live_worldperatio(tickers):
-    """
-    Scarica il P/E live da worldperatio.com — stessa fonte e metodologia
-    del pe_historical.xlsx (outlier excluded, log-normalized).
-    Fallback su yfinance se la pagina non è raggiungibile.
-    """
     import requests
     import re
     from bs4 import BeautifulSoup
@@ -247,19 +248,53 @@ def load_pe_historical():
 
 @st.cache_data(ttl=60*60*6)
 def load_sp500_data(timeframe_days: int):
+    import requests
+    from io import StringIO
+
+    wiki = None
+
+    # Tentativo 1 — Wikipedia con StringIO (evita il parsing diretto di resp.text)
     try:
-        import requests
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         resp = requests.get(
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-            headers=headers
+            headers=headers, timeout=15
         )
-        tables = pd.read_html(resp.text, header=0)
-        wiki = tables[0][["Symbol", "GICS Sector"]].copy()
-        wiki.columns = ["Ticker", "Sector"]
-        wiki["Ticker"] = wiki["Ticker"].str.replace(".", "-", regex=False)
-    except Exception as e:
-        st.error(f"Errore Wikipedia: {e}")
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text), attrs={"id": "constituents"})
+        if tables:
+            raw = tables[0]
+            # colonne possibili a seconda della versione Wikipedia
+            sym_col  = next((c for c in raw.columns if "Symbol"  in str(c) or "Ticker" in str(c)), None)
+            sec_col  = next((c for c in raw.columns if "Sector"  in str(c) or "GICS"   in str(c)), None)
+            if sym_col and sec_col:
+                wiki = raw[[sym_col, sec_col]].copy()
+                wiki.columns = ["Ticker", "Sector"]
+                wiki["Ticker"] = wiki["Ticker"].str.replace(".", "-", regex=False)
+    except Exception:
+        pass
+
+    # Tentativo 2 — fallback su primo table se constituents non trovato
+    if wiki is None:
+        try:
+            tables = pd.read_html(StringIO(resp.text), header=0)
+            raw = tables[0]
+            sym_col = next((c for c in raw.columns if "Symbol" in str(c) or "Ticker" in str(c)), raw.columns[0])
+            sec_col = next((c for c in raw.columns if "Sector" in str(c) or "GICS"   in str(c)), raw.columns[3])
+            wiki = raw[[sym_col, sec_col]].copy()
+            wiki.columns = ["Ticker", "Sector"]
+            wiki["Ticker"] = wiki["Ticker"].astype(str).str.replace(".", "-", regex=False)
+        except Exception as e:
+            st.error(f"Errore caricamento lista S&P 500: {e}")
+            return pd.DataFrame()
+
+    if wiki is None or wiki.empty:
+        st.error("Lista S&P 500 non disponibile. Riprova tra qualche minuto.")
         return pd.DataFrame()
 
     tickers = wiki["Ticker"].tolist()
@@ -322,62 +357,8 @@ def load_thematic_prices():
 # ========================
 # VOLUME SIGNAL
 # ========================
-
-# MODIFICA 2 — compute_vwds riscritta con logica ibrida direzionale + posizionale
-#
-# PROBLEMA ORIGINALE:
-#   buy_ratio = (cl - lo) / (hi - lo)
-#   Un titolo che chiude nella metà inferiore del range intra-day veniva
-#   classificato come pressione di vendita anche se il prezzo era salito
-#   rispetto alla chiusura precedente. Su mercati in trend questo produceva
-#   sistematicamente falsi segnali DISTRIBUZIONE.
-#
-# NUOVA LOGICA — due componenti ortogonali, sommate con pesi:
-#
-#   [A] Componente DIREZIONALE (peso w_dir=0.60) — OBV-style
-#       Confronta close vs close precedente (prev_close).
-#       Segno: +1 se salita, -1 se discesa.
-#       Forza: variazione % assoluta, cappata a 5% per isolare outlier da gap.
-#       Normalizzata sul max della finestra → range [-1, +1].
-#       Volume pesato per questa forza normalizzata.
-#
-#   [B] Componente POSIZIONALE (peso w_pos=0.40) — range intra-day
-#       Mantiene il concetto originale ma centrato su 0.5:
-#       pos_signal = (cl - lo) / (hi - lo) → trasformato in [-1, +1] via (ratio - 0.5) * 2.
-#       Cattura la pressione intra-sessione (dove chiude nel range).
-#       Peso ridotto per evitare che domini il segnale su candele con range stretto.
-#
-#   COMPOSIZIONE:
-#       buy_total  = w_dir * buy_vol_dir  + w_pos * buy_vol_pos
-#       sell_total = w_dir * sell_vol_dir + w_pos * sell_vol_pos
-#       score      = (buy_total - sell_total) / (buy_total + sell_total)  ∈ [-1, +1]
-#
-# GESTIONE NaN:
-#   - Prima riga sempre NaN per prev_close mancante: ignorata automaticamente
-#     dalle operazioni vettoriali (where/clip su NaN restituisce 0 o NaN
-#     che non contribuisce alle somme).
-#   - rng=0 (doji perfetti): fillna(0.5) → pos_signal=0, contributo neutro.
-#   - Serie troppo corte: guard clause min(3, window//3).
-#   - Qualsiasi eccezione residua: return np.nan (comportamento invariato).
-#
 def compute_vwds(ohlcv_raw, ticker, window, w_dir=0.60, w_pos=0.40):
-    """
-    Volume-Weighted Directional Score ibrido.
-
-    Parametri
-    ----------
-    ohlcv_raw : DataFrame (MultiIndex o singolo ticker)
-    ticker    : str
-    window    : int  — finestra in giorni (10 = breve, 20 = medio)
-    w_dir     : float — peso componente direzionale (default 0.60)
-    w_pos     : float — peso componente posizionale intra-day (default 0.40)
-
-    Ritorna
-    -------
-    float in [-1, +1] oppure np.nan se dati insufficienti
-    """
     try:
-        # ── Estrazione colonne ────────────────────────────────────────────────
         if isinstance(ohlcv_raw.columns, pd.MultiIndex):
             hi = ohlcv_raw["High"][ticker].dropna()
             lo = ohlcv_raw["Low"][ticker].dropna()
@@ -389,7 +370,6 @@ def compute_vwds(ohlcv_raw, ticker, window, w_dir=0.60, w_pos=0.40):
             cl = ohlcv_raw["Close"].dropna()
             vo = ohlcv_raw["Volume"].dropna()
 
-        # ── Allineamento indici e slicing sulla finestra ──────────────────────
         idx = (hi.index
                .intersection(lo.index)
                .intersection(cl.index)
@@ -400,55 +380,31 @@ def compute_vwds(ohlcv_raw, ticker, window, w_dir=0.60, w_pos=0.40):
         cl = cl.iloc[-window:]
         vo = vo.iloc[-window:]
 
-        # Guard: almeno 3 barre valide oppure window//3 (es. 3 su finestra 10)
         if len(cl) < max(3, window // 3):
             return np.nan
 
-        # ── [A] COMPONENTE DIREZIONALE ────────────────────────────────────────
-        prev_cl = cl.shift(1)
-
-        # Variazione percentuale rispetto alla chiusura precedente
-        # replace(0) evita divisione per zero su strumenti con prezzo nullo
-        pct_chg = (cl - prev_cl) / prev_cl.replace(0, np.nan)
-
-        # Segno della direzione (+1 / -1 / 0)
+        prev_cl   = cl.shift(1)
+        pct_chg   = (cl - prev_cl) / prev_cl.replace(0, np.nan)
         direction = np.sign(cl - prev_cl)
-
-        # Forza = |pct_chg| cappata al 5% — limita l'impatto di gap estremi
-        # (es. earnings surprise, split) che distorcerebbero la normalizzazione
-        strength = pct_chg.abs().clip(upper=0.05)
-
-        # Segnale direzionale grezzo: segno * forza
+        strength  = pct_chg.abs().clip(upper=0.05)
         dir_signal = direction * strength
 
-        # Normalizzazione sul massimo della finestra → range [-1, +1]
-        # Se tutti i valori sono zero (mercato piatto) → segnale neutro
         max_strength = strength.max()
         if pd.isna(max_strength) or max_strength == 0:
             dir_signal_norm = pd.Series(0.0, index=dir_signal.index)
         else:
             dir_signal_norm = (dir_signal / max_strength).fillna(0.0)
 
-        # Volume pesato per la componente direzionale
-        # NaN in dir_signal_norm (prima riga) → clip li porta a 0 → nessun contributo
         buy_vol_dir  = vo * dir_signal_norm.clip(lower=0)
         sell_vol_dir = vo * dir_signal_norm.clip(upper=0).abs()
 
-        # ── [B] COMPONENTE POSIZIONALE ────────────────────────────────────────
         rng = (hi - lo).replace(0, np.nan)
-
-        # Posizione della chiusura nel range [0, 1]
-        # fillna(0.5): doji o range nullo → contributo neutro
         pos_ratio = ((cl - lo) / rng).fillna(0.5).clip(0, 1)
-
-        # Centrato su 0 e scalato a [-1, +1]
-        # 0.5 → 0 (neutro), 1.0 → +1 (close al massimo), 0.0 → -1 (close al minimo)
         pos_signal = (pos_ratio - 0.5) * 2
 
         buy_vol_pos  = vo * pos_signal.clip(lower=0)
         sell_vol_pos = vo * pos_signal.clip(upper=0).abs()
 
-        # ── COMPOSIZIONE PESATA ───────────────────────────────────────────────
         buy_total  = (w_dir * buy_vol_dir  + w_pos * buy_vol_pos).sum()
         sell_total = (w_dir * sell_vol_dir + w_pos * sell_vol_pos).sum()
 
@@ -518,7 +474,6 @@ def rsr(asset_ret, benchmark_ret):
     return ((1 + asset_ret/100) / (1 + benchmark_ret/100) - 1) * 100
 
 def safe_ret(series, days):
-    """Always returns float or np.nan — never None."""
     try:
         s = series.dropna()
         if days is None:
@@ -534,7 +489,7 @@ def safe_ret(series, days):
 
 
 # ========================
-# ROTATION SCORE SERIES
+# ROTATION SCORE — v1 (originale, usata in Tab8/Backtest)
 # ========================
 def compute_rotation_score_series(prices):
     ret_1m = prices.pct_change(21, fill_method=None)
@@ -552,12 +507,123 @@ def compute_rotation_score_series(prices):
     return rotation_score.dropna()
 
 
+# ========================
+# ROTATION SCORE — v2 (ROS 2.0, Intervento 1)
+# ========================
+def compute_rotation_score_series_v2(prices):
+    """
+    ROS 2.0 — momentum relativo multi-timeframe con leading edge 1W.
+    Pesi: 1W=15% · 1M=25% · 3M=35% · 6M=25%
+    """
+    ret_1w  = prices.pct_change(5,   fill_method=None)
+    ret_1m  = prices.pct_change(21,  fill_method=None)
+    ret_3m  = prices.pct_change(63,  fill_method=None)
+    ret_6m  = prices.pct_change(126, fill_method=None)
+
+    rar_1w = ret_1w.sub(ret_1w[BENCHMARK], axis=0)
+    rar_1m = ret_1m.sub(ret_1m[BENCHMARK], axis=0)
+    rar_3m = ret_3m.sub(ret_3m[BENCHMARK], axis=0)
+    rar_6m = ret_6m.sub(ret_6m[BENCHMARK], axis=0)
+
+    rar_weighted = (
+        rar_1w * WEIGHTS_V2["1W"] +
+        rar_1m * WEIGHTS_V2["1M"] +
+        rar_3m * WEIGHTS_V2["3M"] +
+        rar_6m * WEIGHTS_V2["6M"]
+    )
+
+    cyc  = rar_weighted[CYCLICAL].mean(axis=1)
+    def_ = rar_weighted[DEFENSIVE].mean(axis=1)
+    return (cyc - def_) * 100
+
+
+# ========================
+# ADAPTIVE THRESHOLD — Intervento 2
+# ========================
+def compute_adaptive_threshold(series, window=252, multiplier=0.75):
+    """
+    Soglia adattiva basata su rolling std a 252 giorni.
+    In laterale si restringe, in trend si allarga.
+    """
+    rolling_std = series.rolling(window=window, min_periods=63).std()
+    return (rolling_std * multiplier).dropna()
+
+
+# ========================
+# VOL CONFIRMATION — Intervento 3
+# ========================
+def compute_vol_confirmation(vol_plain_dict, cyclicals, defensives):
+    """
+    Vol Confirmation Score: media vol ciclici − media vol difensivi.
+    Range teorico [-2, +2]. Positivo = volume conferma risk-on.
+    """
+    cyc_scores = [
+        VOL_SCORE_MAP.get(vol_plain_dict.get(t, "[B~ M~] INDECISO"), 0.0)
+        for t in cyclicals
+    ]
+    def_scores = [
+        VOL_SCORE_MAP.get(vol_plain_dict.get(t, "[B~ M~] INDECISO"), 0.0)
+        for t in defensives
+    ]
+    cyc_mean = float(np.mean(cyc_scores)) if cyc_scores else 0.0
+    def_mean = float(np.mean(def_scores)) if def_scores else 0.0
+    return round(cyc_mean - def_mean, 3)
+
+
+def compute_vol_multiplier(vol_confirmation):
+    """
+    Traduce il Vol Confirmation Score in moltiplicatore scalare.
+    >= +0.5 → 1.0 (pieno) · [0, 0.5) → 0.75 (parziale) · < 0 → 0.5 (dimezzato)
+    """
+    if vol_confirmation >= 0.5:
+        return 1.0
+    elif vol_confirmation >= 0.0:
+        return 0.75
+    else:
+        return 0.5
+
+
+# ========================
+# INT.4 — DERIVATA BANDA ADATTIVA
+# ========================
+def compute_band_derivative(adaptive_threshold_series, window=10):
+    if adaptive_threshold_series.empty or len(adaptive_threshold_series) < window + 2:
+        return pd.Series(dtype=float), {
+            "deriv": float('nan'), "stato": "N/D", "color": "#888888",
+            "soglia_stretta": float('nan'), "soglia_larga": float('nan'), "deriv_std": float('nan'),
+        }
+    deriv     = adaptive_threshold_series.pct_change(window).dropna() * 100
+    deriv_std = float(deriv.std())
+    s_str     = -0.5 * deriv_std
+    s_lar     =  0.5 * deriv_std
+    deriv_now = float(deriv.iloc[-1]) if not deriv.empty else float('nan')
+    import math
+    if math.isnan(deriv_now):
+        stato, color = "N/D", "#888888"
+    elif deriv_now < s_str * 2:
+        stato, color = "STRETTA RAPIDA", "#ff4422"
+    elif deriv_now < s_str:
+        stato, color = "STRETTA", "#ffaa00"
+    elif deriv_now > s_lar * 2:
+        stato, color = "LARGA RAPIDA", "#44aaff"
+    elif deriv_now > s_lar:
+        stato, color = "LARGA", "#888888"
+    else:
+        stato, color = "STABILE", "#aaaaaa"
+    return deriv, {
+        "deriv": deriv_now, "stato": stato, "color": color,
+        "soglia_stretta": s_str, "soglia_larga": s_lar, "deriv_std": deriv_std,
+    }
+
+
+# ========================
+# RISK OFF EPISODES
+# ========================
 def compute_risk_off_episodes(series, threshold, confirm_days=3):
     if series.empty:
         return []
 
     neg_threshold = -abs(threshold)
-
     episodes = []
     in_episode   = False
     ep_start     = None
@@ -878,41 +944,154 @@ with tab3:
 
 
 # ========================
-# TAB 4 — ROTAZIONE SETTORIALE
+# TAB 4 — ROTAZIONE SETTORIALE v2
 # ========================
 with tab4:
 
     CYCLICALS  = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
 
-    rar_focus = rsr_df[["1M","3M","6M"]].mean(axis=1)
-    cyc_score = rar_focus.loc[CYCLICALS]
-    def_score = rar_focus.loc[DEFENSIVES]
-    rotation_score = cyc_score.mean() - def_score.mean()
+    # ── ROS v1 scalar (vecchio, per confronto numerico) ──────────────
+    rar_focus_v1     = rsr_df[["1M","3M","6M"]].mean(axis=1)
+    rotation_score_v1 = (
+        rar_focus_v1.loc[CYCLICALS].mean() - rar_focus_v1.loc[DEFENSIVES].mean()
+    )
 
-    if rotation_score > 1.5:
+    # ── ROS v2 scalar (Intervento 1) ─────────────────────────────────
+    rar_weighted_scalar = (
+        rsr_df["1W"] * WEIGHTS_V2["1W"] +
+        rsr_df["1M"] * WEIGHTS_V2["1M"] +
+        rsr_df["3M"] * WEIGHTS_V2["3M"] +
+        rsr_df["6M"] * WEIGHTS_V2["6M"]
+    )
+    rotation_score_v2_scalar = (
+        rar_weighted_scalar.loc[CYCLICALS].mean() -
+        rar_weighted_scalar.loc[DEFENSIVES].mean()
+    )
+
+    # ── Intervento 3 — Vol Confirmation ──────────────────────────────
+    vol_conf  = compute_vol_confirmation(vol_plain, CYCLICALS, DEFENSIVES)
+    vol_mult  = compute_vol_multiplier(vol_conf)
+    rotation_score_adjusted = rotation_score_v2_scalar * vol_mult
+
+    # ── Serie storiche + Int.4 (anticipate per il 4 box header) ─────
+    rotation_series_v1        = compute_rotation_score_series(prices)
+    rotation_series_v2        = compute_rotation_score_series_v2(prices).dropna()
+    adaptive_threshold_series = compute_adaptive_threshold(rotation_series_v2)
+    _rs_std_v1    = float(rotation_series_v1.std()) if len(rotation_series_v1) > 5 else 5.0
+    _threshold_v1 = round(_rs_std_v1 * 0.75, 2)
+    _threshold_v2_now = (
+        float(adaptive_threshold_series.iloc[-1])
+        if not adaptive_threshold_series.empty else _threshold_v1
+    )
+    band_deriv_series, band_stato = compute_band_derivative(adaptive_threshold_series, window=10)
+
+    # ── Regime label ──────────────────────────────────────────────────
+    if rotation_score_adjusted > 1.5:
         regime  = "🟢 ROTATION: RISK ON"
         bg      = "#003300"
-        comment = "Ciclici dominanti su timeframe medio"
-    elif rotation_score < -1.5:
+        comment = "Ciclici dominanti — volume confermato" if vol_mult == 1.0 else "Ciclici dominanti — volume parziale"
+    elif rotation_score_adjusted < -1.5:
         regime  = "🔴 ROTATION: RISK OFF"
         bg      = "#330000"
         comment = "Difensivi dominanti su timeframe medio"
     else:
         regime  = "🟡 ROTATION: NEUTRAL"
         bg      = "#333300"
-        comment = "Equilibrio tra ciclici e difensivi"
+        comment = "Equilibrio ciclici/difensivi"
 
-    st.markdown(f"""
-    <div style="background:{bg};padding:20px 40px;border-radius:12px;
-                text-align:center;margin-bottom:15px;">
-        <h2 style="margin:0 0 8px 0;">{regime}</h2>
-        <h3 style="margin:0; font-weight:normal;">Rotation Score: {rotation_score:.2f}</h3>
-    </div>
-    """, unsafe_allow_html=True)
+    if vol_conf >= 0.5:
+        vol_conf_label = "✅ VOLUME CONFERMA"
+        vol_conf_color = "#00ff55"
+    elif vol_conf >= 0.0:
+        vol_conf_label = "⚠️ VOLUME PARZIALE"
+        vol_conf_color = "#ffaa00"
+    else:
+        vol_conf_label = "❌ VOLUME CONTRADDICE"
+        vol_conf_color = "#ff4422"
 
-    rotation_series = compute_rotation_score_series(prices)
+    # ── Header: 4 box ────────────────────────────────────────────────
+    col_box1, col_box2, col_box3, col_box4 = st.columns(4)
 
+    with col_box1:
+        st.markdown(f"""
+        <div style="background:{bg};padding:16px 24px;border-radius:12px;text-align:center;">
+            <div style="font-size:0.72em;color:#888;letter-spacing:0.08em;
+                        text-transform:uppercase;margin-bottom:4px;">ROS Adjusted</div>
+            <div style="font-size:1.5em;font-weight:bold;">{regime}</div>
+            <div style="font-size:1.0em;margin-top:4px;color:#aaa;">{rotation_score_adjusted:.2f}</div>
+            <div style="font-size:0.78em;color:#666;margin-top:4px;">{comment}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_box2:
+        delta_v1_v2 = rotation_score_v2_scalar - rotation_score_v1
+        delta_color = "#00ff55" if delta_v1_v2 >= 0 else "#ff4422"
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;padding:16px 24px;
+                    border-radius:12px;text-align:center;">
+            <div style="font-size:0.72em;color:#888;letter-spacing:0.08em;
+                        text-transform:uppercase;margin-bottom:6px;">Confronto v1 → v2 → adj</div>
+            <div style="font-size:0.88em;color:#aaa;">
+                v1 (33/33/33): <b style="color:#dddddd">{rotation_score_v1:.2f}</b>
+            </div>
+            <div style="font-size:0.88em;color:#aaa;margin-top:4px;">
+                v2 (15/25/35/25): <b style="color:#dddddd">{rotation_score_v2_scalar:.2f}</b>
+            </div>
+            <div style="font-size:0.88em;color:#aaa;margin-top:4px;">
+                adjusted (×{vol_mult}): <b style="color:#ff9900">{rotation_score_adjusted:.2f}</b>
+            </div>
+            <div style="font-size:0.80em;margin-top:6px;color:{delta_color};">
+                Δ v1→v2: {delta_v1_v2:+.2f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_box3:
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;padding:16px 24px;
+                    border-radius:12px;text-align:center;">
+            <div style="font-size:0.72em;color:#888;letter-spacing:0.08em;
+                        text-transform:uppercase;margin-bottom:6px;">Vol Confirmation</div>
+            <div style="font-size:1.1em;font-weight:bold;color:{vol_conf_color};margin-top:4px;">
+                {vol_conf_label}
+            </div>
+            <div style="font-size:0.88em;color:#aaa;margin-top:6px;">
+                Score: <b style="color:{vol_conf_color}">{vol_conf:+.2f}</b>
+                &nbsp;·&nbsp; Mult: <b style="color:#ff9900">×{vol_mult}</b>
+            </div>
+            <div style="font-size:0.75em;color:#555;margin-top:6px;">
+                Ciclici vol − Difensivi vol
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_box4:
+        _bd_stato = band_stato["stato"] if "band_stato" in dir() else "N/D"
+        _bd_color = band_stato["color"] if "band_stato" in dir() else "#888"
+        _bd_deriv = band_stato["deriv"] if "band_stato" in dir() else float("nan")
+        _bd_std   = band_stato.get("deriv_std", float("nan"))
+        _bd_deriv_str = f"{_bd_deriv:+.2f}%" if not (isinstance(_bd_deriv, float) and _bd_deriv != _bd_deriv) else "N/D"
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;padding:16px 24px;
+                    border-radius:12px;text-align:center;">
+            <div style="font-size:0.72em;color:#888;letter-spacing:0.08em;
+                        text-transform:uppercase;margin-bottom:6px;">Banda — Velocità</div>
+            <div style="font-size:1.0em;font-weight:bold;color:{band_stato['color']};margin-top:4px;">
+                {band_stato['stato']}
+            </div>
+            <div style="font-size:0.85em;color:#aaa;margin-top:6px;">
+                Δ banda 10gg: <b style="color:{band_stato['color']}">{band_stato['deriv']:+.2f}%</b>
+            </div>
+            <div style="font-size:0.72em;color:#555;margin-top:4px;">
+                σ derivata: {band_stato['deriv_std']:.2f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+
+    # ── Timeframe selector ────────────────────────────────────────────
     tf_rot = st.radio(
         "Storico grafico",
         ["1A", "2A", "3A", "5A", "Max"],
@@ -921,39 +1100,256 @@ with tab4:
     )
     _tf_rot_days = {"1A": 365, "2A": 730, "3A": 1095, "5A": 1825, "Max": 99999}
 
-    if not rotation_series.empty:
-        cutoff_date  = rotation_series.index.max() - pd.Timedelta(days=_tf_rot_days[tf_rot])
-        rotation_plot = rotation_series[rotation_series.index >= cutoff_date]
-    else:
-        rotation_plot = rotation_series
+    def slice_series(s, days):
+        if s.empty:
+            return s
+        cutoff = s.index.max() - pd.Timedelta(days=days)
+        return s[s.index >= cutoff]
 
-    _rs_std    = float(rotation_series.std()) if len(rotation_series) > 5 else 5.0
-    _threshold = round(_rs_std * 0.75, 2)
+    days_sel      = _tf_rot_days[tf_rot]
+    plot_v1       = slice_series(rotation_series_v1, days_sel)
+    plot_v2       = slice_series(rotation_series_v2, days_sel)
+    plot_adaptive = slice_series(adaptive_threshold_series, days_sel)
 
-    _chart_height = 280 if tf_rot == "1A" else 340
-
-    fig_rs = go.Figure()
-    fig_rs.add_trace(go.Scatter(
-        x=rotation_plot.index, y=rotation_plot,
-        mode="lines", line=dict(color="#DDDDDD", width=2),
-        name="Rotation Score", fill='tozeroy', fillcolor='rgba(100,100,100,0.2)'
-    ))
-    fig_rs.add_hline(y=_threshold,  line_dash="dot",  line_color="#00AA00",
-                     annotation_text=f"Risk On (+{_threshold:.1f})",  annotation_position="right")
-    fig_rs.add_hline(y=0.0,         line_dash="solid", line_color="#666666")
-    fig_rs.add_hline(y=-_threshold, line_dash="dot",   line_color="#AA0000",
-                     annotation_text=f"Risk Off (-{_threshold:.1f})", annotation_position="right")
-    fig_rs.update_layout(
-        height=_chart_height, margin=dict(l=40, r=40, t=20, b=40),
-        paper_bgcolor="#000000", plot_bgcolor="#000000",
-        font_color="white", showlegend=False,
-        yaxis_title="Rotation Score",
-        yaxis=dict(gridcolor="#222222")
+    # ── Label confronto ───────────────────────────────────────────────
+    st.markdown(
+        '<div style="color:#555;font-size:0.78em;letter-spacing:0.06em;'
+        'text-transform:uppercase;margin-bottom:6px;">'
+        '◀ ROS v1 — pesi flat · soglia fissa &nbsp;|&nbsp; '
+        'ROS v2 — pesi 15/25/35/25 · soglia adattiva · vol adjusted ▶'
+        '</div>',
+        unsafe_allow_html=True
     )
-    st.plotly_chart(fig_rs, width="stretch")
 
+    col_g1, col_g2 = st.columns(2)
+
+    # ── Grafico sinistro: ROS v1 ──────────────────────────────────────
+    with col_g1:
+        fig_v1 = go.Figure()
+        fig_v1.add_trace(go.Scatter(
+            x=plot_v1.index, y=plot_v1,
+            mode="lines",
+            line=dict(color="#888888", width=1.5),
+            name="ROS v1",
+            fill='tozeroy',
+            fillcolor='rgba(100,100,100,0.12)'
+        ))
+        fig_v1.add_hline(
+            y=_threshold_v1, line_dash="dot", line_color="#00AA00",
+            annotation_text=f"Risk On +{_threshold_v1:.1f} (fissa)",
+            annotation_position="right",
+            annotation_font=dict(size=9, color="#00AA00")
+        )
+        fig_v1.add_hline(y=0.0, line_dash="solid", line_color="#444444")
+        fig_v1.add_hline(
+            y=-_threshold_v1, line_dash="dot", line_color="#AA0000",
+            annotation_text=f"Risk Off -{_threshold_v1:.1f} (fissa)",
+            annotation_position="right",
+            annotation_font=dict(size=9, color="#AA0000")
+        )
+        fig_v1.update_layout(
+            height=300,
+            margin=dict(l=40, r=90, t=30, b=40),
+            paper_bgcolor="#000000", plot_bgcolor="#000000",
+            font_color="white", showlegend=False,
+            title=dict(
+                text="ROS v1 — originale",
+                font=dict(size=10, color="#666"), x=0, xanchor="left"
+            ),
+            yaxis=dict(gridcolor="#1a1a1a", title=""),
+            xaxis=dict(gridcolor="#1a1a1a")
+        )
+        st.plotly_chart(fig_v1, use_container_width=True)
+
+    # ── Grafico destro: ROS v2 adjusted ──────────────────────────────
+    with col_g2:
+        fig_v2 = go.Figure()
+
+        # Banda soglia adattiva
+        if not plot_adaptive.empty and not plot_v2.empty:
+            common_idx   = plot_v2.index.intersection(plot_adaptive.index)
+            if len(common_idx) > 0:
+                adap_aligned = plot_adaptive.reindex(common_idx).ffill()
+                fig_v2.add_trace(go.Scatter(
+                    x=common_idx, y=adap_aligned,
+                    mode="lines",
+                    line=dict(color="#00AA00", width=1, dash="dot"),
+                    showlegend=False, opacity=0.55
+                ))
+                fig_v2.add_trace(go.Scatter(
+                    x=common_idx, y=-adap_aligned,
+                    mode="lines",
+                    line=dict(color="#AA0000", width=1, dash="dot"),
+                    fill='tonexty',
+                    fillcolor='rgba(80,80,80,0.07)',
+                    showlegend=False, opacity=0.55
+                ))
+
+        fig_v2.add_trace(go.Scatter(
+            x=plot_v2.index, y=plot_v2,
+            mode="lines",
+            line=dict(color="#DDDDDD", width=2),
+            name="ROS v2",
+            fill='tozeroy',
+            fillcolor='rgba(120,120,120,0.13)'
+        ))
+
+        # Diamante punto corrente adjusted
+        if not plot_v2.empty:
+            last_date = plot_v2.index[-1]
+            last_val  = float(plot_v2.iloc[-1])
+            adj_val   = last_val * vol_mult
+            mk_color  = "#00ff55" if vol_mult == 1.0 else "#ffaa00" if vol_mult == 0.75 else "#ff4422"
+            fig_v2.add_trace(go.Scatter(
+                x=[last_date], y=[adj_val],
+                mode="markers",
+                marker=dict(size=12, color=mk_color, symbol="diamond",
+                            line=dict(color="white", width=1.5)),
+                name=f"adj ×{vol_mult}",
+                hovertemplate=f"ROS adjusted: {adj_val:.2f}<extra></extra>"
+            ))
+
+        fig_v2.add_hline(y=0.0, line_dash="solid", line_color="#444444")
+
+        # Annotazioni soglia adattiva corrente
+        if not plot_v2.empty:
+            fig_v2.add_annotation(
+                x=plot_v2.index[-1], y=_threshold_v2_now,
+                text=f"+{_threshold_v2_now:.1f} adattiva",
+                showarrow=False, font=dict(size=9, color="#00AA00"),
+                xanchor="right", yanchor="bottom"
+            )
+            fig_v2.add_annotation(
+                x=plot_v2.index[-1], y=-_threshold_v2_now,
+                text=f"-{_threshold_v2_now:.1f} adattiva",
+                showarrow=False, font=dict(size=9, color="#AA0000"),
+                xanchor="right", yanchor="top"
+            )
+
+        fig_v2.update_layout(
+            height=300,
+            margin=dict(l=40, r=90, t=30, b=40),
+            paper_bgcolor="#000000", plot_bgcolor="#000000",
+            font_color="white", showlegend=False,
+            title=dict(
+                text=f"ROS v2 — adjusted · ◆ = punto corrente ×{vol_mult}",
+                font=dict(size=10, color="#666"), x=0, xanchor="left"
+            ),
+            yaxis=dict(gridcolor="#1a1a1a", title=""),
+            xaxis=dict(gridcolor="#1a1a1a")
+        )
+        st.plotly_chart(fig_v2, use_container_width=True)
+
+    # ── Int.4 — grafico derivata banda adattiva ──────────────────────
+    if not band_deriv_series.empty:
+        plot_deriv = slice_series(band_deriv_series, days_sel)
+        if not plot_deriv.empty:
+            import math as _m4
+            _s_str = band_stato["soglia_stretta"]
+            _s_lar = band_stato["soglia_larga"]
+            _s_ok  = not _m4.isnan(_s_str)
+            _l_ok  = not _m4.isnan(_s_lar)
+            bar_colors_d = []
+            for _v in plot_deriv:
+                if _s_ok and _v < _s_str * 2:   bar_colors_d.append("#ff4422")
+                elif _s_ok and _v < _s_str:      bar_colors_d.append("#ffaa00")
+                elif _l_ok and _v > _s_lar * 2:  bar_colors_d.append("#44aaff")
+                elif _v > 0:                      bar_colors_d.append("#555555")
+                else:                             bar_colors_d.append("#333333")
+            fig_d4 = go.Figure()
+            fig_d4.add_trace(go.Bar(
+                x=plot_deriv.index, y=plot_deriv,
+                marker_color=bar_colors_d,
+                hovertemplate="Delta banda: %{y:+.2f}%<extra></extra>",
+            ))
+            fig_d4.add_hline(y=0, line_color="#555", line_width=1)
+            if _s_ok:
+                fig_d4.add_hline(y=_s_str, line_dash="dot", line_color="#ffaa00",
+                    annotation_text="stretta", annotation_font=dict(size=8, color="#ffaa00"),
+                    annotation_position="right")
+                fig_d4.add_hline(y=_s_str * 2, line_dash="dot", line_color="#ff4422",
+                    annotation_text="stretta rapida", annotation_font=dict(size=8, color="#ff4422"),
+                    annotation_position="right")
+            if _l_ok:
+                fig_d4.add_hline(y=_s_lar * 2, line_dash="dot", line_color="#44aaff",
+                    annotation_text="larga rapida", annotation_font=dict(size=8, color="#44aaff"),
+                    annotation_position="right")
+            fig_d4.update_layout(
+                height=155,
+                margin=dict(l=40, r=110, t=22, b=30),
+                paper_bgcolor="#000", plot_bgcolor="#000",
+                font_color="white", showlegend=False,
+                title=dict(
+                    text="Int.4 — Velocita banda adattiva (10gg)  |  rosso=stringe [pericolo imminente] · grigio=stabile · blu=allarga [segnale ritarda]",
+                    font=dict(size=9, color="#555"), x=0, xanchor="left"
+                ),
+                yaxis=dict(gridcolor="#1a1a1a", ticksuffix="%", title=""),
+                xaxis=dict(gridcolor="#1a1a1a"),
+            )
+            st.plotly_chart(fig_d4, use_container_width=True)
+
+    # ── Legenda interventi ────────────────────────────────────────────
+    _bd_leg_str = f"{band_stato['stato']} ({band_stato['deriv']:+.2f}%)"
+    st.markdown(f"""
+    <div style="background:#080808;border:1px solid #1a1a1a;border-radius:8px;
+                padding:12px 20px;margin-top:2px;font-size:0.80em;color:#666;
+                display:flex;gap:28px;flex-wrap:wrap;">
+        <span><b style="color:#ff9900">Int.1</b> — peso 1W=15% leading edge · pesi 15·25·35·25</span>
+        <span><b style="color:#ff9900">Int.2</b> — soglia adattiva rolling(252)x0.75
+              · ora: +/-{_threshold_v2_now:.2f} vs fissa +/-{_threshold_v1:.2f}</span>
+        <span><b style="color:#ff9900">Int.3</b> — vol mult x{vol_mult}
+              (score {vol_conf:+.2f}) · <span style="color:{vol_conf_color}">{vol_conf_label}</span></span>
+        <span><b style="color:#ff9900">Int.4</b> — banda: <span style="color:{band_stato['color']}">{_bd_leg_str}</span></span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Expander: Vol Confirmation dettaglio ──────────────────────────
+    with st.expander("🔬 Dettaglio Vol Confirmation per settore", expanded=False):
+        vol_detail_rows = []
+        for t in CYCLICALS + DEFENSIVES:
+            plain = vol_plain.get(t, "[B~ M~] INDECISO")
+            score = VOL_SCORE_MAP.get(plain, 0.0)
+            vol_detail_rows.append({
+                "Ticker":     t,
+                "Tipo":       "Ciclico" if t in CYCLICALS else "Difensivo",
+                "Vol Signal": plain,
+                "Score":      score,
+            })
+        vd_df = pd.DataFrame(vol_detail_rows)
+
+        def style_vol_score(val):
+            if val > 0.5:  return "color:#00ff55;font-weight:bold"
+            if val > 0:    return "color:#88cc88"
+            if val < -0.5: return "color:#ff4422;font-weight:bold"
+            if val < 0:    return "color:#cc6644"
+            return "color:#666"
+
+        def style_tipo(val):
+            return "color:#ffaa00" if val == "Ciclico" else "color:#44aaff"
+
+        st.dataframe(
+            vd_df.style
+                .map(style_vol_score, subset=["Score"])
+                .map(style_tipo,      subset=["Tipo"]),
+            use_container_width=True, hide_index=True,
+        )
+
+        cyc_avg = np.mean([VOL_SCORE_MAP.get(vol_plain.get(t, "[B~ M~] INDECISO"), 0.0) for t in CYCLICALS])
+        def_avg = np.mean([VOL_SCORE_MAP.get(vol_plain.get(t, "[B~ M~] INDECISO"), 0.0) for t in DEFENSIVES])
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;'
+            f'padding:8px 16px;margin-top:6px;font-size:0.82em;color:#888;'
+            f'display:flex;gap:28px;flex-wrap:wrap;">'
+            f'<span>Media ciclici: <b style="color:#ffaa00">{cyc_avg:+.2f}</b></span>'
+            f'<span>Media difensivi: <b style="color:#44aaff">{def_avg:+.2f}</b></span>'
+            f'<span>Vol confirmation: <b style="color:{vol_conf_color}">{vol_conf:+.2f}</b></span>'
+            f'<span>Multiplier: <b style="color:#ff9900">×{vol_mult}</b></span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # ── Expander: Episodi Risk Off (su serie v2 + soglia adattiva) ────
     with st.expander("🔬 Episodi Risk Off — analisi storica", expanded=False):
-
         confirm_sel = st.radio(
             "Giorni conferma anti-whipsaw",
             [2, 3, 5],
@@ -963,7 +1359,7 @@ with tab4:
         )
 
         episodes = compute_risk_off_episodes(
-            rotation_series, _threshold, confirm_days=confirm_sel
+            rotation_series_v2, _threshold_v2_now, confirm_days=confirm_sel
         )
 
         if not episodes:
@@ -971,17 +1367,17 @@ with tab4:
         else:
             st.markdown(
                 f'<div style="color:#555;font-size:0.78em;margin-bottom:8px;">'
-                f'Soglia: RS &lt; <b style="color:#AA0000">-{_threshold:.1f}</b> · '
-                f'Conferma: <b>{confirm_sel}</b> giorni consecutivi · '
-                f'Episodi identificati: <b style="color:#ff9900">{len(episodes)}</b>'
+                f'Soglia adattiva corrente: RS &lt; <b style="color:#AA0000">-{_threshold_v2_now:.1f}</b> · '
+                f'Conferma: <b>{confirm_sel}</b> giorni · '
+                f'Episodi: <b style="color:#ff9900">{len(episodes)}</b>'
                 f'</div>',
                 unsafe_allow_html=True
             )
 
             rows_ep = []
             for i, ep in enumerate(episodes, 1):
-                stato = "🔴 APERTO" if ep["open"] else "✅ chiuso"
-                end_str = "in corso" if ep["open"] else ep["end"].strftime("%d/%m/%Y")
+                stato   = "🔴 APERTO" if ep["open"] else "✅ chiuso"
+                end_str = "in corso"  if ep["open"] else ep["end"].strftime("%d/%m/%Y")
                 rows_ep.append({
                     "#":           i,
                     "Inizio":      ep["start"].strftime("%d/%m/%Y"),
@@ -992,7 +1388,6 @@ with tab4:
                     "Data minimo": ep["rs_min_date"].strftime("%d/%m/%Y"),
                     "Stato":       stato,
                 })
-
             ep_df = pd.DataFrame(rows_ep)
 
             def style_ep(row):
@@ -1003,8 +1398,8 @@ with tab4:
             def style_rs_min(val):
                 try:
                     v = float(val)
-                    if v < -7:  return "color:#ff4422;font-weight:bold"
-                    if v < -5:  return "color:#ffaa00;font-weight:bold"
+                    if v < -7: return "color:#ff4422;font-weight:bold"
+                    if v < -5: return "color:#ffaa00;font-weight:bold"
                     return "color:#888888"
                 except Exception:
                     return ""
@@ -1013,8 +1408,7 @@ with tab4:
                 ep_df.style
                     .apply(style_ep, axis=1)
                     .map(style_rs_min, subset=["RS minimo"]),
-                use_container_width=True,
-                hide_index=True,
+                use_container_width=True, hide_index=True,
                 column_config={
                     "Durata (gg)": st.column_config.NumberColumn("Durata (gg)", format="%d"),
                     "RS minimo":   st.column_config.NumberColumn("RS minimo",   format="%.2f"),
@@ -1023,8 +1417,8 @@ with tab4:
 
             closed = [e for e in episodes if not e["open"]]
             if closed:
-                durate   = [e["duration"] for e in closed]
-                minimi   = [e["rs_min"]   for e in closed]
+                durate = [e["duration"] for e in closed]
+                minimi = [e["rs_min"]   for e in closed]
                 st.markdown(
                     f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
                     f'padding:10px 20px;margin-top:8px;font-size:0.82em;color:#888;'
@@ -1038,19 +1432,34 @@ with tab4:
                     unsafe_allow_html=True
                 )
 
+    # ── Spiegazione ───────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="background:#0d0d0d;padding:25px;border-radius:10px;font-size:1.05em;line-height:1.7;">
-    <h3 style="color:#ff9900;margin-top:0;">📊 Come si Calcola il Rotation Score</h3>
-    Il <b>Rotation Score</b> misura la forza relativa tra settori <b>Ciclici</b> e <b>Difensivi</b> rispetto al benchmark SPY.
-    <ol style="margin:15px 0;">
-        <li><b>Calcolo RSR medio</b>: media dei rendimenti relativi su 1M, 3M e 6M</li>
-        <li><b>Performance Ciclici</b>: XLK, XLY, XLF, XLI, XLE, XLB</li>
-        <li><b>Performance Difensivi</b>: XLP, XLV, XLU, XLRE</li>
-        <li><b>Rotation Score</b> = (Ciclici − Difensivi) × 100</li>
-    </ol>
-    <h3 style="color:#ff9900;margin-top:25px;">🎯 Situazione Attuale</h3>
-    <div style="background:#1a1a1a;padding:15px;border-radius:8px;margin:15px 0;">
-        <b>Rotation Score:</b> {rotation_score:.2f} → <b>{comment}</b>
+    <div style="background:#0d0d0d;padding:25px;border-radius:10px;
+                font-size:1.0em;line-height:1.7;margin-top:8px;">
+    <h3 style="color:#ff9900;margin-top:0;">📊 ROS 2.0 — Tre Interventi</h3>
+
+    <b style="color:#ff9900">Intervento 1 — Leading Edge 1W</b><br>
+    Aggiunto timeframe settimanale (peso 15%) per catturare rotazioni emergenti prima
+    che si consolidino nel mensile. Pesi: 1W=15% · 1M=25% · 3M=35% · 6M=25%.<br><br>
+
+    <b style="color:#ff9900">Intervento 2 — Soglia Adattiva</b><br>
+    Soglia calcolata su rolling std 252gg × 0.75. In mercati laterali si restringe
+    (meno falsi segnali), in mercati direzionali si allarga (segnali più significativi).
+    Corrente: <b style="color:#ff9900">±{_threshold_v2_now:.2f}</b>
+    vs fissa v1: <b style="color:#888">±{_threshold_v1:.2f}</b><br><br>
+
+    <b style="color:#ff9900">Intervento 3 — Vol Confirmation</b><br>
+    Aggrega i VWDS settoriali in un Vol Confirmation Score ({vol_conf:+.2f}).
+    Quando il volume contraddice il momentum relativo, il segnale viene scalato:
+    ×1.0 (confermato) · ×0.75 (parziale) · ×0.5 (contradditorio).<br>
+    Stato corrente: <b style="color:{vol_conf_color}">{vol_conf_label}</b> → ×{vol_mult}
+
+    <h3 style="color:#ff9900;margin-top:20px;">🎯 Situazione Attuale</h3>
+    <div style="background:#1a1a1a;padding:15px;border-radius:8px;">
+        ROS v1: <b>{rotation_score_v1:.2f}</b> →
+        ROS v2: <b>{rotation_score_v2_scalar:.2f}</b> →
+        ROS adjusted: <b style="color:#ff9900">{rotation_score_adjusted:.2f}</b>
+        · {comment}
     </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1228,12 +1637,12 @@ with tab6:
                 dev_live = None
 
             def valuation_label(dev):
-                if dev is None:           return "N/D",       "#888888"
-                if dev < 0:               return "Cheap",     "#00ff55"
-                if dev < 0.5:             return "Fair",      "#aaaaaa"
-                if dev < 1.5:             return "Moderato",  "#ffff44"
-                if dev < 2.5:             return "Overvalued","#ffaa00"
-                return "Expensive", "#ff4422"
+                if dev is None:      return "N/D",       "#888888"
+                if dev < 0:          return "Cheap",     "#00ff55"
+                if dev < 0.5:        return "Fair",      "#aaaaaa"
+                if dev < 1.5:        return "Moderato",  "#ffff44"
+                if dev < 2.5:        return "Overvalued","#ffaa00"
+                return "Expensive",  "#ff4422"
 
             label, color = valuation_label(dev_live)
             rows.append({
@@ -1565,10 +1974,10 @@ with tab7:
 
     with col_panel:
 
-        n_bm_pos     = (cdf_plot["BM_ret"] > 0).sum()
-        n_bm_tot     = cdf_plot["BM_ret"].dropna().__len__()
+        n_bm_pos       = (cdf_plot["BM_ret"] > 0).sum()
+        n_bm_tot       = cdf_plot["BM_ret"].dropna().__len__()
         global_breadth = round(pos_pct, 1)
-        avg_bm_ret   = round(cdf_plot["BM_ret"].mean(), 1)
+        avg_bm_ret     = round(cdf_plot["BM_ret"].mean(), 1)
 
         if n_bm_pos >= 9:
             regime_txt   = "RISK ON DIFFUSO"
@@ -1587,9 +1996,9 @@ with tab7:
             regime_color = "#ff4422"
             regime_icon  = "🔴"
 
-        sorted_cdf   = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
-        bm_positivi  = sorted_cdf[sorted_cdf["BM_ret"] >  0]
-        bm_negativi  = sorted_cdf[sorted_cdf["BM_ret"] <= 0].sort_values("BM_ret")
+        sorted_cdf  = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
+        bm_positivi = sorted_cdf[sorted_cdf["BM_ret"] >  0]
+        bm_negativi = sorted_cdf[sorted_cdf["BM_ret"] <= 0].sort_values("BM_ret")
 
         all_positive = len(bm_negativi) == 0
         all_negative = len(bm_positivi) == 0
@@ -1737,10 +2146,10 @@ with tab7:
         try:
             if x is None:
                 return "—"
-            f = float(x)
-            if np.isnan(f):
+            f_val = float(x)
+            if np.isnan(f_val):
                 return "—"
-            return f"{f:+.1f}%"
+            return f"{f_val:+.1f}%"
         except Exception:
             return "—"
 
@@ -1922,8 +2331,7 @@ with tab7:
             plot_bgcolor="#000000",
             font=dict(color="white", size=10),
             title=dict(
-                text=(f"Scatter {sc_tf} — asse X: ritorno assoluto  |  asse Y: delta vs benchmark gruppo  |  "
-                      f"quadranti: LEADER (alto-dx) · ALPHA PURO (alto-sx) · BETA PURO (basso-dx) · EVITARE (basso-sx)"),
+                text=(f"Scatter {sc_tf} — asse X: ritorno assoluto  |  asse Y: delta vs benchmark gruppo"),
                 font=dict(size=10, color="#666")
             ),
             xaxis=dict(title=f"Ritorno assoluto {sc_tf} (%)", gridcolor="#1a1a1a",
@@ -1943,8 +2351,8 @@ with tab7:
                     padding:10px 20px;margin-top:4px;font-size:0.80em;color:#888;
                     display:flex;gap:24px;flex-wrap:wrap;">
             <span><b style="color:#00ff55">LEADER</b> — ritorno positivo E sovraperforma il benchmark</span>
-            <span><b style="color:#44aaff">ALPHA PURO</b> — ritorno negativo ma batte il benchmark (difensivo relativo)</span>
-            <span><b style="color:#ffaa00">BETA PURO</b> — ritorno positivo ma sotto il benchmark (cavalca l'onda settoriale)</span>
+            <span><b style="color:#44aaff">ALPHA PURO</b> — ritorno negativo ma batte il benchmark</span>
+            <span><b style="color:#ffaa00">BETA PURO</b> — ritorno positivo ma sotto il benchmark</span>
             <span><b style="color:#ff4422">EVITARE</b> — ritorno negativo E sottoperforma il benchmark</span>
         </div>
         """, unsafe_allow_html=True)
@@ -1952,8 +2360,7 @@ with tab7:
     st.markdown("""
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
                 padding:10px 20px;margin-top:16px;font-size:0.78em;color:#555;">
-        <b style="color:#ff9900">vs BM</b> = differenza ritorno tematico − ritorno benchmark di gruppo (stesso TF) ·
-        I benchmark sono ETF globali Xtrackers (XDWT.DE, XDWC.DE…) tranne Immobiliare (EPRA.MI) e Cross-Sector (SWDA.MI)
+        <b style="color:#ff9900">vs BM</b> = differenza ritorno tematico − ritorno benchmark di gruppo (stesso TF)
     </div>
     """, unsafe_allow_html=True)
 
@@ -1987,11 +2394,11 @@ with tab8:
         stats = bt["statistiche_aggregate"]
         k1, k2, k3, k4, k5 = st.columns(5)
         kpi_bt = [
-            (k1, "Win Rate",           stats["win_rate"],                          "#00ff55"),
+            (k1, "Win Rate",           stats["win_rate"],                              "#00ff55"),
             (k2, "Payoff medio +40gg", f"+{stats['spy_perf_40_media_positivi']:.1f}%", "#00ff55"),
             (k3, "Payoff medio +20gg", f"+{stats['spy_perf_20_media_positivi']:.1f}%", "#88cc88"),
-            (k4, "Durata media ep.",   f"{stats['durata_media_gg']:.0f} gg",       "#ff9900"),
-            (k5, "RS min medio",       f"{stats['rs_min_medio']:.2f}",             "#ff4422"),
+            (k4, "Durata media ep.",   f"{stats['durata_media_gg']:.0f} gg",           "#ff9900"),
+            (k5, "RS min medio",       f"{stats['rs_min_medio']:.2f}",                 "#ff4422"),
         ]
         for col, label, val, color in kpi_bt:
             col.markdown(
