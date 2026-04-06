@@ -101,23 +101,23 @@ VOL_SCORE_MAP = {
 # STRUTTURA ETF TEMATICI
 # ========================
 TEMATICI_STRUCT = [
-    ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","ISPY.MI","ECAR.MI"],   "XDWT.DE"),
+    ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","CIBR.MI","ECAR.MI"],   "XDWT.DE"),
     ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
     ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],              "XDWF.DE"),
-    ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE"],                                  "XWTS.DE"),
+    ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE","KWEB.AS"],                        "XWTS.DE"),
     ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
     ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI"],             "XDWI.DE"),
+    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI","PAVE.MI"],    "XDWI.DE"),
     ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],   "XDWM.DE"),
     ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                        "XDW0.DE"),
     ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],   "XDWU.DE"),
-    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS"],                         "EPRA.MI"),
-    ("INTRAS./ALTERNATIVI",     ["LVO.MI","BUYB.PA","HODLX.PA","GOAT.PA","FOOD.MI"],   "SWDA.MI"),
+    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS","WTRE.MI"],               "EPRA.MI"),
+    ("INTRAS./ALTERNATIVI",     ["ARKK.MI","WPAY.MI","UNIC.MI","GOAT.PA","FOOD.MI"],   "SWDA.MI"),
 ]
 
 TEMATICI_DESCRIPTIONS = {
     "BCHN.MI": "blockchain & crypto", "XAIX.MI": "AI", "QNTM.MI": "quantum comp.",
-    "ISPY.MI": "cybersecurity",       "ECAR.MI": "mobilità elettr.",
+    "CIBR.MI": "cybersecurity",       "ECAR.MI": "mobilità elettr.",
     "GLUX.MI": "beni di lusso",       "EXV5.DE": "automobili",
     "EXV9.DE": "travel & leisure",    "ECOM.MI": "e.commerce",
     "ITBL.MI": "banche italiane",     "BNKE.PA": "banche europa",   "EXH5.DE": "assic. europa",
@@ -134,8 +134,8 @@ TEMATICI_DESCRIPTIONS = {
     "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
     "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",
     "DPAY.MI": "pagamenti digitali",  "XSGI.MI": "infrast. globali",
-    "WOOE.AS": "legname",
-    "HODLX.PA":"basket crypto",       "GOAT.PA": "global moat",     "FOOD.MI": "futuro del cibo",
+    "WOOE.AS": "legname",             "WPAY.MI": "humanoid & drones",
+    "UNIC.MI":"disruptive tech.",     "GOAT.PA": "global moat",     "FOOD.MI": "futuro del cibo",
 }
 
 ALL_THEMATIC_TICKERS = list(dict.fromkeys(
