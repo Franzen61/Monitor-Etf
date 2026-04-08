@@ -454,6 +454,97 @@ def volume_signal(score_short, score_medium):
         f'<br><span class="vol-sublabel">{sublabel}</span>'
     )
     return html_badge, text_plain
+# ========================
+# ENHANCED OBV FLOW
+# ========================
+def compute_obv_flow(close: pd.Series, volume: pd.Series,
+                     len_vol: int = 20, len_ema: int = 13,
+                     len_cci: int = 20, len_trend: int = 50) -> dict:
+    """
+    Traduzione Python di Enhanced OBV Flow v2.3 (Pine Script).
+    Parametri validati:
+      Daily:  len_vol=20, len_ema=13, len_cci=20, len_trend=50
+      Weekly: len_vol=10, len_ema=8,  len_cci=14, len_trend=30
+
+    Ritorna dict con serie temporali:
+      flow_cum   : flow cumulato normalizzato
+      flow_ema   : EMA del flow (cuore dell'indicatore)
+      flow_trend : SMA di lungo periodo (filtro regime)
+      cci_flow   : CCI calcolato su flow_ema
+      cci_scaled : CCI riproiettato sulla scala del flow (momentum visivo)
+    """
+    close  = close.dropna()
+    volume = volume.dropna()
+    idx    = close.index.intersection(volume.index)
+    close  = close[idx]
+    volume = volume[idx]
+
+    if len(close) < max(len_vol, len_trend) + 5:
+        empty = pd.Series(dtype=float)
+        return {k: empty for k in
+                ["flow_cum","flow_ema","flow_trend","cci_flow","cci_scaled"]}
+
+    # 1. Normalizzazione volume
+    avg_vol  = volume.rolling(len_vol, min_periods=len_vol // 2).mean()
+    norm_vol = volume / avg_vol.replace(0, np.nan)
+
+    # 2. Flow cumulato
+    chg      = close.diff()
+    direction = np.sign(chg).fillna(0)
+    flow_cum  = (direction * norm_vol).fillna(0).cumsum()
+
+    # 3. Flow EMA (smoothing strutturale)
+    flow_ema = flow_cum.ewm(span=len_ema, adjust=False).mean()
+
+    # 4. Trend filter SMA
+    flow_trend = flow_ema.rolling(len_trend, min_periods=len_trend // 2).mean()
+
+    # 5. CCI su flow_ema
+    flow_ema_sma = flow_ema.rolling(len_cci, min_periods=len_cci // 2).mean()
+    flow_ema_std = flow_ema.rolling(len_cci, min_periods=len_cci // 2).std()
+    # Mean deviation per CCI (Pine usa mean deviation, non std)
+    mean_dev = flow_ema.rolling(len_cci, min_periods=len_cci // 2).apply(
+        lambda x: np.mean(np.abs(x - np.mean(x))), raw=True
+    ).replace(0, np.nan)
+    cci_flow = (flow_ema - flow_ema_sma) / (0.015 * mean_dev)
+
+    # 6. CCI rescalato su scala flow (z-score -> proiezione su flow_std)
+    cci_sma   = cci_flow.rolling(len_cci, min_periods=len_cci // 2).mean()
+    cci_std   = cci_flow.rolling(len_cci, min_periods=len_cci // 2).std().replace(0, np.nan)
+    cci_z     = (cci_flow - cci_sma) / cci_std
+    flow_mid  = flow_ema_sma
+    flow_std  = flow_ema_std.replace(0, np.nan)
+    cci_scaled = flow_mid + cci_z * flow_std * 0.5
+
+    return {
+        "flow_cum"   : flow_cum,
+        "flow_ema"   : flow_ema,
+        "flow_trend" : flow_trend,
+        "cci_flow"   : cci_flow,
+        "cci_scaled" : cci_scaled,
+    }
+
+
+def obv_flow_regime(close: pd.Series, volume: pd.Series,
+                    len_vol: int = 20, len_ema: int = 13,
+                    len_cci: int = 20, len_trend: int = 50) -> str:
+    """
+    Ritorna stringa regime corrente per uso in tabella:
+    'BULL FLOW', 'BEAR FLOW', o 'N/D'
+    """
+    result = compute_obv_flow(close, volume, len_vol, len_ema, len_cci, len_trend)
+    fe = result["flow_ema"]
+    ft = result["flow_trend"]
+    if fe.empty or ft.empty:
+        return "N/D"
+    last_fe = fe.dropna()
+    last_ft = ft.dropna()
+    if last_fe.empty or last_ft.empty:
+        return "N/D"
+    common = last_fe.index.intersection(last_ft.index)
+    if len(common) == 0:
+        return "N/D"
+    return "BULL FLOW" if float(last_fe[common[-1]]) > float(last_ft[common[-1]]) else "BEAR FLOW"
 
 
 # ========================
@@ -736,7 +827,7 @@ df["Operatività"] = df.apply(operativita, axis=1)
 vol_html  = {}
 vol_plain = {}
 _vol_errors = []
-for ticker in SECTORS:
+for ticker in SECTORS + [BENCHMARK]:
     s_short  = compute_vwds(ohlcv, ticker, window=10)
     s_medium = compute_vwds(ohlcv, ticker, window=20)
     if np.isnan(s_short) and np.isnan(s_medium):
@@ -752,6 +843,40 @@ if _vol_errors:
     )
 
 df["Vol Signal"] = df.index.map(vol_plain)
+# ── OBV Flow Regime per Tab 1 ────────────────────────────────────────────
+@st.cache_data(ttl=60*60)
+def load_ohlcv_long(tickers):
+    end   = datetime.today()
+    start = end - timedelta(days=2*365)
+    raw = yf.download(
+        tickers,
+        start=start,
+        end=end,
+        auto_adjust=True,
+        progress=False
+    )
+    return raw
+
+ohlcv_long = load_ohlcv_long(tuple(ALL_TICKERS))
+ohlcv = ohlcv_long
+obv_regime = {}
+_obv_available = list(ohlcv_long["Close"].columns) if isinstance(ohlcv_long.columns, pd.MultiIndex) else [BENCHMARK]
+
+for ticker in SECTORS + [BENCHMARK]:
+    if ticker not in _obv_available:
+        obv_regime[ticker] = "N/D"
+        continue
+    try:
+        cl = ohlcv_long["Close"][ticker].dropna()
+        vo = ohlcv_long["Volume"][ticker].dropna()
+        if len(cl) < 60 or len(vo) < 60:
+            obv_regime[ticker] = "N/D"
+            continue
+        obv_regime[ticker] = obv_flow_regime(cl, vo)
+    except Exception as e:
+        obv_regime[ticker] = "N/D"
+
+df["Flow Regime"] = df.index.map(obv_regime)
 
 
 # ========================
@@ -814,11 +939,17 @@ with tab1:
 
     with col2:
         for t, row in df.head(3).iterrows():
-            badge = vol_html[t]
+            badge   = vol_html[t]
+            regime  = obv_regime.get(t, "N/D")
+            reg_color = "#00ff55" if regime == "BULL FLOW" else "#ff4422" if regime == "BEAR FLOW" else "#888"
             html = (
                 '<div class="leader-box">'
                 f'<div class="leader-ticker">{t}</div>'
                 f'<div class="leader-mom">RSR: {row.Rsr_momentum:.2f} &nbsp;|&nbsp; {row.Operatività} &nbsp;|&nbsp; {row.Situazione}</div>'
+                f'<div style="margin-top:4px;font-size:0.80em;">'
+                f'<span style="color:#555;letter-spacing:0.06em;font-size:0.85em;">FLOW REGIME &nbsp;</span>'
+                f'<span style="color:{reg_color};font-weight:bold;font-family:monospace;">{regime}</span>'
+                f'</div>'
                 f'<div style="margin-top:5px;font-size:0.78em;color:#555;letter-spacing:0.06em;">VOL SIGNAL</div>'
                 f'<div style="font-size:0.88em;margin-top:2px;">{badge}</div>'
                 '</div>'
@@ -839,17 +970,25 @@ with tab1:
         if "INDECISO"   in v: return "background-color:#1a1a1a; color:#888888"
         return ""
 
+    def style_flow_regime(val):
+        v = str(val)
+        if v == "BULL FLOW": return "background-color:#0d2b0d; color:#00ff55; font-weight:bold"
+        if v == "BEAR FLOW": return "background-color:#2b0d0d; color:#ff4422; font-weight:bold"
+        return "color:#888888"
+
     styled = (
         df.round(2)
         .style
-        .map(style_vol, subset=["Vol Signal"])
+        .map(style_vol,         subset=["Vol Signal"])
+        .map(style_flow_regime, subset=["Flow Regime"])
     )
 
     st.dataframe(
         styled,
         width="stretch",
         column_config={
-            "Vol Signal": st.column_config.TextColumn("Vol Signal", width="medium")
+            "Vol Signal":   st.column_config.TextColumn("Vol Signal",   width="medium"),
+            "Flow Regime":  st.column_config.TextColumn("Flow Regime",  width="small"),
         }
     )
 
@@ -862,9 +1001,9 @@ with tab1:
         <span><b style="color:#44aaff">[B+M-] INVERSIONE</b> — breve si rafforza su medio debole</span>
         <span><b style="color:#ff4422">[B-M-] DISTRIBUZ</b> — pressione vendita dominante</span>
         <span><b style="color:#888">[B~ M~] INDECISO</b> — segnale non direzionale</span>
+        <span><b style="color:#00ff55">BULL FLOW</b> / <b style="color:#ff4422">BEAR FLOW</b> — flowEMA vs flowTrend (OBV normalizzato, Daily 20/13/50)</span>
     </div>
     """, unsafe_allow_html=True)
-
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -1431,6 +1570,195 @@ with tab4:
                     f'</div>',
                     unsafe_allow_html=True
                 )
+                # ── Cross-asset OBV Flow Chart ────────────────────────────────────
+    st.markdown("---")
+    st.markdown(
+        '<h4 style="color:#ff9900;margin-bottom:2px;">📊 Cross-Asset OBV Flow</h4>'
+        '<p style="color:#555;font-size:0.80em;margin-top:0;">'
+        'flowEMA normalizzata su scala comune — confronto volumetrico cross-settoriale impossibile in TradingView</p>',
+        unsafe_allow_html=True
+    )
+
+    col_obv1, col_obv2, col_obv3 = st.columns([3, 1, 1])
+    with col_obv1:
+        obv_tickers_sel = st.multiselect(
+            "Strumenti da confrontare",
+            options=SECTORS + [BENCHMARK],
+            default=["XLK", "XLY", "XLF", "XLV", "SPY"],
+            key="obv_cross_sel"
+        )
+    with col_obv2:
+        obv_tf = st.radio(
+            "Finestra chart",
+            ["6M", "1A", "2A", "Max"],
+            index=1, horizontal=False,
+            key="obv_tf_sel"
+        )
+    with col_obv3:
+        show_trend_filter = st.checkbox(
+            "Mostra Trend Filter",
+            value=False,
+            key="obv_show_trend"
+        )
+
+    _obv_tf_days = {"6M": 126, "1A": 252, "2A": 504, "Max": 99999}
+
+    if obv_tickers_sel:
+        obv_palette = [
+            "#ff9900", "#00ff55", "#44aaff", "#ff4422", "#ffff44",
+            "#bb44ff", "#00ffcc", "#ff66cc", "#88cc88", "#cc8844",
+            "#4488ff", "#ff8844"
+        ]
+
+        fig_obv = go.Figure()
+        obv_loaded = 0
+
+        for i, ticker in enumerate(obv_tickers_sel):
+            try:
+                if isinstance(ohlcv_long.columns, pd.MultiIndex):
+                    cl = ohlcv_long["Close"][ticker].dropna()
+                    vo = ohlcv_long["Volume"][ticker].dropna()
+                else:
+                    cl = ohlcv_long["Close"].dropna()
+                    vo = ohlcv_long["Volume"].dropna()
+
+                if cl.empty or vo.empty or len(cl) < 60:
+                    continue
+
+                result = compute_obv_flow(cl, vo)
+                fe = result["flow_ema"].dropna()
+                ft = result["flow_trend"].dropna()
+
+                if fe.empty:
+                    continue
+
+                # Slice per timeframe selezionato
+                days_obv = _obv_tf_days[obv_tf]
+                if days_obv < 99999:
+                    cutoff = fe.index.max() - pd.Timedelta(days=days_obv)
+                    fe = fe[fe.index >= cutoff]
+                    ft = ft[ft.index >= cutoff]
+
+                color = obv_palette[i % len(obv_palette)]
+
+                # Normalizzazione z-score per confronto visivo su scala comune
+                fe_mean = fe.mean()
+                fe_std  = fe.std()
+                if fe_std == 0 or np.isnan(fe_std):
+                    continue
+                fe_norm = (fe - fe_mean) / fe_std
+                ft_norm = (ft - fe_mean) / fe_std  # stessa scala
+
+                fig_obv.add_trace(go.Scatter(
+                    x=fe_norm.index,
+                    y=fe_norm,
+                    mode="lines",
+                    name=ticker,
+                    line=dict(color=color, width=2),
+                    hovertemplate=f"<b>{ticker}</b><br>%{{x|%d %b %Y}}<br>Flow (z): %{{y:.2f}}<extra></extra>"
+                ))
+
+                if show_trend_filter and not ft_norm.empty:
+                    fig_obv.add_trace(go.Scatter(
+                        x=ft_norm.index,
+                        y=ft_norm,
+                        mode="lines",
+                        name=f"{ticker} trend",
+                        line=dict(color=color, width=1, dash="dot"),
+                        opacity=0.45,
+                        showlegend=False,
+                        hovertemplate=f"<b>{ticker} trend</b><br>%{{x|%d %b %Y}}<br>%{{y:.2f}}<extra></extra>"
+                    ))
+
+                obv_loaded += 1
+
+            except Exception:
+                continue
+
+        if obv_loaded == 0:
+            st.warning("Dati OBV non disponibili per i ticker selezionati.")
+        else:
+            fig_obv.add_hline(
+                y=0, line_color="#444", line_width=1,
+                line_dash="dot"
+            )
+            fig_obv.update_layout(
+                height=380,
+                paper_bgcolor="#000000",
+                plot_bgcolor="#000000",
+                font=dict(color="white", size=10),
+                title=dict(
+                    text="OBV Flow EMA — normalizzata z-score (scala comune)  |  sopra 0 = accumulo strutturale relativo",
+                    font=dict(size=9, color="#555"),
+                    x=0, xanchor="left"
+                ),
+                xaxis=dict(gridcolor="#1a1a1a"),
+                yaxis=dict(
+                    gridcolor="#1a1a1a",
+                    title="Flow z-score",
+                    zeroline=False
+                ),
+                legend=dict(
+                    font=dict(size=9),
+                    bgcolor="rgba(0,0,0,0.6)",
+                    bordercolor="#333",
+                    borderwidth=1,
+                    orientation="h",
+                    y=1.04, x=0, xanchor="left"
+                ),
+                margin=dict(l=50, r=30, t=45, b=40),
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig_obv, use_container_width=True)
+
+            # Tabella regime corrente per i ticker selezionati
+            regime_rows = []
+            for ticker in obv_tickers_sel:
+                r = obv_regime.get(ticker, "N/D")
+                regime_rows.append({
+                    "Ticker":      ticker,
+                    "Flow Regime": r,
+                    "RSR 1M":      round(float(rsr_df.loc[ticker, "1M"]), 2) if ticker in rsr_df.index else np.nan,
+                    "Vol Signal":  vol_plain.get(ticker, "—"),
+                })
+            reg_df = pd.DataFrame(regime_rows)
+
+            def _style_regime(val):
+                if val == "BULL FLOW": return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if val == "BEAR FLOW": return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+                return "color:#888"
+
+            def _style_vol_plain(val):
+                v = str(val)
+                if "ACCUMULO"   in v: return "color:#00ff55;font-weight:bold"
+                if "DISTRIBUZ"  in v: return "color:#ff4422;font-weight:bold"
+                if "ESAURIM"    in v: return "color:#ffaa00;font-weight:bold"
+                if "INVERSIONE" in v: return "color:#44aaff;font-weight:bold"
+                return "color:#888"
+
+            st.dataframe(
+                reg_df.style
+                    .map(_style_regime,    subset=["Flow Regime"])
+                    .map(_style_vol_plain, subset=["Vol Signal"]),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Flow Regime": st.column_config.TextColumn("Flow Regime", width="small"),
+                    "Vol Signal":  st.column_config.TextColumn("Vol Signal",  width="medium"),
+                    "RSR 1M":      st.column_config.NumberColumn("RSR 1M",    format="%.2f"),
+                }
+            )
+
+    st.markdown(
+        '<div style="background:#080808;border:1px solid #1a1a1a;border-radius:6px;'
+        'padding:8px 16px;margin-top:6px;font-size:0.78em;color:#555;">'
+        '<b style="color:#ff9900">Flow Regime</b>: flowEMA &gt; flowTrend → BULL · '
+        'flowEMA &lt; flowTrend → BEAR &nbsp;|&nbsp; '
+        '<b style="color:#ff9900">Scala</b>: z-score per confronto cross-asset '
+        '(parametri Daily: vol=20 · ema=13 · trend=50)'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     # ── Spiegazione ───────────────────────────────────────────────────
     st.markdown(f"""
