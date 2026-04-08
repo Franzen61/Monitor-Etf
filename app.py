@@ -778,7 +778,7 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
 # LOAD SECTORAL DATA
 # ========================
 prices = load_prices(ALL_TICKERS)
-ohlcv  = load_ohlcv_long(tuple(ALL_TICKERS))
+ohlcv  = load_ohlcv(ALL_TICKERS)
 
 returns = pd.DataFrame({
     "1D": prices.apply(lambda x: ret(x, 1)),
@@ -858,6 +858,7 @@ def load_ohlcv_long(tickers):
     return raw
 
 ohlcv_long = load_ohlcv_long(tuple(ALL_TICKERS))
+ohlcv = ohlcv_long
 obv_regime = {}
 _obv_available = list(ohlcv_long["Close"].columns) if isinstance(ohlcv_long.columns, pd.MultiIndex) else [BENCHMARK]
 
