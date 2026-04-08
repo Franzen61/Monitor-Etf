@@ -859,16 +859,20 @@ def load_ohlcv_long(tickers):
 
 ohlcv_long = load_ohlcv_long(tuple(ALL_TICKERS))
 obv_regime = {}
-for ticker in SECTORS:
+_obv_available = list(ohlcv_long["Close"].columns) if isinstance(ohlcv_long.columns, pd.MultiIndex) else [BENCHMARK]
+
+for ticker in SECTORS + [BENCHMARK]:
+    if ticker not in _obv_available:
+        obv_regime[ticker] = "N/D"
+        continue
     try:
-        if isinstance(ohlcv_long.columns, pd.MultiIndex):
-            cl = ohlcv_long["Close"][ticker].dropna()
-            vo = ohlcv_long["Volume"][ticker].dropna()
-        else:
-            cl = ohlcv_long["Close"].dropna()
-            vo = ohlcv_long["Volume"].dropna()
+        cl = ohlcv_long["Close"][ticker].dropna()
+        vo = ohlcv_long["Volume"][ticker].dropna()
+        if len(cl) < 60 or len(vo) < 60:
+            obv_regime[ticker] = "N/D"
+            continue
         obv_regime[ticker] = obv_flow_regime(cl, vo)
-    except Exception:
+    except Exception as e:
         obv_regime[ticker] = "N/D"
 
 df["Flow Regime"] = df.index.map(obv_regime)
