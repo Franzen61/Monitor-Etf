@@ -844,7 +844,7 @@ if _vol_errors:
 
 df["Vol Signal"] = df.index.map(vol_plain)
 # ── OBV Flow Regime per Tab 1 ────────────────────────────────────────────
-@st.cache_data(ttl=60*60)
+@st.cache_data(ttl=1)
 def load_ohlcv_long(tickers):
     end   = datetime.today()
     start = end - timedelta(days=2*365)
@@ -857,8 +857,7 @@ def load_ohlcv_long(tickers):
     )
     return raw
 
-ohlcv_long = load_ohlcv_long(ALL_TICKERS)
-
+ohlcv_long = load_ohlcv_long(tuple(ALL_TICKERS))
 obv_regime = {}
 for ticker in SECTORS:
     try:
