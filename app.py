@@ -827,7 +827,7 @@ df["Operatività"] = df.apply(operativita, axis=1)
 vol_html  = {}
 vol_plain = {}
 _vol_errors = []
-for ticker in SECTORS:
+for ticker in SECTORS + [BENCHMARK]:
     s_short  = compute_vwds(ohlcv, ticker, window=10)
     s_medium = compute_vwds(ohlcv, ticker, window=20)
     if np.isnan(s_short) and np.isnan(s_medium):
