@@ -778,7 +778,7 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
 # LOAD SECTORAL DATA
 # ========================
 prices = load_prices(ALL_TICKERS)
-ohlcv  = load_ohlcv(ALL_TICKERS)
+ohlcv  = load_ohlcv_long(tuple(ALL_TICKERS))
 
 returns = pd.DataFrame({
     "1D": prices.apply(lambda x: ret(x, 1)),
