@@ -844,7 +844,7 @@ if _vol_errors:
 
 df["Vol Signal"] = df.index.map(vol_plain)
 # ── OBV Flow Regime per Tab 1 ────────────────────────────────────────────
-@st.cache_data(ttl=1)
+@st.cache_data(ttl=60*60)
 def load_ohlcv_long(tickers):
     end   = datetime.today()
     start = end - timedelta(days=2*365)
