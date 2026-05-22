@@ -569,7 +569,7 @@ def compute_euro_indicators(prices, today_prices, benchmark):
         breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
         medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
         tt  = (breve-medio) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
-        mr  = (breve/(abs(medio)+0.02)) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
+        mr  = (breve/(abs(medio)+2)) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
         if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
             mbi = ((r1w+r1m)/2 - mms6m_rsr) / abs(mms6m_rsr)
         else:
@@ -1672,7 +1672,7 @@ with tab6:
             breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
             medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
             tt  = (breve-medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
-            mr  = (breve/(abs(medio)+0.02)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+            mr  = (breve/(abs(medio)+2)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
             if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
                 mbi = ((r1w+r1m)/2 - mms6m_rsr)/abs(mms6m_rsr)
             else: mbi = np.nan
