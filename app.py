@@ -236,8 +236,6 @@ def load_sp500_data(timeframe_days: int):
     return merged
 
 
-)
-
 
 # ========================
 # VOLUME SIGNAL (VWDS)
