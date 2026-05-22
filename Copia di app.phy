@@ -77,13 +77,32 @@ ALL_TICKERS = SECTORS + [BENCHMARK]
 CYCLICAL = ["XLK","XLY","XLF","XLI","XLB","XLE"]
 DEFENSIVE = ["XLV","XLP","XLU","XLRE"]
 
-FACTOR_ETFS = [
-    "MVOL.MI","IWQU.MI","IWMO.MI","IWVL.MI",
-    "IUSN.DE","SWDA.MI","IQSA.MI"
-]
-FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
+
 
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
+# ========================
+# EUROSTOXX 600
+# ========================
+EURO_SECTORS = [
+    "EXH1.DE","EXV6.DE","EXV7.DE","EXV3.DE","EXH4.DE",
+    "EXV1.DE","EXH2.DE","EXH9.DE","EXH5.DE","EXV8.DE",
+    "EXH6.DE","EXV4.DE","EXV5.DE","EXH8.DE","EXV9.DE",
+    "EXI5.DE","EXH3.DE","EXH7.DE","EXV2.DE",
+]
+EURO_BENCHMARK = "EXSA.DE"
+EURO_ALL = EURO_SECTORS + [EURO_BENCHMARK]
+EURO_NAMES = {
+    "EXH1.DE":"Healthcare",      "EXV6.DE":"Technology",
+    "EXV7.DE":"Basic Resources", "EXV3.DE":"Chemicals",
+    "EXH4.DE":"Real Estate",     "EXV1.DE":"Banks",
+    "EXH2.DE":"Financial Svcs",  "EXH9.DE":"Telecom",
+    "EXH5.DE":"Insurance",       "EXV8.DE":"Media",
+    "EXH6.DE":"Personal Goods",  "EXV4.DE":"Oil & Gas",
+    "EXV5.DE":"Automobiles",     "EXH8.DE":"Retail",
+    "EXV9.DE":"Travel & Leisure","EXI5.DE":"Industrials",
+    "EXH3.DE":"Food & Bev",      "EXH7.DE":"Utilities",
+    "EXV2.DE":"Cons Staples",    "EXSA.DE":"STOXX 600",
+}
 
 # ── ROS 2.0 weights (Intervento 1)
 WEIGHTS_V2 = {"1W": 0.15, "1M": 0.25, "3M": 0.35, "6M": 0.25}
@@ -97,51 +116,6 @@ VOL_SCORE_MAP = {
     "[B-M-] DISTRIBUZ":  -1.0,
 }
 
-# ========================
-# STRUTTURA ETF TEMATICI  (tua versione aggiornata)
-# ========================
-TEMATICI_STRUCT = [
-    ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","CIBR.MI","ECAR.MI"],   "XDWT.DE"),
-    ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
-    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],              "XDWF.DE"),
-    ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE","KWEB.AS"],                        "XWTS.DE"),
-    ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
-    ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI","PAVE.MI"],    "XDWI.DE"),
-    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],   "XDWM.DE"),
-    ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                        "XDW0.DE"),
-    ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],   "XDWU.DE"),
-    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS","WTRE.MI"],               "EPRA.MI"),
-    ("INTRAS./ALTERNATIVI",     ["ARKK.MI","WPAY.MI","UNIC.MI","GOAT.PA","FOOD.MI"],   "SWDA.MI"),
-]
-
-TEMATICI_DESCRIPTIONS = {
-    "BCHN.MI": "blockchain & crypto", "XAIX.MI": "AI", "QNTM.MI": "quantum comp.",
-    "CIBR.MI": "cybersecurity",       "ECAR.MI": "mobilità elettr.",
-    "GLUX.MI": "beni di lusso",       "EXV5.DE": "automobili",
-    "EXV9.DE": "travel & leisure",    "ECOM.MI": "e.commerce",
-    "ITBL.MI": "banche italiane",     "BNKE.PA": "banche europa",   "EXH5.DE": "assic. europa",
-    "ESPO.MI": "gaming",              "EXV2.DE": "telco europa",    "KWEB.AS": "tech Cina",
-    "AGED.MI": "ageing popul.",       "2B70.DE": "biotech",
-    "DOCT.MI": "tech salute",         "HEAL.MI": "health innovat.",
-    "EXH3.DE": "food & beverage",     "DXSK.DE": "cons.stapl.europa",
-    "HTWO.MI": "idrogeno",            "DFNS.MI": "difesa",          "JEDI.MI": "aerospazio",
-    "PAVE.MI": "infrast. USA",        "REMX.MI": "terre rare",      "BATT.MI": "batterie",
-    "EXV7.DE": "chimica",             "ISAG.MI": "agricoltura",
-    "STNX.MI": "energia europa",      "IOGP.AS": "oil & gas global","NUCL.MI": "nucleare",
-    "H2OA.AS": "acqua",               "INRG.MI": "rinnovabili",
-    "WNDY.DE": "eolico",              "RENW.MI": "rinnovabili (2)",
-    "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
-    "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",       "WTRE.MI": "imm. globale",
-    "DPAY.MI": "pagamenti digitali",  "XSGI.MI": "infrast. globali",
-    "WOOE.AS": "legname",             "WPAY.MI": "humanoid & drones",
-    "ARKK.MI": "disruptive innov.",   "UNIC.MI": "disruptive tech.",
-    "GOAT.PA": "global moat",         "FOOD.MI": "futuro del cibo",
-}
-
-ALL_THEMATIC_TICKERS = list(dict.fromkeys(
-    t for _, tickers, bm in TEMATICI_STRUCT for t in tickers + [bm]
-))
 
 TF_DAYS = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "YTD": None, "1A": 252, "2A": 504}
 
@@ -191,62 +165,6 @@ def load_ohlcv_long(tickers):
     start = end - timedelta(days=2*365)
     raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
     return raw
-
-
-WORLDPE_URLS = {
-    "XLK":  "https://worldperatio.com/sector/sp-500-information-technology",
-    "XLY":  "https://worldperatio.com/sector/sp-500-consumer-discretionary",
-    "XLF":  "https://worldperatio.com/sector/sp-500-financials",
-    "XLC":  "https://worldperatio.com/sector/sp-500-communication-services",
-    "XLV":  "https://worldperatio.com/sector/sp-500-health-care",
-    "XLP":  "https://worldperatio.com/sector/sp-500-consumer-staples",
-    "XLI":  "https://worldperatio.com/sector/sp-500-industrials",
-    "XLE":  "https://worldperatio.com/sector/sp-500-energy",
-    "XLB":  "https://worldperatio.com/sector/sp-500-materials",
-    "XLU":  "https://worldperatio.com/sector/sp-500-utilities",
-    "XLRE": "https://worldperatio.com/sector/sp-500-real-estate",
-}
-
-
-@st.cache_data(ttl=60*60*6)
-def load_pe_live_worldperatio(tickers):
-    import requests, re
-    from bs4 import BeautifulSoup
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    result, _failed = {}, []
-    for ticker in tickers:
-        url = WORLDPE_URLS.get(ticker)
-        if not url:
-            result[ticker] = None
-            continue
-        try:
-            resp = requests.get(url, headers=headers, timeout=12)
-            resp.raise_for_status()
-            text  = BeautifulSoup(resp.text, "html.parser").get_text()
-            match = re.search(r"P/E Ratio\s*\n\s*([\d.]+)", text)
-            result[ticker] = float(match.group(1)) if match else None
-            if not match:
-                _failed.append(ticker)
-        except Exception:
-            result[ticker] = None
-            _failed.append(ticker)
-    for t in _failed:
-        try:
-            info = yf.Ticker(t).info
-            pe   = info.get("trailingPE") or info.get("forwardPE")
-            result[t] = round(pe, 2) if pe else None
-        except Exception:
-            result[t] = None
-    return result, _failed
-
-
-@st.cache_data(ttl=60*60*12)
-def load_pe_historical():
-    try:
-        pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
-        return pe_hist.set_index("Period")
-    except Exception:
-        return None
 
 
 # ── FIX: Wikipedia con StringIO + fallback robusto
@@ -317,17 +235,6 @@ def load_sp500_data(timeframe_days: int):
     merged = ret_df.merge(wiki, on="Ticker", how="left").dropna(subset=["Sector"])
     return merged
 
-
-@st.cache_data(ttl=60*60)
-def load_thematic_prices():
-    end   = datetime.today()
-    start = end - timedelta(days=2*365 + 30)
-    raw = yf.download(ALL_THEMATIC_TICKERS, start=start, end=end, auto_adjust=True, progress=False)
-    if isinstance(raw.columns, pd.MultiIndex):
-        close = raw["Close"]
-    else:
-        close = raw
-    return close.dropna(how="all")
 
 
 # ========================
@@ -607,7 +514,89 @@ def compute_risk_off_episodes(series, threshold, confirm_days=3):
                           "rs_min": round(float(ep_slice.min()), 2), "rs_min_date": ep_slice.idxmin()})
     return episodes
 
+# ========================
+# EUROSTOXX LOADERS
+# ========================
+@st.cache_data(ttl=3600)
+def load_euro_prices():
+    end   = datetime.today()
+    start = end - timedelta(days=2*365+30)
+    raw   = yf.download(EURO_ALL, start=start, end=end, auto_adjust=True, progress=False)
+    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+    return close.dropna(how="all")
 
+@st.cache_data(ttl=300)
+def load_euro_prices_today():
+    end   = datetime.today()
+    start = end - timedelta(days=7)
+    raw   = yf.download(EURO_ALL, start=start, end=end, auto_adjust=True, progress=False)
+    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+    return close.dropna(how="all")
+
+# ========================
+# EUROSTOXX INDICATORS
+# ========================
+def compute_euro_indicators(prices, today_prices, benchmark):
+    results = []
+    bm  = prices[benchmark].dropna() if benchmark in prices.columns else None
+    bm_t= today_prices[benchmark].dropna() if benchmark in today_prices.columns else None
+    wts = [0.20, 0.35, 0.25, 0.20]
+
+    def get_rsr(tk, days):
+        try:
+            s = today_prices[tk].dropna() if days==1 else prices[tk].dropna()
+            b = bm_t if days==1 else bm
+            if s is None or b is None or len(s)<=days or len(b)<=days: return np.nan
+            rs = float(s.iloc[-1]/s.iloc[-days-1]-1)
+            rb = float(b.iloc[-1]/b.iloc[-days-1]-1)
+            return float((1+rs)/(1+rb)-1)
+        except: return np.nan
+
+    def get_abs(tk, days):
+        try:
+            s = prices[tk].dropna()
+            if len(s)<=days: return np.nan
+            return float(s.iloc[-1]/s.iloc[-days-1]-1)
+        except: return np.nan
+
+    for tk in [t for t in prices.columns if t != benchmark]:
+        r1d=get_rsr(tk,1); r1w=get_rsr(tk,5)
+        r1m=get_rsr(tk,21); r3m=get_rsr(tk,63); r6m=get_rsr(tk,126)
+        vals_r=[r1w,r1m,r3m,r6m]
+        mms6m_rsr = sum(v*w for v,w in zip(vals_r,wts)) if not any(np.isnan(v) for v in vals_r) else np.nan
+        vals_a=[get_abs(tk,d) for d in [5,21,63,126]]
+        mms6m_abs = sum(v*w for v,w in zip(vals_a,wts)) if not any(np.isnan(v) for v in vals_a) else np.nan
+        breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
+        medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
+        tt  = (breve-medio) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
+        mr  = (breve/(abs(medio)+0.02)) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
+        if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
+            mbi = ((r1w+r1m)/2 - mms6m_rsr) / abs(mms6m_rsr)
+        else:
+            mbi = np.nan
+        results.append({
+            "Ticker":tk, "Nome":EURO_NAMES.get(tk,tk),
+            "RSr 1D":r1d, "RSr 1W":r1w, "RSr 1M":r1m, "RSr 3M":r3m, "RSr 6M":r6m,
+            "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
+            "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
+        })
+    return pd.DataFrame(results).set_index("Ticker")
+
+def euro_gate_signal(row_dict, thr_abs=0.03, thr_rsr=0.01, thr_tt=0.015, thr_mr=0.01):
+    gates = [
+        ("MMS6M Ass.", thr_abs), ("MMS6M RSr", thr_rsr),
+        ("Tact. Thrust", thr_tt), ("Mr Index", thr_mr),
+    ]
+    passed = 0
+    for col, thr in gates:
+        try: val = float(row_dict.get(col, np.nan))
+        except: val = np.nan
+        if np.isnan(val): break
+        if val >= thr: passed += 1
+        else: break
+    if passed==4: return "🟢 ATTIVO"
+    elif passed==0: return "🔴 FILTRATO"
+    else: return "🟡 WATCHLIST"
 # ========================
 # LOAD SECTORAL DATA
 # ========================
@@ -685,14 +674,13 @@ df["Flow Regime"] = df.index.map(obv_regime)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
-    "📊 Fattori",
     "🔄 Rotazione Settoriale",
     "🫧 S&P 500 Bubble",
-    "📐 Valutazione P/E",
-    "📌 Tematici",
+    "🇪🇺 Settoriali Eurostoxx 600",
+    "🔁 Rotation Backtest",
     "🧪 Backtest RS",
 ])
 
@@ -774,6 +762,17 @@ with tab1:
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("""
+    <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
+                padding:10px 20px;margin-top:10px;font-size:0.82em;">
+        <span style="color:#555;">Valutazione P/E settoriale: </span>
+        <a href="https://worldperatio.com" target="_blank"
+           style="color:#ff9900;text-decoration:none;font-weight:bold;">
+           worldperatio.com</a>
+    </div>
+    """, unsafe_allow_html=True)
+   
+
 
 # ========================
 # TAB 2 — ANDAMENTO
@@ -792,45 +791,12 @@ with tab2:
     st.plotly_chart(fig, width="stretch")
 
 
+
+
 # ========================
-# TAB 3 — FATTORI
+# TAB 3 — ROTAZIONE SETTORIALE v2
 # ========================
 with tab3:
-    factor_prices = load_prices(FACTOR_ETFS)
-    if factor_prices.empty or factor_prices.isna().all().all():
-        st.error("⚠️ Impossibile scaricare i dati degli ETF fattoriali da Yahoo Finance.")
-        st.info("Ticker richiesti: " + ", ".join(FACTOR_ETFS))
-    else:
-        f = pd.DataFrame(index=FACTOR_ETFS)
-        f["Prezzo"] = factor_prices.iloc[-1].round(2)
-        for col, d in [("1D",1),("1W",5),("1M",21),("3M",63),("6M",126),("1A",252),("3A",756),("5A",1260)]:
-            f[col] = factor_prices.apply(lambda x: ret(x, d))
-        f["YTD"] = factor_prices.apply(ret_ytd)
-
-        def style_row(row):
-            if row.name in FACTOR_COMPARISON: return ["background-color:#1e1e1e;color:#ccc"] * len(row)
-            return ["background-color:#000;color:white"] * len(row)
-
-        def highlight_extremes(s):
-            valid = s.dropna()
-            if valid.empty: return [""] * len(s)
-            max_val, min_val = valid.max(), valid.min()
-            return ["background-color:#003300;color:#00FF00;font-weight:bold" if v == max_val
-                    else "background-color:#330000;color:#ff4422;font-weight:bold" if v == min_val
-                    else "" for v in s]
-
-        st.dataframe(
-            f.round(2).style.apply(style_row, axis=1)
-            .apply(highlight_extremes, subset=[c for c in f.columns if c != "Prezzo"])
-            .format({"Prezzo": "{:.2f}", **{c: "{:+.2f}%" for c in f.columns if c != "Prezzo"}}),
-            width="stretch"
-        )
-
-
-# ========================
-# TAB 4 — ROTAZIONE SETTORIALE v2
-# ========================
-with tab4:
 
     CYCLICALS  = ["XLK","XLY","XLF","XLI","XLE","XLB"]
     DEFENSIVES = ["XLP","XLV","XLU","XLRE"]
@@ -1249,9 +1215,9 @@ with tab4:
 
 
 # ========================
-# TAB 5 — BUBBLE CHART S&P 500
+# TAB 4 — BUBBLE CHART S&P 500
 # ========================
-with tab5:
+with tab4:
     tf_options = {"1W": 5, "1M": 21, "3M": 63, "6M": 126,
                   "YTD": (datetime.today() - datetime(datetime.today().year, 1, 1)).days}
     tf_sel  = st.radio("Timeframe", options=list(tf_options.keys()), index=1, horizontal=True)
@@ -1333,458 +1299,574 @@ with tab5:
                          use_container_width=True, hide_index=True)
 
 
+
+
+
 # ========================
-# TAB 6 — P/E
+# TAB 5 — SETTORIALI EUROSTOXX 600
+# ========================
+with tab5:
+    st.markdown(
+        '<h3 style="color:#ff9900;margin-bottom:2px;">🇪🇺 Settoriali STOXX Europe 600</h3>'
+        '<p style="color:#555;font-size:0.82em;margin-top:0;">'
+        '19 ETF iShares · Benchmark EXSA.DE · RSr gaussiano · Gate sequenziale MMS6M→TT→Mr Index→MBI</p>',
+        unsafe_allow_html=True)
+
+    with st.spinner("Caricamento prezzi Eurostoxx..."):
+        euro_prices       = load_euro_prices()
+        euro_prices_today = load_euro_prices_today()
+
+    available_euro = [t for t in EURO_ALL if t in euro_prices.columns]
+    missing_euro   = [t for t in EURO_ALL if t not in euro_prices.columns]
+    if missing_euro:
+        st.warning(f"Ticker non trovati: {', '.join(missing_euro)}")
+    if EURO_BENCHMARK not in euro_prices.columns:
+        st.error(f"Benchmark {EURO_BENCHMARK} non disponibile.")
+        st.stop()
+
+    euro_prices_clean = euro_prices[available_euro].copy()
+    euro_today_avail  = [t for t in available_euro if t in euro_prices_today.columns]
+    euro_today_clean  = euro_prices_today[euro_today_avail].copy()
+
+    with st.spinner("Calcolo indicatori RSr..."):
+        euro_ind = compute_euro_indicators(euro_prices_clean, euro_today_clean, EURO_BENCHMARK)
+
+    euro_ind["Segnale"] = euro_ind.apply(
+        lambda row: euro_gate_signal({
+            "MMS6M Ass.":   row["MMS6M Ass."],
+            "MMS6M RSr":    row["MMS6M RSr"],
+            "Tact. Thrust": row["Tact. Thrust"],
+            "Mr Index":     row["Mr Index"],
+        }), axis=1)
+
+    # ── Controlli UI
+    c1, c2 = st.columns([2, 2])
+    with c1:
+        euro_tf   = st.selectbox("Timeframe grafico",
+            ["1D","1W","1M","3M","6M","YTD","1A"], index=4, key="euro_tf")
+    with c2:
+        euro_sort = st.selectbox("Ordina tabella per",
+            ["MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","RSr 1M","RSr 3M"],
+            key="euro_sort")
+
+    # ── 1. BAR CHART RSr
+    tf_days_map = {"1D":1,"1W":5,"1M":21,"3M":63,"6M":126,"YTD":None,"1A":252}
+    bar_data = []
+    for tk in EURO_SECTORS:
+        if tk not in euro_prices_clean.columns: continue
+        d = tf_days_map[euro_tf]
+        if d == 1:
+            s = euro_today_clean[tk].dropna() if tk in euro_today_clean.columns else pd.Series(dtype=float)
+            b = euro_today_clean[EURO_BENCHMARK].dropna() if EURO_BENCHMARK in euro_today_clean.columns else pd.Series(dtype=float)
+        else:
+            s = euro_prices_clean[tk].dropna()
+            b = euro_prices_clean[EURO_BENCHMARK].dropna()
+        rs = safe_ret(s, d); rb = safe_ret(b, d)
+        if not np.isnan(rs) and not np.isnan(rb):
+            rsr_val = float((1+rs/100)/(1+rb/100)-1)
+        else:
+            rsr_val = np.nan
+        bar_data.append({"Ticker":tk, "Nome":EURO_NAMES.get(tk,tk), "RSr":rsr_val})
+
+    bar_df = pd.DataFrame(bar_data).dropna(subset=["RSr"]).sort_values("RSr", ascending=True)
+    bar_colors = ["#00cc44" if v>=0 else "#cc2200" for v in bar_df["RSr"]]
+    fig_bar = go.Figure(go.Bar(
+        x=bar_df["RSr"]*100, y=bar_df["Nome"], orientation="h",
+        marker=dict(color=bar_colors, line=dict(color="#333",width=1)),
+        text=[f"{v*100:+.2f}%" for v in bar_df["RSr"]],
+        textposition="outside", textfont=dict(color="white",size=9),
+    ))
+    fig_bar.add_vline(x=0, line_color="#444", line_width=1.5)
+    fig_bar.update_layout(
+        height=520, paper_bgcolor="#000", plot_bgcolor="#000",
+        font=dict(color="white",size=9),
+        title=dict(text=f"RSr vs EXSA — {euro_tf}  |  Forza relativa settoriale",
+                   font=dict(size=10,color="#ff9900")),
+        xaxis=dict(gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
+        yaxis=dict(gridcolor="#0a0a0a"),
+        margin=dict(l=130,r=80,t=40,b=30),
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ── 2. SCATTER QUADRANTI
+    st.markdown("---")
+    sc_c1, sc_c2 = st.columns([3,1])
+    with sc_c1:
+        st.markdown("#### Scatter — RSr 1M vs RSr 3M")
+    with sc_c2:
+        sc_lbl = st.radio("Etichette", ["Ticker","Nome"], horizontal=True, key="euro_sc_lbl")
+
+    sc_data = []
+    for tk in EURO_SECTORS:
+        if tk not in euro_ind.index: continue
+        sc_data.append({
+            "Ticker": tk, "Nome": EURO_NAMES.get(tk,tk),
+            "RSr 1M": euro_ind.loc[tk,"RSr 1M"],
+            "RSr 3M": euro_ind.loc[tk,"RSr 3M"],
+            "Segnale": euro_ind.loc[tk,"Segnale"],
+        })
+    sc_df = pd.DataFrame(sc_data).dropna(subset=["RSr 1M","RSr 3M"])
+
+    if not sc_df.empty:
+        sig_colors = {"🟢 ATTIVO":"#00cc44","🟡 WATCHLIST":"#ffaa00","🔴 FILTRATO":"#cc2200"}
+        fig_sc = go.Figure()
+        for sig, grp in sc_df.groupby("Segnale"):
+            lbl = grp["Ticker"] if sc_lbl=="Ticker" else grp["Nome"]
+            fig_sc.add_trace(go.Scatter(
+                x=grp["RSr 1M"]*100, y=grp["RSr 3M"]*100,
+                mode="markers+text", name=sig,
+                marker=dict(size=11, color=sig_colors.get(sig,"#888"),
+                            opacity=0.85, line=dict(color="#111",width=1)),
+                text=lbl, textposition="top center",
+                textfont=dict(size=8,color="#ccc"),
+                hovertemplate="<b>%{text}</b><br>RSr 1M: %{x:.2f}%<br>RSr 3M: %{y:.2f}%<extra></extra>",
+            ))
+        fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
+        fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
+        x_rng = sc_df["RSr 1M"].max()*100
+        y_rng = sc_df["RSr 3M"].max()*100
+        for qx,qy,ql,qc,qax,qay in [
+            ( x_rng*0.85,  y_rng*0.85, "LEADER",    "#00ff55","right","top"),
+            (-x_rng*0.85,  y_rng*0.85, "IMPROVING", "#44aaff","left", "top"),
+            ( x_rng*0.85, -y_rng*0.85, "WEAKENING", "#ffaa00","right","bottom"),
+            (-x_rng*0.85, -y_rng*0.85, "LAGGARD",   "#ff4422","left", "bottom"),
+        ]:
+            fig_sc.add_annotation(x=qx, y=qy, text=ql, showarrow=False,
+                font=dict(color=qc,size=10,family="Courier New"),
+                opacity=0.45, xanchor=qax, yanchor=qay)
+        fig_sc.update_layout(
+            height=460, paper_bgcolor="#000", plot_bgcolor="#000",
+            font=dict(color="white",size=10),
+            title=dict(text="Scatter RSr 1M (X) vs RSr 3M (Y) — colorato per segnale gate",
+                       font=dict(size=10,color="#666")),
+            xaxis=dict(title="RSr 1M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
+            yaxis=dict(title="RSr 3M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
+            legend=dict(font=dict(size=9),bgcolor="rgba(0,0,0,0.5)",
+                        bordercolor="#333",borderwidth=1),
+            margin=dict(l=60,r=40,t=50,b=60),
+        )
+        st.plotly_chart(fig_sc, use_container_width=True)
+
+    # ── 3. TABELLA INDICATORI
+    st.markdown("---")
+    st.markdown("#### Tabella indicatori — formattazione condizionale")
+
+    disp = euro_ind.sort_values(euro_sort, ascending=False).copy()
+    disp_show = disp[["Nome","RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
+                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI","Segnale"]].copy()
+
+    def _c_rsr(v):
+        try:
+            v=float(v)
+            if v>0.02:  return "color:#00ff55"
+            if v>0:     return "color:#88cc88"
+            if v<-0.02: return "color:#ff4422"
+            if v<0:     return "color:#cc6644"
+        except: pass
+        return "color:#888"
+
+    def _c_mms_rsr(v):
+        try:
+            v=float(v)
+            if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except: pass
+        return "color:#888"
+
+    def _c_mms_abs(v):
+        try:
+            v=float(v)
+            if v>0.03:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v<-0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except: pass
+        return "color:#888"
+
+    def _c_tt(v):
+        try:
+            v=float(v)
+            if v>0.015:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v<-0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except: pass
+        return "color:#888"
+
+    def _c_mr(v):
+        try:
+            v=float(v)
+            if v>0.01:   return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v>0.005:  return "color:#88cc88"
+            if v<-0.01:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v<-0.005: return "color:#cc6644"
+        except: pass
+        return "color:#888"
+
+    def _c_mbi(v):
+        try:
+            v=float(v)
+            if v<-1.00:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v<-0.50:  return "color:#aaff44"
+            if v>1.00:   return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v>0.50:   return "color:#ffaa00"
+        except: pass
+        return "color:#888"
+
+    def _c_seg(v):
+        if "ATTIVO"    in str(v): return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+        if "FILTRATO"  in str(v): return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        if "WATCHLIST" in str(v): return "background-color:#2b2200;color:#ffaa00;font-weight:bold"
+        return ""
+
+    fp = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—"
+    fm = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
+
+    st.dataframe(
+        disp_show.style
+        .map(_c_rsr,     subset=["RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
+        .map(_c_mms_rsr, subset=["MMS6M RSr"])
+        .map(_c_mms_abs, subset=["MMS6M Ass."])
+        .map(_c_tt,      subset=["Tact. Thrust"])
+        .map(_c_mr,      subset=["Mr Index"])
+        .map(_c_mbi,     subset=["MBI"])
+        .map(_c_seg,     subset=["Segnale"])
+        .format({"RSr 1D":fp,"RSr 1W":fp,"RSr 1M":fp,"RSr 3M":fp,"RSr 6M":fp,
+                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
+        use_container_width=True,
+        column_config={
+            "Nome":    st.column_config.TextColumn("Settore", width="medium"),
+            "Segnale": st.column_config.TextColumn("Segnale", width="small"),
+        }
+    )
+    st.markdown("""
+    <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                padding:12px 20px;margin-top:8px;font-size:0.80em;color:#888;
+                display:flex;gap:20px;flex-wrap:wrap;">
+        <span><b style="color:#ff9900">MMS6M RSr</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20%</span>
+        <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio (accelerazione)</span>
+        <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
+        <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
+        <span><b style="color:#00ff55">🟢 ATTIVO</b> = 4 gate superati
+              <b style="color:#ffaa00">🟡 WATCHLIST</b> = parziale
+              <b style="color:#ff4422">🔴 FILTRATO</b> = primo gate non superato</span>
+    </div>
+    """, unsafe_allow_html=True)
+# ========================
+# TAB 6 — ROTATION BACKTEST
 # ========================
 with tab6:
     st.markdown(
-        '<h3 style="color:#ff9900;margin-bottom:4px;">📐 Valutazione P/E — Attuale vs Storia</h3>'
-        '<p style="color:#666;font-size:0.85em;margin-top:0;">P/E live da worldperatio.com · Medie storiche da worldperatio.com</p>'
-        '<p style="color:#444;font-size:0.78em;margin-top:4px;">📅 Dati storici aggiornati a: <b style="color:#ff9900">Febbraio 2026</b></p>',
-        unsafe_allow_html=True)
-    period_sel = st.radio("Confronta con media storica",
-                           options=["Last 1Y","Last 3Y","Last 5Y","Last 10Y","Last 20Y"], index=2, horizontal=True)
-    pe_hist = load_pe_historical()
-    if pe_hist is None:
-        st.warning("⚠️ File pe_historical.xlsx non trovato.")
-    else:
-        with st.spinner("Scarico P/E live da worldperatio.com..."):
-            pe_live, _pe_fallback = load_pe_live_worldperatio(SECTORS)
-        if _pe_fallback:
-            st.markdown(
-                f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
-                f'padding:6px 14px;margin-bottom:8px;font-size:0.78em;color:#aa7700;">'
-                f'⚠️ worldperatio non raggiungibile per: <b>{", ".join(_pe_fallback)}</b> — fallback yfinance</div>',
-                unsafe_allow_html=True)
-        etf_sectors = {
-            "XLK":"Info Technology","XLY":"Cons Discretionary","XLF":"Financials",
-            "XLC":"Comm Services","XLV":"Health Care","XLP":"Cons Staples",
-            "XLI":"Industrials","XLE":"Energy","XLB":"Materials","XLU":"Utilities","XLRE":"Real Estate",
-        }
-        rows = []
-        for etf, sector_name in etf_sectors.items():
-            pe_now  = pe_live.get(etf)
-            avg_col = f"{etf}_AvgPE"
-            std_col = f"{etf}_StdDev"
-            if period_sel not in pe_hist.index:
-                continue
-            avg_pe  = pe_hist.loc[period_sel, avg_col] if avg_col in pe_hist.columns else None
-            std_dev = pe_hist.loc[period_sel, std_col] if std_col in pe_hist.columns else None
-            dev_live= round((pe_now - avg_pe) / std_dev, 2) if pe_now and avg_pe and std_dev and std_dev > 0 else None
-            def valuation_label(dev):
-                if dev is None: return "N/D", "#888888"
-                if dev < 0:     return "Cheap", "#00ff55"
-                if dev < 0.5:   return "Fair",  "#aaaaaa"
-                if dev < 1.5:   return "Moderato", "#ffff44"
-                if dev < 2.5:   return "Overvalued","#ffaa00"
-                return "Expensive", "#ff4422"
-            label, color = valuation_label(dev_live)
-            rows.append({"ETF": etf, "Settore": sector_name, "P/E Live": pe_now,
-                          f"Avg P/E ({period_sel})": avg_pe, "Std Dev": std_dev,
-                          "Dev σ (live)": dev_live, "Valutazione": label, "_color": color})
-        comp_df = pd.DataFrame(rows)
-        bar_colors_pe = []
-        for _, r in comp_df.iterrows():
-            d = r["Dev σ (live)"]
-            if d is None:     bar_colors_pe.append("#555555")
-            elif d < 0:       bar_colors_pe.append("#00ff55")
-            elif d < 0.5:     bar_colors_pe.append("#aaaaaa")
-            elif d < 1.5:     bar_colors_pe.append("#ffff44")
-            elif d < 2.5:     bar_colors_pe.append("#ffaa00")
-            else:             bar_colors_pe.append("#ff4422")
-        fig_pe = go.Figure()
-        fig_pe.add_trace(go.Bar(x=comp_df["ETF"], y=comp_df["Dev σ (live)"], marker_color=bar_colors_pe,
-            text=[f"{v:.2f}σ" if v is not None else "N/D" for v in comp_df["Dev σ (live)"]],
-            textposition="outside", textfont=dict(size=11, color="white"),
-            hovertemplate="<b>%{x}</b><br>Deviazione: %{y:.2f}σ<extra></extra>"))
-        for y, c, txt in [(0,"#444444",None),(1.5,"#ffaa00","Overvalued"),(2.5,"#ff4422","Expensive"),(-0.5,"#00ff55","Cheap")]:
-            kwargs = dict(y=y, line_color=c, line_width=1)
-            if txt: kwargs.update(line_dash="dot", annotation_text=txt, annotation_font_color=c, annotation_position="right")
-            fig_pe.add_hline(**kwargs)
-        fig_pe.update_layout(height=320, paper_bgcolor="#000000", plot_bgcolor="#000000",
-            font=dict(color="white", size=11),
-            title=dict(text=f"Deviazione P/E Live vs Media {period_sel}  (σ)", font=dict(size=13, color="#ff9900")),
-            xaxis=dict(gridcolor="#111"), yaxis=dict(gridcolor="#1a1a1a", ticksuffix="σ"),
-            margin=dict(l=40, r=80, t=50, b=40), showlegend=False)
-        st.plotly_chart(fig_pe, use_container_width=True)
-        display_cols = ["ETF","Settore","P/E Live",f"Avg P/E ({period_sel})","Std Dev","Dev σ (live)","Valutazione"]
-        display_df   = comp_df[display_cols].copy()
-        def style_valuation(val):
-            return {"Cheap":"color:#00ff55;font-weight:bold","Fair":"color:#aaaaaa",
-                    "Moderato":"color:#ffff44;font-weight:bold","Overvalued":"color:#ffaa00;font-weight:bold",
-                    "Expensive":"color:#ff4422;font-weight:bold","N/D":"color:#555555"}.get(str(val), "")
-        def style_dev(val):
-            try:
-                v = float(val)
-                if v < 0:   return "color:#00ff55"
-                if v < 0.5: return "color:#aaaaaa"
-                if v < 1.5: return "color:#ffff44"
-                if v < 2.5: return "color:#ffaa00"
-                return "color:#ff4422"
-            except Exception: return ""
-        st.dataframe(
-            display_df.style.map(style_valuation, subset=["Valutazione"]).map(style_dev, subset=["Dev σ (live)"])
-            .format({"P/E Live": lambda x: f"{x:.2f}" if x else "N/D",
-                     f"Avg P/E ({period_sel})": lambda x: f"{x:.2f}" if x else "N/D",
-                     "Std Dev": lambda x: f"{x:.2f}" if x else "N/D",
-                     "Dev σ (live)": lambda x: f"{x:.2f}σ" if x else "N/D"}),
-            use_container_width=True, hide_index=True)
-        st.markdown("""
-        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
-                    padding:10px 20px;margin-top:8px;font-size:0.82em;color:#888;display:flex;gap:20px;flex-wrap:wrap;">
-            <span><b style="color:#00ff55">Cheap</b> — sotto la media storica</span>
-            <span><b style="color:#aaaaaa">Fair</b> — entro 0.5σ</span>
-            <span><b style="color:#ffff44">Moderato</b> — tra 0.5σ e 1.5σ</span>
-            <span><b style="color:#ffaa00">Overvalued</b> — tra 1.5σ e 2.5σ</span>
-            <span><b style="color:#ff4422">Expensive</b> — oltre 2.5σ</span>
-        </div>""", unsafe_allow_html=True)
-
-
-# ========================
-# TAB 7 — TEMATICI
-# ========================
-with tab7:
-    st.markdown(
-        '<h3 style="color:#ff9900;margin-bottom:2px;">📌 ETF Tematici</h3>'
+        '<h3 style="color:#ff9900;margin-bottom:2px;">🔁 Rotation Backtest</h3>'
         '<p style="color:#555;font-size:0.82em;margin-top:0;">'
-        'Performance assoluta · Delta vs benchmark di gruppo · Coerenza intra-settoriale · Scatter quadranti</p>',
+        'Strumento universale — Eurostoxx precaricato · ticker e benchmark modificabili · '
+        'calcola indicatori e rendimenti forward a una data storica</p>',
         unsafe_allow_html=True)
-    with st.spinner("Caricamento prezzi tematici…"):
-        th_prices = load_thematic_prices()
-    if th_prices.empty:
-        st.error("Impossibile scaricare i dati.")
-        st.stop()
 
-    c1, c2, c3 = st.columns([2, 2, 1])
-    with c1:
-        tf_label = st.selectbox("Timeframe analisi", ["1D","1W","1M","3M","6M","YTD","1A","2A"], index=4, key="tem_tf_main")
-    with c2:
-        sector_opts = ["TUTTI"] + [s for s, _, _ in TEMATICI_STRUCT]
-        sel_sector  = st.selectbox("Filtra gruppo", sector_opts, key="tem_sector")
-    with c3:
-        show_bm = st.checkbox("Mostra benchmark", value=True, key="tem_bm")
+    col_tk, col_bm = st.columns([3, 1])
+    with col_tk:
+        bt_tickers_raw = st.text_area(
+            "Ticker (uno per riga)",
+            value="\n".join(EURO_SECTORS),
+            height=220, key="bt_tickers")
+    with col_bm:
+        bt_benchmark = st.text_input("Benchmark", value=EURO_BENCHMARK, key="bt_bm").strip().upper()
+        bt_ref_date  = st.date_input(
+            "Data di riferimento",
+            value=datetime.today().date() - timedelta(days=90),
+            min_value=datetime(2010,1,1).date(),
+            max_value=datetime.today().date(),
+            key="bt_date")
 
-    tf_days_main = TF_DAYS[tf_label]
-    rows_tem = []
-    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
-        bm_ret = safe_ret(th_prices[bm_ticker], tf_days_main) if bm_ticker in th_prices.columns else None
-        for ticker in tickers:
-            if ticker not in th_prices.columns: continue
-            s = th_prices[ticker].dropna()
-            if len(s) < 3: continue
-            abs_ret  = safe_ret(s, tf_days_main)
-            delta_bm = (abs_ret - bm_ret) if (abs_ret is not None and bm_ret is not None
-                                               and not np.isnan(abs_ret) and not np.isnan(bm_ret)) else np.nan
-            rows_tem.append({
-                "Gruppo": sector, "Ticker": ticker, "Tema": TEMATICI_DESCRIPTIONS.get(ticker, ticker),
-                "BM": bm_ticker, "BM ret": round(bm_ret, 2) if bm_ret and not np.isnan(bm_ret) else np.nan,
-                "1D": round(safe_ret(s, 1), 2), "1W": round(safe_ret(s, 5), 2),
-                "1M": round(safe_ret(s, 21), 2), "3M": round(safe_ret(s, 63), 2),
-                "6M": round(safe_ret(s, 126), 2), "YTD": round(safe_ret(s, None), 2),
-                "1A": round(safe_ret(s, 252), 2), "2A": round(safe_ret(s, 504), 2),
-                "vs BM": round(delta_bm, 2) if not np.isnan(delta_bm) else np.nan,
-            })
-    tem_df = pd.DataFrame(rows_tem)
-    if tem_df.empty:
-        st.warning("Nessun dato disponibile.")
-        st.stop()
+    st.markdown("##### Soglie gate")
+    s1,s2,s3,s4,s5 = st.columns(5)
+    with s1: bt_thr_abs = st.slider("MMS6M Ass.",  0.00,0.05,0.03,0.005,format="%.3f",key="bt_abs")
+    with s2: bt_thr_rsr = st.slider("MMS6M RSr",   0.00,0.03,0.01,0.002,format="%.3f",key="bt_rsr")
+    with s3: bt_thr_tt  = st.slider("TT minimo",   0.00,0.03,0.015,0.002,format="%.3f",key="bt_tt")
+    with s4: bt_thr_mr  = st.slider("Mr Index",    0.00,0.02,0.01,0.001,format="%.3f",key="bt_mr")
+    with s5: bt_thr_mbi = st.slider("MBI alert",   0.50,1.50,1.00,0.10, format="%.2f",key="bt_mbi")
 
-    st.markdown("---")
-    st.markdown(f"### 1 · Coerenza intra-gruppo — {tf_label}")
-    valid_ret = tem_df[tf_label].dropna()
-    total_etf, total_all = len(valid_ret), len(tem_df)
-    missing_n = total_all - total_etf
-    missing_tickers = tem_df[tem_df[tf_label].isna()]["Ticker"].tolist()
-    pos_count = (valid_ret > 0).sum()
-    pos_pct   = round(pos_count / total_etf * 100, 1) if total_etf > 0 else 0
-    top_row   = tem_df.dropna(subset=[tf_label]).nlargest(1, tf_label).iloc[0] if total_etf > 0 else None
-    bot_row   = tem_df.dropna(subset=[tf_label]).nsmallest(1, tf_label).iloc[0] if total_etf > 0 else None
-    k1, k2, k3, k4 = st.columns(4)
-    kpi_data = [
-        (k1, "ETF con dati", str(total_etf), "#ff9900"),
-        (k2, f"Positivi {tf_label}", f"{pos_count}/{total_etf} ({pos_pct}%)", "#00ff55" if pos_pct >= 50 else "#ff4422"),
-        (k3, f"Top {tf_label}", f"{top_row['Ticker']} ({top_row[tf_label]:+.1f}%)" if top_row is not None else "—", "#00ff55"),
-        (k4, f"Worst {tf_label}", f"{bot_row['Ticker']} ({bot_row[tf_label]:+.1f}%)" if bot_row is not None else "—", "#ff4422"),
-    ]
-    for col, label, val, color in kpi_data:
-        col.markdown(f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;padding:10px 14px;margin-bottom:6px;">'
-                     f'<div style="color:#555;font-size:0.75em;letter-spacing:0.06em">{label}</div>'
-                     f'<div style="color:{color};font-size:1.15em;font-weight:bold">{val}</div></div>', unsafe_allow_html=True)
-    if missing_n > 0:
-        st.markdown(f'<div style="background:#1a1000;border:1px solid #332200;border-radius:6px;'
-                    f'padding:6px 14px;margin-bottom:8px;font-size:0.78em;color:#aa7700;">'
-                    f'⚠️ <b>{missing_n} ETF esclusi</b> su <b>{tf_label}</b>: {", ".join(missing_tickers)}</div>',
-                    unsafe_allow_html=True)
+    st.markdown("##### Rendimenti forward")
+    fw1, fw2 = st.columns(2)
+    with fw1: bt_fw1 = st.selectbox("TF forward 1", ["1M","3M","6M"], index=1, key="bt_fw1")
+    with fw2: bt_fw2 = st.selectbox("TF forward 2", ["3M","6M","1A"], index=1, key="bt_fw2")
+    fw_days_map = {"1M":21,"3M":63,"6M":126,"1A":252}
 
-    coerenza_data = []
-    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
-        grp = tem_df[tem_df["Gruppo"] == sector][tf_label].dropna()
-        if len(grp) == 0: continue
-        bm_r   = tem_df[tem_df["Gruppo"] == sector]["BM ret"].dropna()
-        bm_val = float(bm_r.iloc[0]) if len(bm_r) > 0 else np.nan
-        coerenza_data.append({"Gruppo": sector, "Pct_pos": round((grp > 0).sum() / len(grp) * 100, 1),
-                               "n_pos": int((grp > 0).sum()), "n_tot": int(len(grp)), "BM_ret": bm_val})
-    cdf_plot = pd.DataFrame(coerenza_data)
+    if st.button("Calcola Backtest", type="primary", key="bt_run"):
+        bt_tickers = [t.strip().upper() for t in bt_tickers_raw.strip().splitlines() if t.strip()]
+        if not bt_tickers:
+            st.error("Inserisci almeno un ticker.")
+            st.stop()
 
-    col_chart, col_panel = st.columns([3, 2])
-    with col_chart:
-        bar_bm_colors = ["#00cc44" if (not np.isnan(r["BM_ret"]) and r["BM_ret"] >= 0) else "#cc2200"
-                         for _, r in cdf_plot.iterrows()]
-        bm_vals  = cdf_plot["BM_ret"].dropna()
-        y_max_bm = bm_vals.max() if len(bm_vals) > 0 else 10
-        y_min_bm = bm_vals.min() if len(bm_vals) > 0 else -5
-        y_abs    = max(abs(y_max_bm), abs(y_min_bm))
-        y_pad    = y_abs * 0.30
-        y_top    = y_max_bm + y_pad + 5
-        y_bot    = min(y_min_bm - y_pad, -3)
-        fig_coh  = go.Figure()
-        for _, r in cdf_plot.iterrows():
-            if np.isnan(r["BM_ret"]): continue
-            fig_coh.add_shape(type="line", x0=r["Gruppo"], x1=r["Gruppo"], y0=0, y1=r["BM_ret"],
-                line=dict(color="#00cc44" if r["BM_ret"] >= 0 else "#cc2200", width=8, dash="solid"), opacity=0.45)
-        fig_coh.add_trace(go.Bar(x=cdf_plot["Gruppo"], y=cdf_plot["BM_ret"].fillna(0),
-            marker=dict(color=bar_bm_colors, opacity=0.70, line=dict(color="#333", width=1)), width=0.40,
-            text=[f"{v:+.1f}%" if not np.isnan(v) else "n/d" for v in cdf_plot["BM_ret"]],
-            textposition="outside", textfont=dict(color="#888888", size=8), name=f"BM {tf_label}",
-            hovertemplate=f"<b>%{{x}}</b><br>Benchmark {tf_label}: %{{y:+.1f}}%<extra></extra>"))
-        if show_bm:
-            breadth_col   = ["#00ff55" if r["Pct_pos"] >= 60 else "#ffff44" if r["Pct_pos"] >= 40 else "#ff4422"
-                             for _, r in cdf_plot.iterrows()]
-            hover_diamond = [f"<b>{r['Gruppo']}</b><br>BM {tf_label}: {r['BM_ret']:+.1f}%<br>"
-                             f"Breadth: {r['Pct_pos']:.0f}% ({r['n_pos']}/{r['n_tot']})"
-                             for _, r in cdf_plot.iterrows()]
-            fig_coh.add_trace(go.Scatter(x=cdf_plot["Gruppo"], y=cdf_plot["BM_ret"].fillna(0),
-                mode="markers", marker=dict(symbol="diamond", size=8, color=breadth_col,
-                line=dict(color="#ffffff", width=1.2)), name="Breadth ◆",
-                hovertemplate="%{customdata}<extra></extra>", customdata=hover_diamond))
-        fig_coh.add_hline(y=0, line_color="#555", line_width=1.5)
-        fig_coh.update_layout(height=500, paper_bgcolor="#000", plot_bgcolor="#000",
-            font=dict(color="white", size=9),
-            title=dict(text=f"Ritorno benchmark {tf_label}  |  ◆ = breadth tematici" if show_bm else f"Ritorno benchmark {tf_label}",
-                        font=dict(size=9, color="#555"), x=0, xanchor="left"),
-            xaxis=dict(tickangle=-25, gridcolor="#0a0a0a", tickfont=dict(size=8)),
-            yaxis=dict(range=[y_bot, y_top], gridcolor="#111", ticksuffix="%", zeroline=False,
-                       tickfont=dict(size=8), title=None),
-            legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0)", orientation="h", y=1.02, x=1, xanchor="right"),
-            margin=dict(l=45, r=40, t=30, b=60), barmode="overlay")
-        st.plotly_chart(fig_coh, use_container_width=True)
+        bt_all  = bt_tickers + [bt_benchmark]
+        ref_dt  = pd.Timestamp(bt_ref_date)
+        fwd1_d  = fw_days_map[bt_fw1]
+        fwd2_d  = fw_days_map[bt_fw2]
 
-    with col_panel:
-        n_bm_pos       = (cdf_plot["BM_ret"] > 0).sum()
-        n_bm_tot       = len(cdf_plot["BM_ret"].dropna())
-        global_breadth = round(pos_pct, 1)
-        avg_bm_ret     = round(cdf_plot["BM_ret"].mean(), 1)
-        if n_bm_pos >= 9:   regime_txt, regime_color, regime_icon = "RISK ON DIFFUSO",  "#00ff55", "🟢"
-        elif n_bm_pos >= 6: regime_txt, regime_color, regime_icon = "MOMENTUM MISTO",   "#ffff44", "🟡"
-        elif n_bm_pos >= 3: regime_txt, regime_color, regime_icon = "RISK OFF PARZIALE","#ffaa00", "🟠"
-        else:               regime_txt, regime_color, regime_icon = "RISK OFF DIFFUSO", "#ff4422", "🔴"
-        sorted_cdf  = cdf_plot.dropna(subset=["BM_ret"]).sort_values("BM_ret", ascending=False)
-        bm_positivi = sorted_cdf[sorted_cdf["BM_ret"] >  0]
-        bm_negativi = sorted_cdf[sorted_cdf["BM_ret"] <= 0].sort_values("BM_ret")
-        all_positive, all_negative = len(bm_negativi) == 0, len(bm_positivi) == 0
-        if not all_negative:
-            leader_df, leader_title, leader_note = bm_positivi.head(3), "▲ Leader benchmark", ""
-        else:
-            leader_df = sorted_cdf.head(3)
-            leader_title = "▲ Meno peggio"
-            leader_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti negativi su {tf_label}</div>'
-        if not all_positive:
-            corr_df, corr_title, corr_note = bm_negativi.head(3), "▼ Benchmark in correzione", ""
-        else:
-            corr_df = sorted_cdf.tail(3).sort_values("BM_ret")
-            corr_title = "▼ Gruppi meno forti"
-            corr_note  = f'<div style="color:#555;font-style:italic;font-size:0.75em;margin-top:2px;">tutti positivi su {tf_label}</div>'
-        divergenze = []
-        for _, r in cdf_plot.iterrows():
-            if np.isnan(r["BM_ret"]): continue
-            if r["BM_ret"] > 0 and r["Pct_pos"] < 40:
-                divergenze.append(f'<span style="color:#ffaa00">⚡ <b>{r["Gruppo"]}</b></span>: '
-                                  f'BM {r["BM_ret"]:+.1f}% ma breadth {r["Pct_pos"]:.0f}% → rally non confermato')
-            elif r["BM_ret"] <= 0 and r["Pct_pos"] >= 60:
-                divergenze.append(f'<span style="color:#44aaff">⚡ <b>{r["Gruppo"]}</b></span>: '
-                                  f'BM {r["BM_ret"]:+.1f}% ma breadth {r["Pct_pos"]:.0f}% → tematici reggono')
-        leader_html = "".join([f'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a1a;">'
-                                f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
-                                f'<span style="color:#00ff55;font-weight:bold;font-size:0.82em">{r["BM_ret"]:+.1f}%</span></div>'
-                                for _, r in leader_df.iterrows()]) or \
-                      '<span style="color:#444;font-style:italic;font-size:0.80em">—</span>'
-        corr_color = "#ff4422" if not all_positive else "#ffaa00"
-        corr_html  = "".join([f'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a1a;">'
-                               f'<span style="color:#aaa;font-size:0.82em">{r["Gruppo"]}</span>'
-                               f'<span style="color:{corr_color};font-weight:bold;font-size:0.82em">{r["BM_ret"]:+.1f}%</span></div>'
-                               for _, r in corr_df.iterrows()]) or \
-                     '<span style="color:#444;font-style:italic;font-size:0.80em">—</span>'
-        div_html = "<br>".join(divergenze) if divergenze else \
-                   '<span style="color:#444;font-style:italic;font-size:0.80em">Nessuna divergenza significativa</span>'
+        with st.spinner("Download prezzi..."):
+            try:
+                raw_bt = yf.download(bt_all,
+                    start=ref_dt - timedelta(days=3*365),
+                    end=datetime.today(), auto_adjust=True, progress=False)
+                bt_close = raw_bt["Close"] if isinstance(raw_bt.columns, pd.MultiIndex) else raw_bt
+                bt_close = bt_close.dropna(how="all")
+            except Exception as e:
+                st.error(f"Errore download: {e}")
+                st.stop()
+
+        not_found = [t for t in bt_all if t not in bt_close.columns]
+        if not_found:
+            st.warning(f"Ticker non trovati: {', '.join(not_found)}")
+        if bt_benchmark not in bt_close.columns:
+            st.error(f"Benchmark {bt_benchmark} non disponibile.")
+            st.stop()
+
+        # Data effettiva più vicina disponibile
+        actual_ref = bt_close.index[bt_close.index.searchsorted(ref_dt)]
+        if actual_ref > bt_close.index[-1]:
+            actual_ref = bt_close.index[-1]
+
         st.markdown(
-            f'<div style="background:#080808;border:1px solid #222;border-radius:10px;padding:16px 18px;height:100%;font-family:monospace;">'
-            f'<div style="border-bottom:1px solid #222;padding-bottom:10px;margin-bottom:12px;">'
-            f'<div style="color:#555;font-size:0.70em;letter-spacing:0.1em;text-transform:uppercase;">Regime tematico — {tf_label}</div>'
-            f'<div style="color:{regime_color};font-size:1.25em;font-weight:bold;margin-top:4px;">{regime_icon} {regime_txt}</div>'
-            f'<div style="color:#444;font-size:0.75em;margin-top:2px;">BM positivi: {n_bm_pos}/{n_bm_tot} &nbsp;·&nbsp; '
-            f'Breadth: {global_breadth}% &nbsp;·&nbsp; BM medio: {avg_bm_ret:+.1f}%</div></div>'
-            f'<div style="margin-bottom:12px;"><div style="color:#555;font-size:0.68em;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">{leader_title}</div>'
-            f'{leader_note}{leader_html}</div>'
-            f'<div style="margin-bottom:12px;"><div style="color:#555;font-size:0.68em;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">{corr_title}</div>'
-            f'{corr_note}{corr_html}</div>'
-            f'<div><div style="color:#555;font-size:0.68em;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">⚡ Divergenze rilevate</div>'
-            f'<div style="font-size:0.78em;line-height:1.7;">{div_html}</div></div></div>',
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;'
+            f'padding:8px 16px;margin-bottom:10px;font-size:0.82em;color:#888;">'
+            f'Data riferimento effettiva: <b style="color:#ff9900">'
+            f'{actual_ref.strftime("%d/%m/%Y")}</b></div>',
             unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("### 2 · Performance per timeframe")
-    tf_cols   = ["1D","1W","1M","3M","6M","YTD","1A","2A"]
-    disp_cols = ["Gruppo","Ticker","Tema"] + tf_cols + ["vs BM"]
-    view_df   = tem_df.copy()
-    if sel_sector != "TUTTI":
-        view_df = view_df[view_df["Gruppo"] == sel_sector]
-    view_df = view_df[disp_cols].copy()
+        bt_hist = bt_close[bt_close.index <= actual_ref].copy()
+        bm_hist = bt_hist[bt_benchmark].dropna()
 
-    def highlight_best(s):
-        styles = [""] * len(s)
-        valid  = s.dropna()
-        if valid.empty: return styles
-        max_v, min_v = valid.max(), valid.min()
-        for i, v in enumerate(s):
-            if pd.isna(v):      styles[i] = "color:#333"
-            elif v == max_v:    styles[i] = "background-color:#003300;color:#00FF00;font-weight:bold"
-            elif v == min_v:    styles[i] = "background-color:#330000;color:#ff4422;font-weight:bold"
-            elif v > 0:         styles[i] = "color:#88cc88"
-            else:               styles[i] = "color:#cc6644"
-        return styles
+        def rsr_at(tk, days):
+            try:
+                s = bt_hist[tk].dropna()
+                b = bm_hist
+                if len(s)<=days or len(b)<=days: return np.nan
+                rs = float(s.iloc[-1]/s.iloc[-days-1]-1)
+                rb = float(b.iloc[-1]/b.iloc[-days-1]-1)
+                return float((1+rs)/(1+rb)-1)
+            except: return np.nan
 
-    def color_vs_bm(val):
-        try:
-            v = float(val)
-            if np.isnan(v):  return "color:#333"
-            if v > 2:        return "color:#00ff55;font-weight:bold"
-            if v > 0:        return "color:#88cc88"
-            if v > -2:       return "color:#cc6644"
-            return "color:#ff4422;font-weight:bold"
-        except Exception:    return "color:#333"
+        def abs_at(tk, days):
+            try:
+                s = bt_hist[tk].dropna()
+                if len(s)<=days: return np.nan
+                return float(s.iloc[-1]/s.iloc[-days-1]-1)
+            except: return np.nan
 
-    def fmt_pct(x):
-        try:
-            f_val = float(x)
-            return "—" if np.isnan(f_val) else f"{f_val:+.1f}%"
-        except Exception: return "—"
+        def fw(tk, days):
+            try:
+                s = bt_close[tk].dropna()
+                i = s.index.searchsorted(actual_ref)
+                if i+days >= len(s): return np.nan
+                p0,p1 = float(s.iloc[i]), float(s.iloc[i+days])
+                if pd.isna(p0) or p0==0: return np.nan
+                return p1/p0-1
+            except: return np.nan
 
-    styled_tem = (view_df.style.apply(highlight_best, subset=tf_cols)
-                  .map(color_vs_bm, subset=["vs BM"])
-                  .format({c: fmt_pct for c in tf_cols + ["vs BM"]}))
-    st.dataframe(styled_tem, use_container_width=True, hide_index=True,
-                 column_config={"Gruppo": st.column_config.TextColumn("Gruppo", width="medium"),
-                                "Tema":   st.column_config.TextColumn("Tema",   width="medium"),
-                                "vs BM":  st.column_config.TextColumn(f"vs BM ({tf_label})", width="small")})
-    st.markdown(f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;padding:8px 16px;margin-top:4px;font-size:0.78em;color:#666;">'
-                f'<b style="color:#00ff55">Verde</b> = top per colonna · <b style="color:#ff4422">Rosso</b> = worst per colonna · '
-                f'<b style="color:#ff9900">vs BM</b> = delta tematico − benchmark su {tf_label}</div>', unsafe_allow_html=True)
+        wts=[0.20,0.35,0.25,0.20]
+        rows=[]
+        for tk in bt_tickers:
+            if tk not in bt_close.columns: continue
+            r1d=rsr_at(tk,1); r1w=rsr_at(tk,5)
+            r1m=rsr_at(tk,21); r3m=rsr_at(tk,63); r6m=rsr_at(tk,126)
+            vr=[r1w,r1m,r3m,r6m]
+            mms6m_rsr = sum(v*w for v,w in zip(vr,wts)) if not any(np.isnan(v) for v in vr) else np.nan
+            va=[abs_at(tk,d) for d in [5,21,63,126]]
+            mms6m_abs = sum(v*w for v,w in zip(va,wts)) if not any(np.isnan(v) for v in va) else np.nan
+            breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
+            medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
+            tt  = (breve-medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+            mr  = (breve/(abs(medio)+0.02)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+            if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
+                mbi = ((r1w+r1m)/2 - mms6m_rsr)/abs(mms6m_rsr)
+            else: mbi = np.nan
 
-    st.markdown("---")
-    st.markdown(f"### 3 · Top & Bottom 5 — {tf_label}")
-    ranked = tem_df.dropna(subset=[tf_label]).sort_values(tf_label, ascending=False)
-    top5, bot5 = ranked.head(5), ranked.tail(5).sort_values(tf_label)
-    c_top, c_bot = st.columns(2)
+            sig = euro_gate_signal(
+                {"MMS6M Ass.":mms6m_abs,"MMS6M RSr":mms6m_rsr,
+                 "Tact. Thrust":tt,"Mr Index":mr},
+                bt_thr_abs, bt_thr_rsr, bt_thr_tt, bt_thr_mr)
 
-    def mini_bar(df_slice, ascending=False, title=""):
-        colors_mb = ["#00ff55" if v >= 0 else "#ff4422" for v in df_slice[tf_label]]
-        fig_mb = go.Figure(go.Bar(x=df_slice[tf_label], y=df_slice["Ticker"] + " · " + df_slice["Tema"],
-            orientation="h", marker=dict(color=colors_mb, line=dict(color="#333", width=1)),
-            text=[f"{v:+.1f}%" for v in df_slice[tf_label]], textposition="outside",
-            textfont=dict(color="white", size=10), hovertemplate="<b>%{y}</b><br>%{x:.1f}%<extra></extra>"))
-        fig_mb.add_vline(x=0, line_color="#444", line_width=1)
-        fig_mb.update_layout(height=200, paper_bgcolor="#000", plot_bgcolor="#000", font=dict(color="white", size=9),
-            title=dict(text=title, font=dict(size=11, color="#ff9900")),
-            xaxis=dict(gridcolor="#111", ticksuffix="%"),
-            yaxis=dict(gridcolor="#111", autorange="reversed" if not ascending else True),
-            margin=dict(l=10, r=60, t=35, b=20), showlegend=False)
-        return fig_mb
+            ret_fw1 = fw(tk, fwd1_d)
+            ret_fw2 = fw(tk, fwd2_d)
+            bm_fw1  = fw(bt_benchmark, fwd1_d)
+            bm_fw2  = fw(bt_benchmark, fwd2_d)
+            d1 = (ret_fw1-bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
+            d2 = (ret_fw2-bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
 
-    with c_top: st.plotly_chart(mini_bar(top5, title="🏆 Top 5"), use_container_width=True)
-    with c_bot: st.plotly_chart(mini_bar(bot5, ascending=True, title="💀 Bottom 5"), use_container_width=True)
+            rows.append({
+                "Ticker":tk,
+                "MMS6M Ass.":mms6m_abs, "MMS6M RSr":mms6m_rsr,
+                "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
+                "Segnale":sig,
+                f"Rend +{bt_fw1}":ret_fw1, f"Rend +{bt_fw2}":ret_fw2,
+                f"Delta BM +{bt_fw1}":d1,  f"Delta BM +{bt_fw2}":d2,
+            })
 
-    st.markdown("---")
-    st.markdown("### 4 · Scatter quadranti")
-    sc_tf_opts = ["1D","1W","1M","3M","6M","YTD","1A","2A"]
-    sc_c1, sc_c2, sc_c3 = st.columns([2, 1, 1])
-    with sc_c1: sc_tf = st.selectbox("Timeframe scatter", sc_tf_opts, index=sc_tf_opts.index(tf_label), key="tem_scatter_tf")
-    with sc_c2: label_mode = st.radio("Etichette", ["Ticker","Tema"], horizontal=True, key="tem_sc_lbl")
-    with sc_c3: filter_scatter = st.checkbox("Solo gruppo selezionato", value=False, key="tem_sc_filter")
+        if not rows:
+            st.warning("Nessun dato calcolato.")
+            st.stop()
 
-    rows_sc = []
-    for sector, tickers, bm_ticker in TEMATICI_STRUCT:
-        bm_r = safe_ret(th_prices[bm_ticker], TF_DAYS[sc_tf]) if bm_ticker in th_prices.columns else np.nan
-        for ticker in tickers:
-            if ticker not in th_prices.columns: continue
-            s     = th_prices[ticker].dropna()
-            abs_r = safe_ret(s, TF_DAYS[sc_tf])
-            if np.isnan(abs_r): continue
-            delta = (abs_r - bm_r) if not np.isnan(bm_r) else np.nan
-            rows_sc.append({"Gruppo": sector, "Ticker": ticker, "Tema": TEMATICI_DESCRIPTIONS.get(ticker, ticker),
-                             "BM": bm_ticker, "BM_ret": bm_r, "abs_ret": abs_r, "delta_bm": delta})
-    sc_df = pd.DataFrame(rows_sc).dropna(subset=["abs_ret","delta_bm"])
-    if filter_scatter and sel_sector != "TUTTI":
-        sc_df = sc_df[sc_df["Gruppo"] == sel_sector]
-    if sc_df.empty:
-        st.info("Dati insufficienti per lo scatter su questo timeframe.")
-    else:
-        group_colors = {s: c for s, c in zip([g for g, _, _ in TEMATICI_STRUCT],
-                        ["#ff9900","#00ff55","#44aaff","#ff4422","#ffff44","#bb44ff",
-                         "#00ffcc","#ff66cc","#88cc88","#cc8844","#4488ff","#ff8844"])}
-        fig_sc = go.Figure()
-        for sector in sc_df["Gruppo"].unique():
-            sub    = sc_df[sc_df["Gruppo"] == sector]
-            labels = sub["Ticker"] if label_mode == "Ticker" else sub["Tema"]
-            color  = group_colors.get(sector, "#aaaaaa")
-            hover_text = []
-            for _, r in sub.iterrows():
-                lbl    = r["Ticker"] if label_mode == "Ticker" else r["Tema"]
-                bm_str = f"{r['BM_ret']:+.1f}%" if not np.isnan(r["BM_ret"]) else "n/d"
-                hover_text.append(f"<b>{lbl}</b><br>Gruppo: {sector}<br>Ret {sc_tf}: {r['abs_ret']:+.1f}%<br>BM ({r['BM']}): {bm_str}<br>vs BM: {r['delta_bm']:+.1f}%")
-            fig_sc.add_trace(go.Scatter(x=sub["abs_ret"], y=sub["delta_bm"], mode="markers+text", name=sector,
-                marker=dict(size=10, color=color, opacity=0.85, line=dict(color="#111", width=1)),
-                text=labels, textposition="top center", textfont=dict(size=8, color="#cccccc"),
-                hovertemplate="%{customdata}<extra></extra>", customdata=hover_text))
-        fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
-        fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
-        pad_x = (sc_df["abs_ret"].max() - sc_df["abs_ret"].min()) * 0.08
-        pad_y = (sc_df["delta_bm"].max() - sc_df["delta_bm"].min()) * 0.08
-        for qx, qy, qlabel, qcolor, qanchor in [
-            (sc_df["abs_ret"].max()-pad_x,  sc_df["delta_bm"].max()-pad_y, "LEADER",     "#00ff55", "top right"),
-            (sc_df["abs_ret"].min()+pad_x,  sc_df["delta_bm"].max()-pad_y, "ALPHA PURO", "#44aaff", "top left"),
-            (sc_df["abs_ret"].max()-pad_x,  sc_df["delta_bm"].min()+pad_y, "BETA PURO",  "#ffaa00", "bottom right"),
-            (sc_df["abs_ret"].min()+pad_x,  sc_df["delta_bm"].min()+pad_y, "EVITARE",    "#ff4422", "bottom left"),
-        ]:
-            fig_sc.add_annotation(x=qx, y=qy, text=qlabel, showarrow=False,
-                font=dict(color=qcolor, size=10, family="Courier New"),
-                opacity=0.45, xanchor=qanchor.split()[1], yanchor=qanchor.split()[0])
-        fig_sc.update_layout(height=500, paper_bgcolor="#000000", plot_bgcolor="#000000",
-            font=dict(color="white", size=10),
-            title=dict(text=f"Scatter {sc_tf} — X: ritorno assoluto  |  Y: delta vs benchmark",
-                        font=dict(size=10, color="#666")),
-            xaxis=dict(title=f"Ritorno assoluto {sc_tf} (%)", gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
-            yaxis=dict(title=f"Delta vs benchmark ({sc_tf}) %", gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
-            legend=dict(font=dict(size=8), bgcolor="rgba(0,0,0,0.5)", bordercolor="#333", borderwidth=1,
-                        orientation="v", x=1.01, y=1),
-            margin=dict(l=60, r=160, t=50, b=60), hoverlabel=dict(bgcolor="#111", font_size=11))
-        st.plotly_chart(fig_sc, use_container_width=True)
-        st.markdown("""
-        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
-                    padding:10px 20px;margin-top:4px;font-size:0.80em;color:#888;display:flex;gap:24px;flex-wrap:wrap;">
-            <span><b style="color:#00ff55">LEADER</b> — positivo E sovraperforma il benchmark</span>
-            <span><b style="color:#44aaff">ALPHA PURO</b> — negativo ma batte il benchmark</span>
-            <span><b style="color:#ffaa00">BETA PURO</b> — positivo ma sotto il benchmark</span>
-            <span><b style="color:#ff4422">EVITARE</b> — negativo E sottoperforma</span>
-        </div>""", unsafe_allow_html=True)
-    st.markdown('<div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;padding:10px 20px;margin-top:16px;font-size:0.78em;color:#555;">'
-                '<b style="color:#ff9900">vs BM</b> = differenza ritorno tematico − ritorno benchmark di gruppo (stesso TF)</div>',
+        res = pd.DataFrame(rows).set_index("Ticker").sort_values("MMS6M RSr", ascending=False)
+
+        # MBI alert
+        mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
+        if not mbi_alert.empty:
+            lst = [f"{t} ({v:+.2f})" for t,v in mbi_alert["MBI"].items()]
+            st.markdown(
+                f'<div style="background:#1a1000;border:1px solid #554400;border-radius:6px;'
+                f'padding:8px 16px;margin-bottom:10px;font-size:0.82em;color:#ffaa00;">'
+                f'MBI Alert (|MBI| > {bt_thr_mbi:.2f}): {" · ".join(lst)}</div>',
                 unsafe_allow_html=True)
 
+        fw1c=f"Rend +{bt_fw1}"; fw2c=f"Rend +{bt_fw2}"
+        d1c=f"Delta BM +{bt_fw1}"; d2c=f"Delta BM +{bt_fw2}"
 
+        def _c_fw(v):
+            try:
+                v=float(v)
+                if np.isnan(v): return "color:#444"
+                if v>0.05:  return "color:#00ff55;font-weight:bold"
+                if v>0:     return "color:#88cc88"
+                if v<-0.05: return "color:#ff4422;font-weight:bold"
+                return "color:#cc6644"
+            except: return ""
+
+        def _c_dbm(v):
+            try:
+                v=float(v)
+                if np.isnan(v): return "color:#444"
+                if v>0.03:  return "color:#00ff55;font-weight:bold"
+                if v>0:     return "color:#88cc88"
+                if v<-0.03: return "color:#ff4422;font-weight:bold"
+                return "color:#cc6644"
+            except: return ""
+
+        def _c_seg2(v):
+            if "ATTIVO"    in str(v): return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if "FILTRATO"  in str(v): return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if "WATCHLIST" in str(v): return "background-color:#2b2200;color:#ffaa00;font-weight:bold"
+            return ""
+
+        def _c_mms_rsr2(v):
+            try:
+                v=float(v)
+                if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: pass
+            return "color:#888"
+
+        def _c_mms_abs2(v):
+            try:
+                v=float(v)
+                if v>0.03:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v<-0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: pass
+            return "color:#888"
+
+        def _c_tt2(v):
+            try:
+                v=float(v)
+                if v>0.015:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v<-0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: pass
+            return "color:#888"
+
+        def _c_mr2(v):
+            try:
+                v=float(v)
+                if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: pass
+            return "color:#888"
+
+        def _c_mbi2(v):
+            try:
+                v=float(v)
+                if v<-1.00: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v>1.00:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+                if v>0.50:  return "color:#ffaa00"
+            except: pass
+            return "color:#888"
+
+        fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
+        fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
+
+        st.dataframe(
+            res.style
+            .map(_c_mms_abs2, subset=["MMS6M Ass."])
+            .map(_c_mms_rsr2, subset=["MMS6M RSr"])
+            .map(_c_tt2,      subset=["Tact. Thrust"])
+            .map(_c_mr2,      subset=["Mr Index"])
+            .map(_c_mbi2,     subset=["MBI"])
+            .map(_c_seg2,     subset=["Segnale"])
+            .map(_c_fw,       subset=[fw1c,fw2c])
+            .map(_c_dbm,      subset=[d1c,d2c])
+            .format({"MMS6M Ass.":fp2,"MMS6M RSr":fp2,"Tact. Thrust":fp2,
+                     "Mr Index":fp2,"MBI":fm2,
+                     fw1c:fp2,fw2c:fp2,d1c:fp2,d2c:fp2}),
+            use_container_width=True,
+            column_config={"Segnale":st.column_config.TextColumn("Segnale",width="small")}
+        )
+
+        # Riepilogo
+        na=( res["Segnale"]=="🟢 ATTIVO").sum()
+        nw=(res["Segnale"]=="🟡 WATCHLIST").sum()
+        nf=(res["Segnale"]=="🔴 FILTRATO").sum()
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
+            f'padding:10px 20px;margin-top:8px;font-size:0.85em;color:#888;'
+            f'display:flex;gap:28px;flex-wrap:wrap;">'
+            f'<span>🟢 ATTIVO: <b style="color:#00ff55">{na}</b></span>'
+            f'<span>🟡 WATCHLIST: <b style="color:#ffaa00">{nw}</b></span>'
+            f'<span>🔴 FILTRATO: <b style="color:#ff4422">{nf}</b></span>'
+            f'<span style="color:#555;">Data: {actual_ref.strftime("%d/%m/%Y")} · Bm: {bt_benchmark}</span>'
+            f'</div>', unsafe_allow_html=True)
+
+        # Analisi forward sui soli ATTIVI
+        attivi = res[res["Segnale"]=="🟢 ATTIVO"]
+        if not attivi.empty and not attivi[fw1c].dropna().empty:
+            st.markdown("---")
+            st.markdown("#### Performance forward — solo ATTIVI")
+            avg1=attivi[fw1c].dropna().mean()
+            avg2=attivi[fw2c].dropna().mean()
+            d1m=attivi[d1c].dropna().mean()
+            hit=( attivi[fw1c].dropna()>0).sum()
+            n  =attivi[fw1c].dropna().count()
+            kk=st.columns(4)
+            for col,lbl,val,col_ in [
+                (kk[0],f"Rend medio +{bt_fw1}",
+                 f"{avg1*100:+.2f}%" if not np.isnan(avg1) else "N/D",
+                 "#00ff55" if not np.isnan(avg1) and avg1>0 else "#ff4422"),
+                (kk[1],f"Rend medio +{bt_fw2}",
+                 f"{avg2*100:+.2f}%" if not np.isnan(avg2) else "N/D",
+                 "#00ff55" if not np.isnan(avg2) and avg2>0 else "#ff4422"),
+                (kk[2],f"Hit rate +{bt_fw1}",f"{hit}/{n}" if n>0 else "N/D","#ff9900"),
+                (kk[3],f"Delta BM medio +{bt_fw1}",
+                 f"{d1m*100:+.2f}%" if not np.isnan(d1m) else "N/D",
+                 "#00ff55" if not np.isnan(d1m) and d1m>0 else "#ff4422"),
+            ]:
+                col.markdown(
+                    f'<div style="background:#0d0d0d;border:1px solid #222;'
+                    f'border-radius:8px;padding:10px 14px;">'
+                    f'<div style="color:#555;font-size:0.75em">{lbl}</div>'
+                    f'<div style="color:{col_};font-size:1.15em;font-weight:bold">{val}</div>'
+                    f'</div>', unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+        <div style="background:#080808;border:1px solid #1a1a1a;border-radius:10px;
+                    padding:24px;margin-top:8px;color:#555;font-size:0.88em;line-height:1.8;">
+        <b style="color:#ff9900">Come usare:</b><br>
+        1. Scegli una data storica di riferimento<br>
+        2. Modifica ticker/benchmark per altri universi (es. SPDR US)<br>
+        3. Calibra le soglie gate con gli slider<br>
+        4. Premi <b>Calcola Backtest</b><br>
+        5. La tabella mostra indicatori alla data e rendimenti forward effettivi<br><br>
+        <b style="color:#ff9900">Gate sequenziale:</b>
+        MMS6M Ass. &gt; soglia → MMS6M RSr &gt; soglia → TT &gt; soglia → Mr Index &gt; soglia
+        → <b style="color:#00ff55">🟢 ATTIVO</b>
+        </div>
+        """, unsafe_allow_html=True)
 # ========================
-# TAB 8 — BACKTEST RS
+# TAB 7 — BACKTEST RS
 # ========================
-with tab8:
+with tab7:
     import json
     st.markdown(
         '<h3 style="color:#ff9900;margin-bottom:4px;">🧪 Backtest Rotation Score — Episodi Risk Off</h3>'
