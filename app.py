@@ -749,7 +749,7 @@ with tab1:
         "Flow Regime": st.column_config.TextColumn("Flow Regime", width="small"),
     })
 
-    st.markdown("""
+   st.markdown("""
     <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
                 padding:12px 20px;margin-top:8px;font-size:0.82em;color:#888;
                 display:flex;gap:24px;flex-wrap:wrap;">
@@ -760,6 +760,8 @@ with tab1:
         <span><b style="color:#888">[B~ M~] INDECISO</b> — segnale non direzionale</span>
         <span><b style="color:#00ff55">BULL FLOW</b> / <b style="color:#ff4422">BEAR FLOW</b> — flowEMA vs flowTrend (OBV normalizzato, Daily 20/13/50)</span>
     </div>
+    """, unsafe_allow_html=True)
+
     st.markdown("""
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
                 padding:10px 20px;margin-top:10px;font-size:0.82em;">
