@@ -77,11 +77,7 @@ ALL_TICKERS = SECTORS + [BENCHMARK]
 CYCLICAL = ["XLK","XLY","XLF","XLI","XLB","XLE"]
 DEFENSIVE = ["XLV","XLP","XLU","XLRE"]
 
-FACTOR_ETFS = [
-    "MVOL.MI","IWQU.MI","IWMO.MI","IWVL.MI",
-    "IUSN.DE","SWDA.MI","IQSA.MI"
-]
-FACTOR_COMPARISON = ["SWDA.MI","IQSA.MI"]
+
 
 WEIGHTS = {"1M":0.30,"3M":0.40,"6M":0.30}
 # ========================
@@ -120,51 +116,6 @@ VOL_SCORE_MAP = {
     "[B-M-] DISTRIBUZ":  -1.0,
 }
 
-# ========================
-# STRUTTURA ETF TEMATICI  (tua versione aggiornata)
-# ========================
-TEMATICI_STRUCT = [
-    ("TECHNOLOGY",              ["BCHN.MI","XAIX.MI","QNTM.MI","CIBR.MI","ECAR.MI"],   "XDWT.DE"),
-    ("CONS. DISCREZIONALI",     ["GLUX.MI","EXV5.DE","EXV9.DE","ECOM.MI"],              "XDWC.DE"),
-    ("FINANCIALS",              ["ITBL.MI","BNKE.PA","EXH5.DE","DPAY.MI"],              "XDWF.DE"),
-    ("COMM. SERVICE",           ["ESPO.MI","EXV2.DE","KWEB.AS"],                        "XWTS.DE"),
-    ("HEALTHCARE",              ["AGED.MI","2B70.DE","DOCT.MI","HEAL.MI"],              "XDWH.DE"),
-    ("CONSUMER STAPLES",        ["EXH3.DE","DXSK.DE"],                                  "XDWS.DE"),
-    ("INDUSTRIAL",              ["HTWO.MI","DFNS.MI","JEDI.MI","XSGI.MI","PAVE.MI"],    "XDWI.DE"),
-    ("BASIC MATERIALS",         ["REMX.MI","BATT.MI","EXV7.DE","ISAG.MI","WOOE.AS"],   "XDWM.DE"),
-    ("ENERGY",                  ["STNX.MI","IOGP.AS","NUCL.MI"],                        "XDW0.DE"),
-    ("UTILITIES",               ["H2OA.AS","INRG.MI","WNDY.DE","RENW.MI","SOLR.MI"],   "XDWU.DE"),
-    ("IMMOBILIARE",             ["V9N.DE","IPRE.DE","IASP.AS","WTRE.MI"],               "EPRA.MI"),
-    ("INTRAS./ALTERNATIVI",     ["ARKK.MI","WPAY.MI","UNIC.MI","GOAT.PA","FOOD.MI"],   "SWDA.MI"),
-]
-
-TEMATICI_DESCRIPTIONS = {
-    "BCHN.MI": "blockchain & crypto", "XAIX.MI": "AI", "QNTM.MI": "quantum comp.",
-    "CIBR.MI": "cybersecurity",       "ECAR.MI": "mobilità elettr.",
-    "GLUX.MI": "beni di lusso",       "EXV5.DE": "automobili",
-    "EXV9.DE": "travel & leisure",    "ECOM.MI": "e.commerce",
-    "ITBL.MI": "banche italiane",     "BNKE.PA": "banche europa",   "EXH5.DE": "assic. europa",
-    "ESPO.MI": "gaming",              "EXV2.DE": "telco europa",    "KWEB.AS": "tech Cina",
-    "AGED.MI": "ageing popul.",       "2B70.DE": "biotech",
-    "DOCT.MI": "tech salute",         "HEAL.MI": "health innovat.",
-    "EXH3.DE": "food & beverage",     "DXSK.DE": "cons.stapl.europa",
-    "HTWO.MI": "idrogeno",            "DFNS.MI": "difesa",          "JEDI.MI": "aerospazio",
-    "PAVE.MI": "infrast. USA",        "REMX.MI": "terre rare",      "BATT.MI": "batterie",
-    "EXV7.DE": "chimica",             "ISAG.MI": "agricoltura",
-    "STNX.MI": "energia europa",      "IOGP.AS": "oil & gas global","NUCL.MI": "nucleare",
-    "H2OA.AS": "acqua",               "INRG.MI": "rinnovabili",
-    "WNDY.DE": "eolico",              "RENW.MI": "rinnovabili (2)",
-    "SOLR.MI": "energia solare",      "V9N.DE":  "imm. data cent.",
-    "IPRE.DE": "imm. europa",         "IASP.AS": "imm. asia",       "WTRE.MI": "imm. globale",
-    "DPAY.MI": "pagamenti digitali",  "XSGI.MI": "infrast. globali",
-    "WOOE.AS": "legname",             "WPAY.MI": "humanoid & drones",
-    "ARKK.MI": "disruptive innov.",   "UNIC.MI": "disruptive tech.",
-    "GOAT.PA": "global moat",         "FOOD.MI": "futuro del cibo",
-}
-
-ALL_THEMATIC_TICKERS = list(dict.fromkeys(
-    t for _, tickers, bm in TEMATICI_STRUCT for t in tickers + [bm]
-))
 
 TF_DAYS = {"1D": 1, "1W": 5, "1M": 21, "3M": 63, "6M": 126, "YTD": None, "1A": 252, "2A": 504}
 
@@ -214,62 +165,6 @@ def load_ohlcv_long(tickers):
     start = end - timedelta(days=2*365)
     raw = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
     return raw
-
-
-WORLDPE_URLS = {
-    "XLK":  "https://worldperatio.com/sector/sp-500-information-technology",
-    "XLY":  "https://worldperatio.com/sector/sp-500-consumer-discretionary",
-    "XLF":  "https://worldperatio.com/sector/sp-500-financials",
-    "XLC":  "https://worldperatio.com/sector/sp-500-communication-services",
-    "XLV":  "https://worldperatio.com/sector/sp-500-health-care",
-    "XLP":  "https://worldperatio.com/sector/sp-500-consumer-staples",
-    "XLI":  "https://worldperatio.com/sector/sp-500-industrials",
-    "XLE":  "https://worldperatio.com/sector/sp-500-energy",
-    "XLB":  "https://worldperatio.com/sector/sp-500-materials",
-    "XLU":  "https://worldperatio.com/sector/sp-500-utilities",
-    "XLRE": "https://worldperatio.com/sector/sp-500-real-estate",
-}
-
-
-@st.cache_data(ttl=60*60*6)
-def load_pe_live_worldperatio(tickers):
-    import requests, re
-    from bs4 import BeautifulSoup
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    result, _failed = {}, []
-    for ticker in tickers:
-        url = WORLDPE_URLS.get(ticker)
-        if not url:
-            result[ticker] = None
-            continue
-        try:
-            resp = requests.get(url, headers=headers, timeout=12)
-            resp.raise_for_status()
-            text  = BeautifulSoup(resp.text, "html.parser").get_text()
-            match = re.search(r"P/E Ratio\s*\n\s*([\d.]+)", text)
-            result[ticker] = float(match.group(1)) if match else None
-            if not match:
-                _failed.append(ticker)
-        except Exception:
-            result[ticker] = None
-            _failed.append(ticker)
-    for t in _failed:
-        try:
-            info = yf.Ticker(t).info
-            pe   = info.get("trailingPE") or info.get("forwardPE")
-            result[t] = round(pe, 2) if pe else None
-        except Exception:
-            result[t] = None
-    return result, _failed
-
-
-@st.cache_data(ttl=60*60*12)
-def load_pe_historical():
-    try:
-        pe_hist = pd.read_excel("pe_historical.xlsx", sheet_name="PE_Historical")
-        return pe_hist.set_index("Period")
-    except Exception:
-        return None
 
 
 # ── FIX: Wikipedia con StringIO + fallback robusto
@@ -341,16 +236,7 @@ def load_sp500_data(timeframe_days: int):
     return merged
 
 
-@st.cache_data(ttl=60*60)
-def load_thematic_prices():
-    end   = datetime.today()
-    start = end - timedelta(days=2*365 + 30)
-    raw = yf.download(ALL_THEMATIC_TICKERS, start=start, end=end, auto_adjust=True, progress=False)
-    if isinstance(raw.columns, pd.MultiIndex):
-        close = raw["Close"]
-    else:
-        close = raw
-    return close.dropna(how="all")
+)
 
 
 # ========================
@@ -876,7 +762,16 @@ with tab1:
         <span><b style="color:#888">[B~ M~] INDECISO</b> — segnale non direzionale</span>
         <span><b style="color:#00ff55">BULL FLOW</b> / <b style="color:#ff4422">BEAR FLOW</b> — flowEMA vs flowTrend (OBV normalizzato, Daily 20/13/50)</span>
     </div>
+    st.markdown("""
+    <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;
+                padding:10px 20px;margin-top:10px;font-size:0.82em;">
+        <span style="color:#555;">Valutazione P/E settoriale: </span>
+        <a href="https://worldperatio.com" target="_blank"
+           style="color:#ff9900;text-decoration:none;font-weight:bold;">
+           worldperatio.com</a>
+    </div>
     """, unsafe_allow_html=True)
+   
 
 
 # ========================
