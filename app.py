@@ -92,16 +92,16 @@ EURO_SECTORS = [
 EURO_BENCHMARK = "EXSA.DE"
 EURO_ALL = EURO_SECTORS + [EURO_BENCHMARK]
 EURO_NAMES = {
-    "EXH1.DE":"Healthcare",      "EXV6.DE":"Technology",
-    "EXV7.DE":"Basic Resources", "EXV3.DE":"Chemicals",
-    "EXH4.DE":"Real Estate",     "EXV1.DE":"Banks",
-    "EXH2.DE":"Financial Svcs",  "EXH9.DE":"Telecom",
-    "EXH5.DE":"Insurance",       "EXV8.DE":"Media",
-    "EXH6.DE":"Personal Goods",  "EXV4.DE":"Oil & Gas",
+    "EXH1.DE":"Oil & Gas",      "EXV6.DE":"Basic Res.",
+    "EXV7.DE":"Chemicals", "EXV3.DE":"Technology",
+    "EXH4.DE":"Industrials",     "EXV1.DE":"Banks",
+    "EXH2.DE":"Financial Svcs",  "EXH9.DE":"Utilities",
+    "EXH5.DE":"Insurance",       "EXV8.DE":"Constr & Mat",
+    "EXH6.DE":"Media",  "EXV4.DE":"Healthcare",
     "EXV5.DE":"Automobiles",     "EXH8.DE":"Retail",
-    "EXV9.DE":"Travel & Leisure","EXI5.DE":"Industrials",
-    "EXH3.DE":"Food & Bev",      "EXH7.DE":"Utilities",
-    "EXV2.DE":"Cons Staples",    "EXSA.DE":"STOXX 600",
+    "EXV9.DE":"Travel & Leisure","EXI5.DE":"Real Estate",
+    "EXH3.DE":"Food & Bev",      "EXH7.DE":"Personal & Hous",
+    "EXV2.DE":"Telecom",    "EXSA.DE":"STOXX 600",
 }
 
 # ── ROS 2.0 weights (Intervento 1)
