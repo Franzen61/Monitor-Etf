@@ -1809,7 +1809,7 @@ with tab6:
                 if v>0.50:  return "color:#ffaa00"
             except: pass
             return "color:#888"
-            def _c_amsr_score(v):
+        def _c_amsr_score(v):
             try:
                 v = float(v)
                 if np.isnan(v):  return "color:#444"
