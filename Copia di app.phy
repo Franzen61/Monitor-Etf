@@ -581,7 +581,21 @@ def compute_euro_indicators(prices, today_prices, benchmark):
             "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
         })
     return pd.DataFrame(results).set_index("Ticker")
-
+def calcola_maxdd_rsr(ticker, benchmark, bt_close, actual_ref, periodo_giorni=63):
+    try:
+        tk_s = bt_close[ticker].dropna()
+        bm_s = bt_close[benchmark].dropna()
+        end_idx   = tk_s.index.searchsorted(actual_ref)
+        start_idx = max(0, end_idx - periodo_giorni)
+        tk_win = tk_s.iloc[start_idx:end_idx]
+        bm_win = bm_s.reindex(tk_win.index).dropna()
+        tk_win = tk_win.reindex(bm_win.index)
+        if len(tk_win) < 10: return np.nan
+        rsr_s = (tk_win / bm_win) - 1
+        rolling_max = rsr_s.expanding().max()
+        drawdown    = rsr_s - rolling_max
+        return float(drawdown.min())
+    except: return np.nan
 def euro_gate_signal(row_dict, thr_abs=0.03, thr_rsr=0.01, thr_tt=0.015, thr_mr=0.01):
     gates = [
         ("MMS6M Ass.", thr_abs), ("MMS6M RSr", thr_rsr),
@@ -1688,7 +1702,13 @@ with tab6:
             bm_fw2  = fw(bt_benchmark, fwd2_d)
             d1 = (ret_fw1-bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
             d2 = (ret_fw2-bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
-
+            # AMSR
+            maxdd_rsr = calcola_maxdd_rsr(tk, bt_benchmark, bt_close, actual_ref)
+            amsr_score = (r1m + r3m - abs(maxdd_rsr)) if not np.isnan(maxdd_rsr) else np.nan
+            if not np.isnan(maxdd_rsr) and abs(maxdd_rsr) > 0.001:
+                amsr_sharpe = mms6m_rsr / abs(maxdd_rsr) if not np.isnan(mms6m_rsr) else np.nan
+            else:
+                amsr_sharpe = np.nan
             rows.append({
                 "Ticker":tk,
                 "MMS6M Ass.":mms6m_abs, "MMS6M RSr":mms6m_rsr,
@@ -1696,6 +1716,8 @@ with tab6:
                 "Segnale":sig,
                 f"Rend +{bt_fw1}":ret_fw1, f"Rend +{bt_fw2}":ret_fw2,
                 f"Delta BM +{bt_fw1}":d1,  f"Delta BM +{bt_fw2}":d2,
+                "AMSR Score":  amsr_score,
+                "AMSR Sharpe": amsr_sharpe,
             })
 
         if not rows:
@@ -1703,7 +1725,11 @@ with tab6:
             st.stop()
 
         res = pd.DataFrame(rows).set_index("Ticker").sort_values("MMS6M RSr", ascending=False)
-
+        # Ranking
+        res["Rank MMS6M"]      = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Rank AMSR"]       = res["AMSR Score"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Rank AMSR Sharpe"]= res["AMSR Sharpe"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Delta Rank"]      = res["Rank AMSR"] - res["Rank MMS6M"]
         # MBI alert
         mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
         if not mbi_alert.empty:
@@ -1783,6 +1809,35 @@ with tab6:
                 if v>0.50:  return "color:#ffaa00"
             except: pass
             return "color:#888"
+        def _c_amsr_score(v):
+            try:
+                v = float(v)
+                if np.isnan(v):  return "color:#444"
+                if v >= 0.05:    return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v >= 0.02:    return "color:#88cc88"
+                if v >= 0:       return "color:#888"
+                return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: return ""
+
+        def _c_amsr_sharpe(v):
+            try:
+                v = float(v)
+                if np.isnan(v):  return "color:#444"
+                if v > 1.0:      return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v > 0.5:      return "color:#88cc88"
+                if v >= 0:       return "color:#888"
+                return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except: return ""
+
+        def _c_delta_rank(v):
+            try:
+                v = int(v)
+                if v <= -3:  return "color:#00ff55;font-weight:bold"
+                if v <= -1:  return "color:#88cc88"
+                if v >= 3:   return "color:#ff4422;font-weight:bold"
+                if v >= 1:   return "color:#cc6644"
+                return "color:#888"
+            except: return ""
 
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
         fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
@@ -1797,11 +1852,28 @@ with tab6:
             .map(_c_seg2,     subset=["Segnale"])
             .map(_c_fw,       subset=[fw1c,fw2c])
             .map(_c_dbm,      subset=[d1c,d2c])
-            .format({"MMS6M Ass.":fp2,"MMS6M RSr":fp2,"Tact. Thrust":fp2,
-                     "Mr Index":fp2,"MBI":fm2,
-                     fw1c:fp2,fw2c:fp2,d1c:fp2,d2c:fp2}),
+            .map(_c_amsr_score,  subset=["AMSR Score"])
+            .map(_c_amsr_sharpe, subset=["AMSR Sharpe"])
+            .map(_c_delta_rank,  subset=["Delta Rank"])
+            .format({
+                "MMS6M Ass.":    fp2,
+                "MMS6M RSr":     fp2,
+                "Tact. Thrust":  fp2,
+                "Mr Index":      fp2,
+                "MBI":           fm2,
+                fw1c:            fp2,
+                fw2c:            fp2,
+                d1c:             fp2,
+                d2c:             fp2,
+                "AMSR Score":    fp2,
+                "AMSR Sharpe":   lambda x: f"{x:+.3f}" if not pd.isna(x) else "N/D",
+                "Rank MMS6M":    lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Rank AMSR":     lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Rank AMSR Sharpe": lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Delta Rank":    lambda x: f"{int(x):+d}" if not pd.isna(x) else "-",
+            }),
             use_container_width=True,
-            column_config={"Segnale":st.column_config.TextColumn("Segnale",width="small")}
+            column_config={"Segnale": st.column_config.TextColumn("Segnale", width="small")}
         )
 
         # Riepilogo
