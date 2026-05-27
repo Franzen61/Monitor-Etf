@@ -581,6 +581,17 @@ def compute_euro_indicators(prices, today_prices, benchmark):
             "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
         })
     return pd.DataFrame(results).set_index("Ticker")
+def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
+    try:
+        tk_s = bt_close[ticker].dropna()
+        end_idx   = tk_s.index.searchsorted(actual_ref)
+        start_idx = max(0, end_idx - periodo_giorni)
+        tk_win = tk_s.iloc[start_idx:end_idx]
+        if len(tk_win) < 10: return np.nan
+        rolling_max = tk_win.expanding().max()
+        drawdown = (tk_win - rolling_max) / rolling_max
+        return float(drawdown.min())
+    except: return np.nan
 def calcola_maxdd_rsr(ticker, benchmark, bt_close, actual_ref, periodo_giorni=63):
     try:
         tk_s = bt_close[ticker].dropna()
@@ -1704,12 +1715,20 @@ with tab6:
             d2 = (ret_fw2-bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
             # AMSR
             maxdd_rsr = calcola_maxdd_rsr(tk, bt_benchmark, bt_close, actual_ref)
-            amsr_score = (r1m + r3m - abs(maxdd_rsr)) if not np.isnan(maxdd_rsr) else np.nan
+            maxdd_abs = calcola_maxdd_assoluto(tk, bt_close, actual_ref)
+            try:
+                tk_s = bt_close[tk].dropna()
+                ret_abs_1m = float(tk_s.iloc[-1] / tk_s.iloc[-22] - 1) if len(tk_s) > 21 else np.nan
+                ret_abs_3m = float(tk_s.iloc[-1] / tk_s.iloc[-64] - 1) if len(tk_s) > 63 else np.nan
+            except:
+                ret_abs_1m, ret_abs_3m = np.nan, np.nan
+            amsr_score = (ret_abs_1m + ret_abs_3m - abs(maxdd_abs)) if not np.isnan(maxdd_abs) else np.nan
             if not np.isnan(maxdd_rsr) and abs(maxdd_rsr) > 0.001:
                 amsr_sharpe = mms6m_rsr / abs(maxdd_rsr) if not np.isnan(mms6m_rsr) else np.nan
             else:
                 amsr_sharpe = np.nan
             rows.append({
+            
                 "Ticker":tk,
                 "MMS6M Ass.":mms6m_abs, "MMS6M RSr":mms6m_rsr,
                 "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
