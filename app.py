@@ -574,25 +574,11 @@ def compute_euro_indicators(prices, today_prices, benchmark):
             mbi = ((r1w+r1m)/2 - mms6m_rsr) / abs(mms6m_rsr)
         else:
             mbi = np.nan
-            # Media Gemini — velocità media su segmenti disgiunti
-        abs1w  = get_abs(tk, 5)
-        abs1m  = get_abs(tk, 21)
-        abs3m  = get_abs(tk, 63)
-        abs6m  = get_abs(tk, 126)
-        seg1 = abs1w
-        seg2 = (abs1m - abs1w) / 3
-        seg3 = (abs3m - abs1m) / 8
-        seg4 = (abs6m - abs3m) / 12
-        if not any(np.isnan(v) for v in [seg1, seg2, seg3, seg4]):
-            media_gemini = (seg1 + seg2 + seg3 + seg4) / 4
-        else:
-            media_gemini = np.nan
         results.append({
             "Ticker":tk, "Nome":EURO_NAMES.get(tk,tk),
             "RSr 1D":r1d, "RSr 1W":r1w, "RSr 1M":r1m, "RSr 3M":r3m, "RSr 6M":r6m,
             "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
             "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
-            "Media Gemini": media_gemini,
         })
     return pd.DataFrame(results).set_index("Ticker")
 def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
