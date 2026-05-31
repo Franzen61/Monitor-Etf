@@ -1567,7 +1567,7 @@ with tab5:
         <span><b style="color:#ff9900">MMS6M RSr</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20%</span>
         <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio (accelerazione)</span>
         <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
-        <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 0,01%</span>
+        <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
         <span><b style="color:#00ff55">🟢 ATTIVO</b> = 4 gate superati
               <b style="color:#ffaa00">🟡 WATCHLIST</b> = parziale
               <b style="color:#ff4422">🔴 FILTRATO</b> = primo gate non superato</span>
