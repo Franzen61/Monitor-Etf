@@ -1958,10 +1958,10 @@ with tab6:
             f'</div>', unsafe_allow_html=True)
 
         # Analisi forward sui soli ATTIVI
-        attivi = res.dropna(subset=[fw1c])
-        if not attivi.empty:
+        attivi = res[res["GTE"] > 0].dropna(subset=[fw1c])
+        if not attivi.empty::
             st.markdown("---")
-            st.markdown("#### Performance forward — solo ATTIVI")
+            st.markdown("#### Performance forward — settori con GTE positivo")
             avg1=attivi[fw1c].dropna().mean()
             avg2=attivi[fw2c].dropna().mean()
             d1m=attivi[d1c].dropna().mean()
