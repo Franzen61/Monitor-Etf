@@ -1768,13 +1768,7 @@ with tab6:
             except:
                 ret_abs_1m, ret_abs_3m = np.nan, np.nan
             amsr_score = (ret_abs_1m + ret_abs_3m - abs(maxdd_abs)) if not np.isnan(maxdd_abs) else np.nan
-            if not np.isnan(maxdd_rsr) and abs(maxdd_rsr) > 0.001:
-                amsr_sharpe = mms6m_rsr / abs(maxdd_rsr) if not np.isnan(mms6m_rsr) else np.nan
-            else:
-                amsr_sharpe = np.nan
             rows.append({
-            
-                rows.append({
                 "Ticker":tk,
                 "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
                 "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
