@@ -1950,22 +1950,16 @@ with tab6:
         )
 
         # Riepilogo
-        na=( res["Segnale"]=="🟢 ATTIVO").sum()
-        nw=(res["Segnale"]=="🟡 WATCHLIST").sum()
-        nf=(res["Segnale"]=="🔴 FILTRATO").sum()
         st.markdown(
             f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
             f'padding:10px 20px;margin-top:8px;font-size:0.85em;color:#888;'
             f'display:flex;gap:28px;flex-wrap:wrap;">'
-            f'<span>🟢 ATTIVO: <b style="color:#00ff55">{na}</b></span>'
-            f'<span>🟡 WATCHLIST: <b style="color:#ffaa00">{nw}</b></span>'
-            f'<span>🔴 FILTRATO: <b style="color:#ff4422">{nf}</b></span>'
-            f'<span style="color:#555;">Data: {actual_ref.strftime("%d/%m/%Y")} · Bm: {bt_benchmark}</span>'
+            f'<span style="color:#555;">Data: {actual_ref.strftime("%d/%m/%Y")} · Bm: {bt_benchmark} · Settori: {len(res)}</span>'
             f'</div>', unsafe_allow_html=True)
 
         # Analisi forward sui soli ATTIVI
-        attivi = res[res["Segnale"]=="🟢 ATTIVO"]
-        if not attivi.empty and not attivi[fw1c].dropna().empty:
+        attivi = res.dropna(subset=[fw1c])
+        if not attivi.empty::
             st.markdown("---")
             st.markdown("#### Performance forward — solo ATTIVI")
             avg1=attivi[fw1c].dropna().mean()
