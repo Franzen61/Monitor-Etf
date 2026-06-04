@@ -1959,7 +1959,7 @@ with tab6:
 
         # Analisi forward sui soli ATTIVI
         attivi = res.dropna(subset=[fw1c])
-        if not attivi.empty::
+        if not attivi.empty:
             st.markdown("---")
             st.markdown("#### Performance forward — solo ATTIVI")
             avg1=attivi[fw1c].dropna().mean()
