@@ -1,4 +1,4 @@
-import streamlit as st
+ streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -574,11 +574,31 @@ def compute_euro_indicators(prices, today_prices, benchmark):
             mbi = ((r1w+r1m)/2 - mms6m_rsr) / abs(mms6m_rsr)
         else:
             mbi = np.nan
+
+        # ── Media Gemini (scomposizione segmenti disgiunti normalizzati per durata)
+        if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]):
+            seg1 = r1w
+            seg2 = (r1m - r1w) / 3
+            seg3 = (r3m - r1m) / 8
+            seg4 = (r6m - r3m) / 13
+            media_gemini = (seg1 + seg2 + seg3 + seg4) / 4
+        else:
+            media_gemini = np.nan
+
+        # ── GTE — Gemini Tactical Efficiency (ratio vs MaxDD assoluto 3M)
+        if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
+            gemini_3m = (r1w + (r1m - r1w)/3 + (r3m - r1m)/8) / 3
+            maxdd_3m  = calcola_maxdd_assoluto(tk, prices, prices.index[-1])
+            gte = gemini_3m / (abs(maxdd_3m) + 0.0001) if not np.isnan(maxdd_3m) else np.nan
+        else:
+            gte = np.nan
+
         results.append({
             "Ticker":tk, "Nome":EURO_NAMES.get(tk,tk),
             "RSr 1D":r1d, "RSr 1W":r1w, "RSr 1M":r1m, "RSr 3M":r3m, "RSr 6M":r6m,
             "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
             "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
+            "Media Gemini":media_gemini, "GTE":gte,
         })
     return pd.DataFrame(results).set_index("Ticker")
 def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
@@ -607,21 +627,17 @@ def calcola_maxdd_rsr(ticker, benchmark, bt_close, actual_ref, periodo_giorni=63
         drawdown    = rsr_s - rolling_max
         return float(drawdown.min())
     except: return np.nan
-def euro_gate_signal(row_dict, thr_abs=0.03, thr_rsr=0.01, thr_tt=0.015, thr_mr=0.01):
-    gates = [
-        ("MMS6M Ass.", thr_abs), ("MMS6M RSr", thr_rsr),
-        ("Tact. Thrust", thr_tt), ("Mr Index", thr_mr),
-    ]
-    passed = 0
-    for col, thr in gates:
-        try: val = float(row_dict.get(col, np.nan))
-        except: val = np.nan
-        if np.isnan(val): break
-        if val >= thr: passed += 1
-        else: break
-    if passed==4: return "🟢 ATTIVO"
-    elif passed==0: return "🔴 FILTRATO"
-    else: return "🟡 WATCHLIST"
+def calcola_maxdd_assoluto_6m(ticker, bt_close, actual_ref, periodo_giorni=126):
+    try:
+        tk_s = bt_close[ticker].dropna()
+        end_idx   = tk_s.index.searchsorted(actual_ref)
+        start_idx = max(0, end_idx - periodo_giorni)
+        tk_win = tk_s.iloc[start_idx:end_idx]
+        if len(tk_win) < 10: return np.nan
+        rolling_max = tk_win.expanding().max()
+        drawdown = (tk_win - rolling_max) / rolling_max
+        return float(drawdown.min())
+    except: return np.nan
 # ========================
 # LOAD SECTORAL DATA
 # ========================
@@ -1356,14 +1372,7 @@ with tab5:
     with st.spinner("Calcolo indicatori RSr..."):
         euro_ind = compute_euro_indicators(euro_prices_clean, euro_today_clean, EURO_BENCHMARK)
 
-    euro_ind["Segnale"] = euro_ind.apply(
-        lambda row: euro_gate_signal({
-            "MMS6M Ass.":   row["MMS6M Ass."],
-            "MMS6M RSr":    row["MMS6M RSr"],
-            "Tact. Thrust": row["Tact. Thrust"],
-            "Mr Index":     row["Mr Index"],
-        }), axis=1)
-
+    
     # ── Controlli UI
     c1, c2 = st.columns([2, 2])
     with c1:
@@ -1428,24 +1437,29 @@ with tab5:
             "Ticker": tk, "Nome": EURO_NAMES.get(tk,tk),
             "RSr 1M": euro_ind.loc[tk,"RSr 1M"],
             "RSr 3M": euro_ind.loc[tk,"RSr 3M"],
-            "Segnale": euro_ind.loc[tk,"Segnale"],
+            "GTE":    euro_ind.loc[tk,"GTE"],
         })
     sc_df = pd.DataFrame(sc_data).dropna(subset=["RSr 1M","RSr 3M"])
 
     if not sc_df.empty:
-        sig_colors = {"🟢 ATTIVO":"#00cc44","🟡 WATCHLIST":"#ffaa00","🔴 FILTRATO":"#cc2200"}
+        def _gte_color(v):
+            if pd.isna(v): return "#888888"
+            return "#00cc44" if v > 0 else "#cc2200"
+        sc_df["_color"] = sc_df["GTE"].apply(_gte_color)
+
         fig_sc = go.Figure()
-        for sig, grp in sc_df.groupby("Segnale"):
-            lbl = grp["Ticker"] if sc_lbl=="Ticker" else grp["Nome"]
-            fig_sc.add_trace(go.Scatter(
-                x=grp["RSr 1M"]*100, y=grp["RSr 3M"]*100,
-                mode="markers+text", name=sig,
-                marker=dict(size=11, color=sig_colors.get(sig,"#888"),
-                            opacity=0.85, line=dict(color="#111",width=1)),
-                text=lbl, textposition="top center",
-                textfont=dict(size=8,color="#ccc"),
-                hovertemplate="<b>%{text}</b><br>RSr 1M: %{x:.2f}%<br>RSr 3M: %{y:.2f}%<extra></extra>",
-            ))
+        lbl = sc_df["Ticker"] if sc_lbl=="Ticker" else sc_df["Nome"]
+        fig_sc.add_trace(go.Scatter(
+            x=sc_df["RSr 1M"]*100, y=sc_df["RSr 3M"]*100,
+            mode="markers+text",
+            name="Settori",
+            marker=dict(size=11, color=sc_df["_color"],
+                        opacity=0.85, line=dict(color="#111",width=1)),
+            text=lbl, textposition="top center",
+            textfont=dict(size=8,color="#ccc"),
+            hovertemplate="<b>%{text}</b><br>RSr 1M: %{x:.2f}%<br>RSr 3M: %{y:.2f}%<extra></extra>",
+        ))
+
         fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
         fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
         x_rng = sc_df["RSr 1M"].max()*100
@@ -1462,7 +1476,7 @@ with tab5:
         fig_sc.update_layout(
             height=460, paper_bgcolor="#000", plot_bgcolor="#000",
             font=dict(color="white",size=10),
-            title=dict(text="Scatter RSr 1M (X) vs RSr 3M (Y) — colorato per segnale gate",
+            title=dict(text="Scatter RSr 1M (X) vs RSr 3M (Y) — colore: GTE positivo=verde / negativo=rosso",
                        font=dict(size=10,color="#666")),
             xaxis=dict(title="RSr 1M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
             yaxis=dict(title="RSr 3M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
@@ -1478,7 +1492,8 @@ with tab5:
 
     disp = euro_ind.sort_values(euro_sort, ascending=False).copy()
     disp_show = disp[["Nome","RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
-                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI","Segnale"]].copy()
+                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI",
+                       "Media Gemini","GTE"]].copy()
 
     def _c_rsr(v):
         try:
@@ -1543,6 +1558,27 @@ with tab5:
     fp = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—"
     fm = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
+    def _c_gemini(v):
+        try:
+            v=float(v)
+            if v>0.005:  return "color:#00ff55"
+            if v>0:      return "color:#88cc88"
+            if v<-0.005: return "color:#ff4422"
+            if v<0:      return "color:#cc6644"
+        except: pass
+        return "color:#888"
+
+    def _c_gte(v):
+        try:
+            v=float(v)
+            if v>1.0:   return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v>0.3:   return "color:#88cc88"
+            if v>0:     return "color:#aaaaaa"
+            if v<-1.0:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v<0:     return "color:#cc6644"
+        except: pass
+        return "color:#888"
+
     st.dataframe(
         disp_show.style
         .map(_c_rsr,     subset=["RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
@@ -1551,13 +1587,14 @@ with tab5:
         .map(_c_tt,      subset=["Tact. Thrust"])
         .map(_c_mr,      subset=["Mr Index"])
         .map(_c_mbi,     subset=["MBI"])
-        .map(_c_seg,     subset=["Segnale"])
+        .map(_c_gemini,  subset=["Media Gemini"])
+        .map(_c_gte,     subset=["GTE"])
         .format({"RSr 1D":fp,"RSr 1W":fp,"RSr 1M":fp,"RSr 3M":fp,"RSr 6M":fp,
-                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
+                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm,
+                 "Media Gemini":fp,"GTE":fm}),
         use_container_width=True,
         column_config={
-            "Nome":    st.column_config.TextColumn("Settore", width="medium"),
-            "Segnale": st.column_config.TextColumn("Segnale", width="small"),
+            "Nome": st.column_config.TextColumn("Settore", width="medium"),
         }
     )
     st.markdown("""
@@ -1568,9 +1605,8 @@ with tab5:
         <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio (accelerazione)</span>
         <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
         <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
-        <span><b style="color:#00ff55">🟢 ATTIVO</b> = 4 gate superati
-              <b style="color:#ffaa00">🟡 WATCHLIST</b> = parziale
-              <b style="color:#ff4422">🔴 FILTRATO</b> = primo gate non superato</span>
+        <span><b style="color:#ff9900">Media Gemini</b>: scomposizione RSr in 4 segmenti disgiunti normalizzati per durata</span>
+        <span><b style="color:#ff9900">GTE</b>: Gemini Tactical Efficiency = Gemini 3M / (|MaxDD 3M| + ε) — positivo = efficienza tattica</span>
     </div>
     """, unsafe_allow_html=True)
 # ========================
@@ -1599,13 +1635,9 @@ with tab6:
             max_value=datetime.today().date(),
             key="bt_date")
 
-    st.markdown("##### Soglie gate")
-    s1,s2,s3,s4,s5 = st.columns(5)
-    with s1: bt_thr_abs = st.slider("MMS6M Ass.",  0.00,0.05,0.03,0.005,format="%.3f",key="bt_abs")
-    with s2: bt_thr_rsr = st.slider("MMS6M RSr",   0.00,0.03,0.01,0.002,format="%.3f",key="bt_rsr")
-    with s3: bt_thr_tt  = st.slider("TT minimo",   0.00,0.03,0.015,0.002,format="%.3f",key="bt_tt")
-    with s4: bt_thr_mr  = st.slider("Mr Index",    0.00,0.02,0.01,0.001,format="%.3f",key="bt_mr")
-    with s5: bt_thr_mbi = st.slider("MBI alert",   0.50,1.50,1.00,0.10, format="%.2f",key="bt_mbi")
+    st.markdown("##### Parametri")
+    with st.columns([1,3])[0]:
+        bt_thr_mbi = st.slider("MBI alert", 0.50,1.50,1.00,0.10, format="%.2f",key="bt_mbi")
 
     st.markdown("##### Rendimenti forward")
     fw1, fw2 = st.columns(2)
@@ -1702,10 +1734,23 @@ with tab6:
                 mbi = ((r1w+r1m)/2 - mms6m_rsr)/abs(mms6m_rsr)
             else: mbi = np.nan
 
-            sig = euro_gate_signal(
-                {"MMS6M Ass.":mms6m_abs,"MMS6M RSr":mms6m_rsr,
-                 "Tact. Thrust":tt,"Mr Index":mr},
-                bt_thr_abs, bt_thr_rsr, bt_thr_tt, bt_thr_mr)
+            # ── Media Gemini
+            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]):
+                seg1 = r1w
+                seg2 = (r1m - r1w) / 3
+                seg3 = (r3m - r1m) / 8
+                seg4 = (r6m - r3m) / 13
+                media_gemini_bt = (seg1 + seg2 + seg3 + seg4) / 4
+            else:
+                media_gemini_bt = np.nan
+
+            # ── GTE
+            if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
+                gemini_3m_bt = (r1w + (r1m - r1w)/3 + (r3m - r1m)/8) / 3
+                maxdd_3m_bt  = calcola_maxdd_assoluto(tk, bt_close, actual_ref)
+                gte_bt = gemini_3m_bt / (abs(maxdd_3m_bt) + 0.0001) if not np.isnan(maxdd_3m_bt) else np.nan
+            else:
+                gte_bt = np.nan
 
             ret_fw1 = fw(tk, fwd1_d)
             ret_fw2 = fw(tk, fwd2_d)
@@ -1729,14 +1774,14 @@ with tab6:
                 amsr_sharpe = np.nan
             rows.append({
             
+                rows.append({
                 "Ticker":tk,
-                "MMS6M Ass.":mms6m_abs, "MMS6M RSr":mms6m_rsr,
+                "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
                 "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
-                "Segnale":sig,
+                "Media Gemini":media_gemini_bt, "GTE":gte_bt,
+                "AMSR Score":amsr_score,
                 f"Rend +{bt_fw1}":ret_fw1, f"Rend +{bt_fw2}":ret_fw2,
                 f"Delta BM +{bt_fw1}":d1,  f"Delta BM +{bt_fw2}":d2,
-                "AMSR Score":  amsr_score,
-                "AMSR Sharpe": amsr_sharpe,
             })
 
         if not rows:
@@ -1745,10 +1790,10 @@ with tab6:
 
         res = pd.DataFrame(rows).set_index("Ticker").sort_values("MMS6M RSr", ascending=False)
         # Ranking
-        res["Rank MMS6M"]      = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Rank AMSR"]       = res["AMSR Score"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Rank AMSR Sharpe"]= res["AMSR Sharpe"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Delta Rank"]      = res["Rank AMSR"] - res["Rank MMS6M"]
+        res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Rank GTE"]   = res["GTE"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Rank AMSR"]  = res["AMSR Score"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Delta Rank"] = res["Rank GTE"] - res["Rank MMS6M"]
         # MBI alert
         mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
         if not mbi_alert.empty:
@@ -1861,38 +1906,53 @@ with tab6:
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
         fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
+        def _c_gemini2(v):
+            try:
+                v=float(v)
+                if v>0.005:  return "color:#00ff55"
+                if v>0:      return "color:#88cc88"
+                if v<-0.005: return "color:#ff4422"
+                if v<0:      return "color:#cc6644"
+            except: pass
+            return "color:#888"
+
+        def _c_gte2(v):
+            try:
+                v=float(v)
+                if v>1.0:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v>0.3:  return "color:#88cc88"
+                if v>0:    return "color:#aaaaaa"
+                if v<-1.0: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+                if v<0:    return "color:#cc6644"
+            except: pass
+            return "color:#888"
+
         st.dataframe(
             res.style
-            .map(_c_mms_abs2, subset=["MMS6M Ass."])
-            .map(_c_mms_rsr2, subset=["MMS6M RSr"])
-            .map(_c_tt2,      subset=["Tact. Thrust"])
-            .map(_c_mr2,      subset=["Mr Index"])
-            .map(_c_mbi2,     subset=["MBI"])
-            .map(_c_seg2,     subset=["Segnale"])
-            .map(_c_fw,       subset=[fw1c,fw2c])
-            .map(_c_dbm,      subset=[d1c,d2c])
-            .map(_c_amsr_score,  subset=["AMSR Score"])
-            .map(_c_amsr_sharpe, subset=["AMSR Sharpe"])
-            .map(_c_delta_rank,  subset=["Delta Rank"])
+            .map(_c_mms_abs2,  subset=["MMS6M Ass."])
+            .map(_c_mms_rsr2,  subset=["MMS6M RSr"])
+            .map(_c_tt2,       subset=["Tact. Thrust"])
+            .map(_c_mr2,       subset=["Mr Index"])
+            .map(_c_mbi2,      subset=["MBI"])
+            .map(_c_gemini2,   subset=["Media Gemini"])
+            .map(_c_gte2,      subset=["GTE"])
+            .map(_c_fw,        subset=[fw1c,fw2c])
+            .map(_c_dbm,       subset=[d1c,d2c])
+            .map(_c_amsr_score, subset=["AMSR Score"])
+            .map(_c_delta_rank, subset=["Delta Rank"])
             .format({
-                "MMS6M Ass.":    fp2,
-                "MMS6M RSr":     fp2,
-                "Tact. Thrust":  fp2,
-                "Mr Index":      fp2,
-                "MBI":           fm2,
-                fw1c:            fp2,
-                fw2c:            fp2,
-                d1c:             fp2,
-                d2c:             fp2,
-                "AMSR Score":    fp2,
-                "AMSR Sharpe":   lambda x: f"{x:+.3f}" if not pd.isna(x) else "N/D",
-                "Rank MMS6M":    lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Rank AMSR":     lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Rank AMSR Sharpe": lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Delta Rank":    lambda x: f"{int(x):+d}" if not pd.isna(x) else "-",
+                "MMS6M Ass.":   fp2, "MMS6M RSr":    fp2,
+                "Tact. Thrust": fp2, "Mr Index":      fp2,
+                "MBI":          fm2,
+                "Media Gemini": fp2, "GTE":           fm2,
+                fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
+                "AMSR Score":   fp2,
+                "Rank MMS6M":   lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Rank GTE":     lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Rank AMSR":    lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Delta Rank":   lambda x: f"{int(x):+d}" if not pd.isna(x) else "-",
             }),
             use_container_width=True,
-            column_config={"Segnale": st.column_config.TextColumn("Segnale", width="small")}
         )
 
         # Riepilogo
