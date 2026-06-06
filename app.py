@@ -1429,7 +1429,7 @@ with tab5:
             x=sc_df["RSr 1M"]*100, y=sc_df["RSr 3M"]*100,
             mode="markers+text",
             name="Settori",
-                        opacity=0.85, line=dict(color="#111",width=1)),
+                        opacity=0.85, line=dict(color="#111",width=1),
             text=lbl, textposition="top center",
             textfont=dict(size=8,color="#ccc"),
             hovertemplate="<b>%{text}</b><br>RSr 1M: %{x:.2f}%<br>RSr 3M: %{y:.2f}%<extra></extra>",
