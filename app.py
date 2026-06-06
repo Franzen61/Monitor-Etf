@@ -1422,10 +1422,6 @@ with tab5:
     sc_df = pd.DataFrame(sc_data).dropna(subset=["RSr 1M","RSr 3M"])
 
     if not sc_df.empty:
-        def _gte_color(v):
-            if pd.isna(v): return "#888888"
-            return "#00cc44" if v > 0 else "#cc2200"
-        sc_df["_color"] = sc_df["GTE"].apply(_gte_color)
 
         fig_sc = go.Figure()
         lbl = sc_df["Ticker"] if sc_lbl=="Ticker" else sc_df["Nome"]
