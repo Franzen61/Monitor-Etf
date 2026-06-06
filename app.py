@@ -575,30 +575,11 @@ def compute_euro_indicators(prices, today_prices, benchmark):
         else:
             mbi = np.nan
 
-        # ── Media Gemini (scomposizione segmenti disgiunti normalizzati per durata)
-        if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]):
-            seg1 = r1w
-            seg2 = (r1m - r1w) / 3
-            seg3 = (r3m - r1m) / 8
-            seg4 = (r6m - r3m) / 13
-            media_gemini = (seg1 + seg2 + seg3 + seg4) / 4
-        else:
-            media_gemini = np.nan
-
-        # ── GTE — Gemini Tactical Efficiency (ratio vs MaxDD assoluto 3M)
-        if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
-            gemini_3m = (r1w + (r1m - r1w)/3 + (r3m - r1m)/8) / 3
-            maxdd_3m  = calcola_maxdd_assoluto(tk, prices, prices.index[-1])
-            gte = gemini_3m / (abs(maxdd_3m) + 0.0001) if not np.isnan(maxdd_3m) else np.nan
-        else:
-            gte = np.nan
-
         results.append({
             "Ticker":tk, "Nome":EURO_NAMES.get(tk,tk),
             "RSr 1D":r1d, "RSr 1W":r1w, "RSr 1M":r1m, "RSr 3M":r3m, "RSr 6M":r6m,
             "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
             "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
-            "Media Gemini":media_gemini, "GTE":gte,
         })
     return pd.DataFrame(results).set_index("Ticker")
 def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
