@@ -1429,7 +1429,6 @@ with tab5:
             x=sc_df["RSr 1M"]*100, y=sc_df["RSr 3M"]*100,
             mode="markers+text",
             name="Settori",
-            marker=dict(size=11, color=sc_df["_color"],
                         opacity=0.85, line=dict(color="#111",width=1)),
             text=lbl, textposition="top center",
             textfont=dict(size=8,color="#ccc"),
