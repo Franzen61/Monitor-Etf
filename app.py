@@ -1418,7 +1418,6 @@ with tab5:
             "Ticker": tk, "Nome": EURO_NAMES.get(tk,tk),
             "RSr 1M": euro_ind.loc[tk,"RSr 1M"],
             "RSr 3M": euro_ind.loc[tk,"RSr 3M"],
-            "GTE":    euro_ind.loc[tk,"GTE"],
         })
     sc_df = pd.DataFrame(sc_data).dropna(subset=["RSr 1M","RSr 3M"])
 
