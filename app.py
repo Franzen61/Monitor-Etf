@@ -234,7 +234,67 @@ def load_sp500_data(timeframe_days: int):
     ret_df = pd.DataFrame(results)
     merged = ret_df.merge(wiki, on="Ticker", how="left").dropna(subset=["Sector"])
     return merged
+    
 
+# ========================
+# HELPER — RSI
+# ========================
+def compute_rsi(series: pd.Series, period: int = 14) -> float:
+    """RSI classico Wilder. Restituisce valore corrente 0–100."""
+    s = series.dropna()
+    if len(s) < period + 1:
+        return np.nan
+    delta = s.diff().dropna()
+    gain  = delta.clip(lower=0).rolling(period).mean()
+    loss  = (-delta.clip(upper=0)).rolling(period).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    rsi   = 100 - (100 / (1 + rs))
+    v     = rsi.dropna()
+    return float(v.iloc[-1]) if not v.empty else np.nan
+
+
+# ========================
+# HELPER — MMS6M CON REGRESSIONE LINEARE
+# ========================
+def compute_mms6m_regression(r1w, r1m, r3m, r6m,
+                               pesi_lenta=(0.20, 0.35, 0.25, 0.20),  coeff_lenta=0.05,
+                               pesi_veloce=(0.30, 0.40, 0.25, 0.05), coeff_veloce=0.22):
+    """
+    MMS6M con correzione pendenza regressione lineare su 3 punti (1W, 1M, 3M).
+    Lenta  (coeff 0.05) = regime strutturale.
+    Veloce (coeff 0.22) = rotazione nascente.
+    Delta veloce-lenta  = accelerazione.
+    """
+    if any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]):
+        return np.nan, np.nan, np.nan
+    base_lenta  = (r1w*pesi_lenta[0]  + r1m*pesi_lenta[1]  +
+                   r3m*pesi_lenta[2]  + r6m*pesi_lenta[3])
+    base_veloce = (r1w*pesi_veloce[0] + r1m*pesi_veloce[1] +
+                   r3m*pesi_veloce[2] + r6m*pesi_veloce[3])
+    x      = np.array([0.25, 1.0, 3.0])
+    y      = np.array([r1w,  r1m, r3m])
+    xm, ym = x.mean(), y.mean()
+    slope  = np.dot(x - xm, y - ym) / np.dot(x - xm, x - xm)
+    mms_lenta  = base_lenta  + slope * coeff_lenta
+    mms_veloce = base_veloce + slope * coeff_veloce
+    return mms_lenta, mms_veloce, mms_veloce - mms_lenta
+
+
+# ========================
+# HELPER — DISPERSIONE CROSS-SETTORIALE
+# ========================
+def compute_cross_sector_dispersion(euro_ind_df: pd.DataFrame) -> dict:
+    """Skewness MMS6M RSr. Negativa = coda bassa ampia = rotazione possibile."""
+    vals = euro_ind_df["MMS6M RSr"].dropna()
+    if len(vals) < 5:
+        return {"skew": np.nan, "std": np.nan, "spread": np.nan, "n": 0}
+    n    = len(vals)
+    mean = float(vals.mean())
+    std  = float(vals.std(ddof=1))
+    skew = (float((n / ((n-1)*(n-2))) * np.sum(((vals - mean)/std)**3))
+            if std != 0 else np.nan)
+    return {"skew": skew, "std": std,
+            "spread": float(vals.max() - vals.min()), "n": n}
 
 
 # ========================
@@ -538,49 +598,76 @@ def load_euro_prices_today():
 # ========================
 def compute_euro_indicators(prices, today_prices, benchmark):
     results = []
-    bm  = prices[benchmark].dropna() if benchmark in prices.columns else None
-    bm_t= today_prices[benchmark].dropna() if benchmark in today_prices.columns else None
-    wts = [0.20, 0.35, 0.25, 0.20]
+    bm   = prices[benchmark].dropna()       if benchmark in prices.columns       else None
+    bm_t = today_prices[benchmark].dropna() if benchmark in today_prices.columns else None
+    wts  = [0.20, 0.35, 0.25, 0.20]
 
     def get_rsr(tk, days):
         try:
-            s = today_prices[tk].dropna() if days==1 else prices[tk].dropna()
-            b = bm_t if days==1 else bm
-            if s is None or b is None or len(s)<=days or len(b)<=days: return np.nan
-            rs = float(s.iloc[-1]/s.iloc[-days-1]-1)
-            rb = float(b.iloc[-1]/b.iloc[-days-1]-1)
-            return float((1+rs)/(1+rb)-1)
-        except: return np.nan
+            s = today_prices[tk].dropna() if days == 1 else prices[tk].dropna()
+            b = bm_t if days == 1 else bm
+            if s is None or b is None or len(s) <= days or len(b) <= days:
+                return np.nan
+            rs = float(s.iloc[-1] / s.iloc[-days-1] - 1)
+            rb = float(b.iloc[-1] / b.iloc[-days-1] - 1)
+            return float((1 + rs) / (1 + rb) - 1)
+        except Exception:
+            return np.nan
 
     def get_abs(tk, days):
         try:
             s = prices[tk].dropna()
-            if len(s)<=days: return np.nan
-            return float(s.iloc[-1]/s.iloc[-days-1]-1)
-        except: return np.nan
+            if len(s) <= days:
+                return np.nan
+            return float(s.iloc[-1] / s.iloc[-days-1] - 1)
+        except Exception:
+            return np.nan
 
     for tk in [t for t in prices.columns if t != benchmark]:
-        r1d=get_rsr(tk,1); r1w=get_rsr(tk,5)
-        r1m=get_rsr(tk,21); r3m=get_rsr(tk,63); r6m=get_rsr(tk,126)
-        vals_r=[r1w,r1m,r3m,r6m]
-        mms6m_rsr = sum(v*w for v,w in zip(vals_r,wts)) if not any(np.isnan(v) for v in vals_r) else np.nan
-        vals_a=[get_abs(tk,d) for d in [5,21,63,126]]
-        mms6m_abs = sum(v*w for v,w in zip(vals_a,wts)) if not any(np.isnan(v) for v in vals_a) else np.nan
-        breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
-        medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
-        tt  = (breve-medio) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
-        mr  = (breve/(abs(medio)+2)) if (not np.isnan(breve) and not np.isnan(medio)) else np.nan
-        if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
-            mbi = ((r1w+r1m)/2 - mms6m_rsr) / abs(mms6m_rsr)
+        r1d = get_rsr(tk, 1);  r1w = get_rsr(tk, 5)
+        r1m = get_rsr(tk, 21); r3m = get_rsr(tk, 63); r6m = get_rsr(tk, 126)
+
+        # MMS6M RSr (pesi gaussiani)
+        vals_r    = [r1w, r1m, r3m, r6m]
+        mms6m_rsr = (sum(v * w for v, w in zip(vals_r, wts))
+                     if not any(np.isnan(v) for v in vals_r) else np.nan)
+
+        # MMS6M Assoluto
+        vals_a    = [get_abs(tk, d) for d in [5, 21, 63, 126]]
+        mms6m_abs = (sum(v * w for v, w in zip(vals_a, wts))
+                     if not any(np.isnan(v) for v in vals_a) else np.nan)
+
+        # MMS6M con regressione — RSr
+        mms_r_lenta, mms_r_veloce, mms_r_delta = compute_mms6m_regression(r1w, r1m, r3m, r6m)
+
+        # MMS6M con regressione — Assoluto
+        a1w, a1m, a3m, a6m = vals_a
+        mms_a_lenta, mms_a_veloce, mms_a_delta = compute_mms6m_regression(a1w, a1m, a3m, a6m)
+
+        # Tact. Thrust e Mr Index
+        breve = (r1m * 0.50 + r1w * 0.35 + r1d * 0.15
+                 if not any(np.isnan(v) for v in [r1m, r1w, r1d]) else np.nan)
+        medio = (r1m * 0.35 + r3m * 0.25 + r6m * 0.20 + r1w * 0.20
+                 if not any(np.isnan(v) for v in [r1m, r3m, r6m, r1w]) else np.nan)
+        tt = (breve - medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+        mr = (breve / (abs(medio) + 2)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+
+        # MBI
+        if (not np.isnan(mms6m_rsr) and mms6m_rsr > 0.03
+                and not np.isnan(r1w) and not np.isnan(r1m)):
+            mbi = ((r1w + r1m) / 2 - mms6m_rsr) / abs(mms6m_rsr)
         else:
             mbi = np.nan
 
         results.append({
-            "Ticker":tk, "Nome":EURO_NAMES.get(tk,tk),
-            "RSr 1D":r1d, "RSr 1W":r1w, "RSr 1M":r1m, "RSr 3M":r3m, "RSr 6M":r6m,
-            "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
-            "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
+            "Ticker": tk, "Nome": EURO_NAMES.get(tk, tk),
+            "RSr 1D": r1d, "RSr 1W": r1w, "RSr 1M": r1m, "RSr 3M": r3m, "RSr 6M": r6m,
+            "MMS6M RSr":    mms6m_rsr,   "MMS6M Ass.":   mms6m_abs,
+            "MMS_R Lenta":  mms_r_lenta, "MMS_R Veloce": mms_r_veloce, "MMS_R Δ": mms_r_delta,
+            "MMS_A Lenta":  mms_a_lenta, "MMS_A Veloce": mms_a_veloce, "MMS_A Δ": mms_a_delta,
+            "Tact. Thrust": tt, "Mr Index": mr, "MBI": mbi,
         })
+
     return pd.DataFrame(results).set_index("Ticker")
 def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
     try:
@@ -696,7 +783,7 @@ df["Flow Regime"] = df.index.map(obv_regime)
 # ========================
 # UI TABS
 # ========================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Dashboard Settoriale",
     "📈 Andamento Settoriale",
     "🔄 Rotazione Settoriale",
@@ -704,6 +791,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🇪🇺 Settoriali Eurostoxx 600",
     "🔁 Rotation Backtest",
     "🧪 Backtest RS",
+    "📂 Backtest Multi-Data",
 ])
 
 # ========================
@@ -1331,7 +1419,7 @@ with tab5:
     st.markdown(
         '<h3 style="color:#ff9900;margin-bottom:2px;">🇪🇺 Settoriali STOXX Europe 600</h3>'
         '<p style="color:#555;font-size:0.82em;margin-top:0;">'
-        '19 ETF iShares · Benchmark EXSA.DE · RSr gaussiano · Gate sequenziale MMS6M→TT→Mr Index→MBI</p>',
+        '19 ETF iShares · Benchmark EXSA.DE · RSr gaussiano · MMS6M RSr/Ass. + regressione lineare</p>',
         unsafe_allow_html=True)
 
     with st.spinner("Caricamento prezzi Eurostoxx..."):
@@ -1353,7 +1441,60 @@ with tab5:
     with st.spinner("Calcolo indicatori RSr..."):
         euro_ind = compute_euro_indicators(euro_prices_clean, euro_today_clean, EURO_BENCHMARK)
 
-    
+    # ── RSI benchmark EXSA.DE
+    _rsi_bm = (compute_rsi(euro_prices_clean[EURO_BENCHMARK])
+               if EURO_BENCHMARK in euro_prices_clean.columns else np.nan)
+    if not np.isnan(_rsi_bm):
+        if   _rsi_bm >= 70: _rsi_regime, _rsi_color = "UPTREND MATURO", "#ff4422"
+        elif _rsi_bm >= 55: _rsi_regime, _rsi_color = "UPTREND FRESCO",  "#00ff55"
+        elif _rsi_bm >= 45: _rsi_regime, _rsi_color = "LATERALE",        "#ffaa00"
+        elif _rsi_bm >= 30: _rsi_regime, _rsi_color = "RIBASSO ATTIVO",  "#ff4422"
+        else:               _rsi_regime, _rsi_color = "BOTTOM RIBASSO",  "#44aaff"
+    else:
+        _rsi_regime, _rsi_color = "N/D", "#888888"
+
+    # ── Dispersione cross-settoriale
+    _disp     = compute_cross_sector_dispersion(euro_ind)
+    _skew_val = _disp["skew"]
+    if not np.isnan(_skew_val):
+        if   _skew_val < -0.5: _skew_label, _skew_color = "DISPERSIONE FAVOREVOLE", "#00ff55"
+        elif _skew_val <  0:   _skew_label, _skew_color = "LIEVE DISPERSIONE",       "#88cc88"
+        elif _skew_val <  0.5: _skew_label, _skew_color = "MOMENTUM EQUILIBRATO",    "#ffaa00"
+        else:                  _skew_label, _skew_color = "MOMENTUM CONCENTRATO",    "#ff4422"
+    else:
+        _skew_label, _skew_color = "N/D", "#888"
+
+    # ── Box RSI + Dispersione
+    _rsi_str    = f"{_rsi_bm:.1f}"    if not np.isnan(_rsi_bm)   else "N/D"
+    _skew_str   = f"{_skew_val:+.2f}" if not np.isnan(_skew_val) else "N/D"
+    _spread_str = f"{_disp['spread']*100:.2f}%" if not np.isnan(_disp['spread']) else "N/D"
+
+    col_ctx1, col_ctx2 = st.columns(2)
+    with col_ctx1:
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                    padding:10px 20px;margin-bottom:12px;">
+            <div style="font-size:0.70em;color:#555;letter-spacing:0.08em;
+                        text-transform:uppercase;">RSI(14) EXSA.DE — Regime benchmark</div>
+            <div style="font-size:1.15em;font-weight:bold;color:{_rsi_color};
+                        margin-top:2px;">{_rsi_regime} &nbsp;·&nbsp; {_rsi_str}</div>
+            <div style="font-size:0.75em;color:#444;margin-top:4px;">
+                45–55 laterale = contesto ottimale · ≥70 alpha si riduce · ≤30 segnale distorto
+            </div>
+        </div>""", unsafe_allow_html=True)
+    with col_ctx2:
+        st.markdown(f"""
+        <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
+                    padding:10px 20px;margin-bottom:12px;">
+            <div style="font-size:0.70em;color:#555;letter-spacing:0.08em;
+                        text-transform:uppercase;">Dispersione cross-settoriale — skewness MMS6M RSr</div>
+            <div style="font-size:1.15em;font-weight:bold;color:{_skew_color};
+                        margin-top:2px;">{_skew_label} &nbsp;·&nbsp; skew {_skew_str}</div>
+            <div style="font-size:0.75em;color:#444;margin-top:4px;">
+                spread: {_spread_str} · std: {_disp['std']*100:.2f}% · skew&lt;0 = rotazione possibile
+            </div>
+        </div>""", unsafe_allow_html=True)
+
     # ── Controlli UI
     c1, c2 = st.columns([2, 2])
     with c1:
@@ -1361,14 +1502,16 @@ with tab5:
             ["1D","1W","1M","3M","6M","YTD","1A"], index=4, key="euro_tf")
     with c2:
         euro_sort = st.selectbox("Ordina tabella per",
-            ["MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","RSr 1M","RSr 3M"],
+            ["MMS6M RSr","MMS6M Ass.","MMS_R Lenta","MMS_R Veloce",
+             "Tact. Thrust","Mr Index","RSr 1M","RSr 3M"],
             key="euro_sort")
 
-    # ── 1. BAR CHART RSr
+    # ── Bar chart RSr
     tf_days_map = {"1D":1,"1W":5,"1M":21,"3M":63,"6M":126,"YTD":None,"1A":252}
     bar_data = []
     for tk in EURO_SECTORS:
-        if tk not in euro_prices_clean.columns: continue
+        if tk not in euro_prices_clean.columns:
+            continue
         d = tf_days_map[euro_tf]
         if d == 1:
             s = euro_today_clean[tk].dropna() if tk in euro_today_clean.columns else pd.Series(dtype=float)
@@ -1377,35 +1520,32 @@ with tab5:
             s = euro_prices_clean[tk].dropna()
             b = euro_prices_clean[EURO_BENCHMARK].dropna()
         rs = safe_ret(s, d); rb = safe_ret(b, d)
-        if not np.isnan(rs) and not np.isnan(rb):
-            rsr_val = float((1+rs/100)/(1+rb/100)-1)
-        else:
-            rsr_val = np.nan
-        bar_data.append({"Ticker":tk, "Nome":EURO_NAMES.get(tk,tk), "RSr":rsr_val})
+        rsr_val = float((1 + rs/100) / (1 + rb/100) - 1) if not (np.isnan(rs) or np.isnan(rb)) else np.nan
+        bar_data.append({"Ticker": tk, "Nome": EURO_NAMES.get(tk, tk), "RSr": rsr_val})
 
-    bar_df = pd.DataFrame(bar_data).dropna(subset=["RSr"]).sort_values("RSr", ascending=True)
-    bar_colors = ["#00cc44" if v>=0 else "#cc2200" for v in bar_df["RSr"]]
+    bar_df     = pd.DataFrame(bar_data).dropna(subset=["RSr"]).sort_values("RSr", ascending=True)
+    bar_colors = ["#00cc44" if v >= 0 else "#cc2200" for v in bar_df["RSr"]]
     fig_bar = go.Figure(go.Bar(
         x=bar_df["RSr"]*100, y=bar_df["Nome"], orientation="h",
-        marker=dict(color=bar_colors, line=dict(color="#333",width=1)),
+        marker=dict(color=bar_colors, line=dict(color="#333", width=1)),
         text=[f"{v*100:+.2f}%" for v in bar_df["RSr"]],
-        textposition="outside", textfont=dict(color="white",size=9),
+        textposition="outside", textfont=dict(color="white", size=9),
     ))
     fig_bar.add_vline(x=0, line_color="#444", line_width=1.5)
     fig_bar.update_layout(
         height=520, paper_bgcolor="#000", plot_bgcolor="#000",
-        font=dict(color="white",size=9),
+        font=dict(color="white", size=9),
         title=dict(text=f"RSr vs EXSA — {euro_tf}  |  Forza relativa settoriale",
-                   font=dict(size=10,color="#ff9900")),
+                   font=dict(size=10, color="#ff9900")),
         xaxis=dict(gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
         yaxis=dict(gridcolor="#0a0a0a"),
-        margin=dict(l=130,r=80,t=40,b=30),
+        margin=dict(l=130, r=80, t=40, b=30),
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ── 2. SCATTER QUADRANTI
+    # ── Scatter quadranti RSr 1M vs RSr 3M
     st.markdown("---")
-    sc_c1, sc_c2 = st.columns([3,1])
+    sc_c1, sc_c2 = st.columns([3, 1])
     with sc_c1:
         st.markdown("#### Scatter — RSr 1M vs RSr 3M")
     with sc_c2:
@@ -1413,167 +1553,172 @@ with tab5:
 
     sc_data = []
     for tk in EURO_SECTORS:
-        if tk not in euro_ind.index: continue
+        if tk not in euro_ind.index:
+            continue
         sc_data.append({
-            "Ticker": tk, "Nome": EURO_NAMES.get(tk,tk),
-            "RSr 1M": euro_ind.loc[tk,"RSr 1M"],
-            "RSr 3M": euro_ind.loc[tk,"RSr 3M"],
+            "Ticker": tk, "Nome": EURO_NAMES.get(tk, tk),
+            "RSr 1M": euro_ind.loc[tk, "RSr 1M"],
+            "RSr 3M": euro_ind.loc[tk, "RSr 3M"],
+            "MMS_R Veloce": euro_ind.loc[tk, "MMS_R Veloce"],
         })
     sc_df = pd.DataFrame(sc_data).dropna(subset=["RSr 1M","RSr 3M"])
 
     if not sc_df.empty:
-
+        sc_df["_color"] = sc_df["MMS_R Veloce"].apply(
+            lambda v: "#888888" if pd.isna(v) else "#00cc44" if v > 0 else "#cc2200")
+        lbl = sc_df["Ticker"] if sc_lbl == "Ticker" else sc_df["Nome"]
         fig_sc = go.Figure()
-        lbl = sc_df["Ticker"] if sc_lbl=="Ticker" else sc_df["Nome"]
         fig_sc.add_trace(go.Scatter(
             x=sc_df["RSr 1M"]*100, y=sc_df["RSr 3M"]*100,
             mode="markers+text",
-            name="Settori",
-                        opacity=0.85, line=dict(color="#111",width=1),
+            marker=dict(size=11, color=sc_df["_color"], opacity=0.85,
+                        line=dict(color="#111", width=1)),
             text=lbl, textposition="top center",
-            textfont=dict(size=8,color="#ccc"),
+            textfont=dict(size=8, color="#ccc"),
             hovertemplate="<b>%{text}</b><br>RSr 1M: %{x:.2f}%<br>RSr 3M: %{y:.2f}%<extra></extra>",
         ))
-
         fig_sc.add_hline(y=0, line_color="#333", line_width=1.5)
         fig_sc.add_vline(x=0, line_color="#333", line_width=1.5)
-        x_rng = sc_df["RSr 1M"].max()*100
-        y_rng = sc_df["RSr 3M"].max()*100
-        for qx,qy,ql,qc,qax,qay in [
-            ( x_rng*0.85,  y_rng*0.85, "LEADER",    "#00ff55","right","top"),
-            (-x_rng*0.85,  y_rng*0.85, "IMPROVING", "#44aaff","left", "top"),
-            ( x_rng*0.85, -y_rng*0.85, "WEAKENING", "#ffaa00","right","bottom"),
-            (-x_rng*0.85, -y_rng*0.85, "LAGGARD",   "#ff4422","left", "bottom"),
+        x_rng = sc_df["RSr 1M"].max() * 100
+        y_rng = sc_df["RSr 3M"].max() * 100
+        for qx, qy, ql, qc, qax, qay in [
+            ( x_rng*0.85,  y_rng*0.85, "LEADER",    "#00ff55", "right", "top"),
+            (-x_rng*0.85,  y_rng*0.85, "IMPROVING", "#44aaff", "left",  "top"),
+            ( x_rng*0.85, -y_rng*0.85, "WEAKENING", "#ffaa00", "right", "bottom"),
+            (-x_rng*0.85, -y_rng*0.85, "LAGGARD",   "#ff4422", "left",  "bottom"),
         ]:
             fig_sc.add_annotation(x=qx, y=qy, text=ql, showarrow=False,
-                font=dict(color=qc,size=10,family="Courier New"),
+                font=dict(color=qc, size=10, family="Courier New"),
                 opacity=0.45, xanchor=qax, yanchor=qay)
         fig_sc.update_layout(
             height=460, paper_bgcolor="#000", plot_bgcolor="#000",
-            font=dict(color="white",size=10),
-            title=dict(text="Scatter RSr 1M (X) vs RSr 3M (Y) — colore: GTE positivo=verde / negativo=rosso",
-                       font=dict(size=10,color="#666")),
-            xaxis=dict(title="RSr 1M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
-            yaxis=dict(title="RSr 3M (%)",gridcolor="#1a1a1a",ticksuffix="%",zeroline=False),
-            legend=dict(font=dict(size=9),bgcolor="rgba(0,0,0,0.5)",
-                        bordercolor="#333",borderwidth=1),
-            margin=dict(l=60,r=40,t=50,b=60),
+            font=dict(color="white", size=10),
+            title=dict(
+                text="Scatter RSr 1M (X) vs RSr 3M (Y) — colore: MMS_R Veloce positivo=verde / negativo=rosso",
+                font=dict(size=10, color="#666")),
+            xaxis=dict(title="RSr 1M (%)", gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
+            yaxis=dict(title="RSr 3M (%)", gridcolor="#1a1a1a", ticksuffix="%", zeroline=False),
+            margin=dict(l=60, r=40, t=50, b=60),
         )
         st.plotly_chart(fig_sc, use_container_width=True)
 
-    # ── 3. TABELLA INDICATORI
+    # ── Tabella indicatori
     st.markdown("---")
     st.markdown("#### Tabella indicatori — formattazione condizionale")
 
-    disp = euro_ind.sort_values(euro_sort, ascending=False).copy()
-    disp_show = disp[["Nome","RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
-                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI"]].copy()
-
-    def _c_rsr(v):
-        try:
-            v=float(v)
-            if v>0.02:  return "color:#00ff55"
-            if v>0:     return "color:#88cc88"
-            if v<-0.02: return "color:#ff4422"
-            if v<0:     return "color:#cc6644"
-        except: pass
-        return "color:#888"
-
-    def _c_mms_rsr(v):
-        try:
-            v=float(v)
-            if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-        except: pass
-        return "color:#888"
-
-    def _c_mms_abs(v):
-        try:
-            v=float(v)
-            if v>0.03:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v<-0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-        except: pass
-        return "color:#888"
-
-    def _c_tt(v):
-        try:
-            v=float(v)
-            if v>0.015:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v<-0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-        except: pass
-        return "color:#888"
-
-    def _c_mr(v):
-        try:
-            v=float(v)
-            if v>0.01:   return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v>0.005:  return "color:#88cc88"
-            if v<-0.01:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v<-0.005: return "color:#cc6644"
-        except: pass
-        return "color:#888"
-
-    def _c_mbi(v):
-        try:
-            v=float(v)
-            if v<-1.00:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v<-0.50:  return "color:#aaff44"
-            if v>1.00:   return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v>0.50:   return "color:#ffaa00"
-        except: pass
-        return "color:#888"
-
-    def _c_seg(v):
-        if "ATTIVO"    in str(v): return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-        if "FILTRATO"  in str(v): return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-        if "WATCHLIST" in str(v): return "background-color:#2b2200;color:#ffaa00;font-weight:bold"
-        return ""
+    disp      = euro_ind.sort_values(euro_sort, ascending=False).copy()
+    disp_show = disp[["Nome",
+                       "RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
+                       "MMS6M RSr","MMS6M Ass.",
+                       "MMS_R Lenta","MMS_R Veloce","MMS_R Δ",
+                       "MMS_A Lenta","MMS_A Veloce","MMS_A Δ",
+                       "Tact. Thrust","Mr Index","MBI"]].copy()
 
     fp = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—"
     fm = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
-    def _c_gemini(v):
+    def _c_rsr(v):
         try:
-            v=float(v)
-            if v>0.005:  return "color:#00ff55"
-            if v>0:      return "color:#88cc88"
-            if v<-0.005: return "color:#ff4422"
-            if v<0:      return "color:#cc6644"
-        except: pass
+            v = float(v)
+            if v >  0.02: return "color:#00ff55"
+            if v >  0:    return "color:#88cc88"
+            if v < -0.02: return "color:#ff4422"
+            if v <  0:    return "color:#cc6644"
+        except Exception: pass
         return "color:#888"
 
-    def _c_gte(v):
+    def _c_mms_rsr(v):
         try:
-            v=float(v)
-            if v>1.0:   return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v>0.3:   return "color:#88cc88"
-            if v>0:     return "color:#aaaaaa"
-            if v<-1.0:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v<0:     return "color:#cc6644"
-        except: pass
+            v = float(v)
+            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mms_abs(v):
+        try:
+            v = float(v)
+            if v >  0.03: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v < -0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mms_reg(v):
+        try:
+            v = float(v)
+            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >  0:    return "color:#88cc88"
+            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v <  0:    return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mms_delta(v):
+        try:
+            v = float(v)
+            if v >  0.005: return "color:#00ff55;font-weight:bold"
+            if v >  0:     return "color:#88cc88"
+            if v < -0.005: return "color:#ff4422;font-weight:bold"
+            if v <  0:     return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_tt(v):
+        try:
+            v = float(v)
+            if v >  0.015: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v < -0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mr(v):
+        try:
+            v = float(v)
+            if v >  0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >  0.005: return "color:#88cc88"
+            if v < -0.01:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v < -0.005: return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mbi(v):
+        try:
+            v = float(v)
+            if v < -1.00: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v < -0.50: return "color:#aaff44"
+            if v >  1.00: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v >  0.50: return "color:#ffaa00"
+        except Exception: pass
         return "color:#888"
 
     st.dataframe(
         disp_show.style
-        .map(_c_rsr,     subset=["RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
-        .map(_c_mms_rsr, subset=["MMS6M RSr"])
-        .map(_c_mms_abs, subset=["MMS6M Ass."])
-        .map(_c_tt,      subset=["Tact. Thrust"])
-        .map(_c_mr,      subset=["Mr Index"])
-        .map(_c_mbi,     subset=["MBI"])
+        .map(_c_rsr,       subset=["RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
+        .map(_c_mms_rsr,   subset=["MMS6M RSr"])
+        .map(_c_mms_abs,   subset=["MMS6M Ass."])
+        .map(_c_mms_reg,   subset=["MMS_R Lenta","MMS_R Veloce","MMS_A Lenta","MMS_A Veloce"])
+        .map(_c_mms_delta, subset=["MMS_R Δ","MMS_A Δ"])
+        .map(_c_tt,        subset=["Tact. Thrust"])
+        .map(_c_mr,        subset=["Mr Index"])
+        .map(_c_mbi,       subset=["MBI"])
         .format({"RSr 1D":fp,"RSr 1W":fp,"RSr 1M":fp,"RSr 3M":fp,"RSr 6M":fp,
-                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
+                 "MMS6M RSr":fp,"MMS6M Ass.":fp,
+                 "MMS_R Lenta":fp,"MMS_R Veloce":fp,"MMS_R Δ":fp,
+                 "MMS_A Lenta":fp,"MMS_A Veloce":fp,"MMS_A Δ":fp,
+                 "Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
         use_container_width=True,
-        column_config={
-            "Nome": st.column_config.TextColumn("Settore", width="medium"),
-        }
+        column_config={"Nome": st.column_config.TextColumn("Settore", width="medium")}
     )
+
     st.markdown("""
     <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
                 padding:12px 20px;margin-top:8px;font-size:0.80em;color:#888;
                 display:flex;gap:20px;flex-wrap:wrap;">
-        <span><b style="color:#ff9900">MMS6M RSr</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20%</span>
-        <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio (accelerazione)</span>
+        <span><b style="color:#ff9900">MMS6M RSr/Ass.</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20%</span>
+        <span><b style="color:#ff9900">MMS_R/A Lenta</b>: MMS + slope regressione 3pt (coeff 0.05)</span>
+        <span><b style="color:#ff9900">MMS_R/A Veloce</b>: MMS + slope regressione 3pt (coeff 0.22)</span>
+        <span><b style="color:#ff9900">MMS_R/A Δ</b>: Veloce − Lenta = accelerazione rotazione</span>
+        <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio</span>
         <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
         <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
     </div>
