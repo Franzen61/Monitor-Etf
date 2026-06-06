@@ -1473,8 +1473,7 @@ with tab5:
 
     disp = euro_ind.sort_values(euro_sort, ascending=False).copy()
     disp_show = disp[["Nome","RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
-                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI",
-                       "Media Gemini","GTE"]].copy()
+                       "MMS6M RSr","MMS6M Ass.","Tact. Thrust","Mr Index","MBI"]].copy()
 
     def _c_rsr(v):
         try:
@@ -1568,11 +1567,8 @@ with tab5:
         .map(_c_tt,      subset=["Tact. Thrust"])
         .map(_c_mr,      subset=["Mr Index"])
         .map(_c_mbi,     subset=["MBI"])
-        .map(_c_gemini,  subset=["Media Gemini"])
-        .map(_c_gte,     subset=["GTE"])
         .format({"RSr 1D":fp,"RSr 1W":fp,"RSr 1M":fp,"RSr 3M":fp,"RSr 6M":fp,
-                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm,
-                 "Media Gemini":fp,"GTE":fm}),
+                 "MMS6M RSr":fp,"MMS6M Ass.":fp,"Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
         use_container_width=True,
         column_config={
             "Nome": st.column_config.TextColumn("Settore", width="medium"),
@@ -1586,8 +1582,6 @@ with tab5:
         <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio (accelerazione)</span>
         <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
         <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
-        <span><b style="color:#ff9900">Media Gemini</b>: scomposizione RSr in 4 segmenti disgiunti normalizzati per durata</span>
-        <span><b style="color:#ff9900">GTE</b>: Gemini Tactical Efficiency = Gemini 3M / (|MaxDD 3M| + ε) — positivo = efficienza tattica</span>
     </div>
     """, unsafe_allow_html=True)
 # ========================
@@ -1715,23 +1709,7 @@ with tab6:
                 mbi = ((r1w+r1m)/2 - mms6m_rsr)/abs(mms6m_rsr)
             else: mbi = np.nan
 
-            # ── Media Gemini
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]):
-                seg1 = r1w
-                seg2 = (r1m - r1w) / 3
-                seg3 = (r3m - r1m) / 8
-                seg4 = (r6m - r3m) / 13
-                media_gemini_bt = (seg1 + seg2 + seg3 + seg4) / 4
-            else:
-                media_gemini_bt = np.nan
-
-            # ── GTE
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
-                gemini_3m_bt = (r1w + (r1m - r1w)/3 + (r3m - r1m)/8) / 3
-                maxdd_3m_bt  = calcola_maxdd_assoluto(tk, bt_close, actual_ref)
-                gte_bt = gemini_3m_bt / (abs(maxdd_3m_bt) + 0.0001) if not np.isnan(maxdd_3m_bt) else np.nan
-            else:
-                gte_bt = np.nan
+            
 
             ret_fw1 = fw(tk, fwd1_d)
             ret_fw2 = fw(tk, fwd2_d)
@@ -1753,7 +1731,6 @@ with tab6:
                 "Ticker":tk,
                 "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
                 "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
-                "Media Gemini":media_gemini_bt, "GTE":gte_bt,
                 "AMSR Score":amsr_score,
                 f"Rend +{bt_fw1}":ret_fw1, f"Rend +{bt_fw2}":ret_fw2,
                 f"Delta BM +{bt_fw1}":d1,  f"Delta BM +{bt_fw2}":d2,
@@ -1766,9 +1743,7 @@ with tab6:
         res = pd.DataFrame(rows).set_index("Ticker").sort_values("MMS6M RSr", ascending=False)
         # Ranking
         res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Rank GTE"]   = res["GTE"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Rank AMSR"]  = res["AMSR Score"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Delta Rank"] = res["Rank GTE"] - res["Rank MMS6M"]
+        
         # MBI alert
         mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
         if not mbi_alert.empty:
@@ -1909,26 +1884,17 @@ with tab6:
             .map(_c_tt2,       subset=["Tact. Thrust"])
             .map(_c_mr2,       subset=["Mr Index"])
             .map(_c_mbi2,      subset=["MBI"])
-            .map(_c_gemini2,   subset=["Media Gemini"])
-            .map(_c_gte2,      subset=["GTE"])
             .map(_c_fw,        subset=[fw1c,fw2c])
             .map(_c_dbm,       subset=[d1c,d2c])
             .map(_c_amsr_score, subset=["AMSR Score"])
-            .map(_c_delta_rank, subset=["Delta Rank"])
             .format({
                 "MMS6M Ass.":   fp2, "MMS6M RSr":    fp2,
                 "Tact. Thrust": fp2, "Mr Index":      fp2,
                 "MBI":          fm2,
-                "Media Gemini": fp2, "GTE":           fm2,
                 fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
                 "AMSR Score":   fp2,
                 "Rank MMS6M":   lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Rank GTE":     lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Rank AMSR":    lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-                "Delta Rank":   lambda x: f"{int(x):+d}" if not pd.isna(x) else "-",
             }),
-            use_container_width=True,
-        )
 
         # Riepilogo
         st.markdown(
@@ -1939,7 +1905,7 @@ with tab6:
             f'</div>', unsafe_allow_html=True)
 
         # Analisi forward sui soli ATTIVI
-        attivi = res[res["GTE"] > 0].dropna(subset=[fw1c])
+        attivi = res[res["MMS6M RSr"] > 0].dropna(subset=[fw1c])
         if not attivi.empty:
             st.markdown("---")
             st.markdown("#### Performance forward — settori con GTE positivo")
