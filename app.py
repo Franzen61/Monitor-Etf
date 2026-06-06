@@ -1894,7 +1894,8 @@ with tab6:
                 fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
                 "AMSR Score":   fp2,
                 "Rank MMS6M":   lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-            }),
+            })
+        )
 
         # Riepilogo
         st.markdown(
