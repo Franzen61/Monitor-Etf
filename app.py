@@ -237,20 +237,35 @@ def load_sp500_data(timeframe_days: int):
     
 
 # ========================
-# HELPER — RSI
+# HELPER — RSI (Wilder corretto)
 # ========================
 def compute_rsi(series: pd.Series, period: int = 14) -> float:
-    """RSI classico Wilder. Restituisce valore corrente 0–100."""
+    """
+    RSI Wilder corretto — identico a TradingView e alla formula Excel YAHOO_RSI.
+    Smoothing: media_precedente × (period-1) + valore_attuale) / period
+    """
     s = series.dropna()
     if len(s) < period + 1:
         return np.nan
+
     delta = s.diff().dropna()
-    gain  = delta.clip(lower=0).rolling(period).mean()
-    loss  = (-delta.clip(upper=0)).rolling(period).mean()
-    rs    = gain / loss.replace(0, np.nan)
-    rsi   = 100 - (100 / (1 + rs))
-    v     = rsi.dropna()
-    return float(v.iloc[-1]) if not v.empty else np.nan
+    gain  = delta.clip(lower=0)
+    loss  = (-delta.clip(upper=0))
+
+    # Prima media SMA sui primi 'period' valori (seed di Wilder)
+    avg_gain = float(gain.iloc[:period].mean())
+    avg_loss = float(loss.iloc[:period].mean())
+
+    # Smoothing di Wilder sui valori successivi
+    for i in range(period, len(gain)):
+        avg_gain = (avg_gain * (period - 1) + float(gain.iloc[i])) / period
+        avg_loss = (avg_loss * (period - 1) + float(loss.iloc[i])) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
 
 
 # ========================
