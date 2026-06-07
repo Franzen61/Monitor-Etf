@@ -1736,10 +1736,9 @@ with tab6:
 
     col_tk, col_bm = st.columns([3, 1])
     with col_tk:
-        bt_tickers_raw = st.text_area(
-            "Ticker (uno per riga)",
-            value="\n".join(EURO_SECTORS),
-            height=220, key="bt_tickers")
+        bt_tickers_raw = st.text_area("Ticker (uno per riga)",
+                                       value="\n".join(EURO_SECTORS),
+                                       height=220, key="bt_tickers")
     with col_bm:
         bt_benchmark = st.text_input("Benchmark", value=EURO_BENCHMARK, key="bt_bm").strip().upper()
         bt_ref_date  = st.date_input(
@@ -1751,7 +1750,8 @@ with tab6:
 
     st.markdown("##### Parametri")
     with st.columns([1,3])[0]:
-        bt_thr_mbi = st.slider("MBI alert", 0.50,1.50,1.00,0.10, format="%.2f",key="bt_mbi")
+        bt_thr_mbi = st.slider("MBI alert", 0.50, 1.50, 1.00, 0.10,
+                                format="%.2f", key="bt_mbi")
 
     st.markdown("##### Rendimenti forward")
     fw1, fw2 = st.columns(2)
@@ -1765,10 +1765,10 @@ with tab6:
             st.error("Inserisci almeno un ticker.")
             st.stop()
 
-        bt_all  = bt_tickers + [bt_benchmark]
-        ref_dt  = pd.Timestamp(bt_ref_date)
-        fwd1_d  = fw_days_map[bt_fw1]
-        fwd2_d  = fw_days_map[bt_fw2]
+        bt_all = bt_tickers + [bt_benchmark]
+        ref_dt = pd.Timestamp(bt_ref_date)
+        fwd1_d = fw_days_map[bt_fw1]
+        fwd2_d = fw_days_map[bt_fw2]
 
         with st.spinner("Download prezzi..."):
             try:
@@ -1788,7 +1788,6 @@ with tab6:
             st.error(f"Benchmark {bt_benchmark} non disponibile.")
             st.stop()
 
-        # Data effettiva più vicina disponibile
         actual_ref = bt_close.index[bt_close.index.searchsorted(ref_dt)]
         if actual_ref > bt_close.index[-1]:
             actual_ref = bt_close.index[-1]
@@ -1803,166 +1802,190 @@ with tab6:
         bt_hist = bt_close[bt_close.index <= actual_ref].copy()
         bm_hist = bt_hist[bt_benchmark].dropna()
 
+        # RSI benchmark alla data
+        rsi_bm_bt = compute_rsi(bm_hist)
+
         def rsr_at(tk, days):
             try:
-                s = bt_hist[tk].dropna()
-                b = bm_hist
-                if len(s)<=days or len(b)<=days: return np.nan
-                rs = float(s.iloc[-1]/s.iloc[-days-1]-1)
-                rb = float(b.iloc[-1]/b.iloc[-days-1]-1)
-                return float((1+rs)/(1+rb)-1)
-            except: return np.nan
+                s = bt_hist[tk].dropna(); b = bm_hist
+                if len(s) <= days or len(b) <= days: return np.nan
+                rs = float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                rb = float(b.iloc[-1] / b.iloc[-days-1] - 1)
+                return float((1 + rs) / (1 + rb) - 1)
+            except Exception: return np.nan
 
         def abs_at(tk, days):
             try:
                 s = bt_hist[tk].dropna()
-                if len(s)<=days: return np.nan
-                return float(s.iloc[-1]/s.iloc[-days-1]-1)
-            except: return np.nan
+                if len(s) <= days: return np.nan
+                return float(s.iloc[-1] / s.iloc[-days-1] - 1)
+            except Exception: return np.nan
 
         def fw(tk, days):
             try:
-                s = bt_close[tk].dropna()
-                i = s.index.searchsorted(actual_ref)
-                if i+days >= len(s): return np.nan
-                p0,p1 = float(s.iloc[i]), float(s.iloc[i+days])
-                if pd.isna(p0) or p0==0: return np.nan
-                return p1/p0-1
-            except: return np.nan
+                s  = bt_close[tk].dropna()
+                i  = s.index.searchsorted(actual_ref)
+                if i + days >= len(s): return np.nan
+                p0, p1 = float(s.iloc[i]), float(s.iloc[i+days])
+                if pd.isna(p0) or p0 == 0: return np.nan
+                return p1 / p0 - 1
+            except Exception: return np.nan
 
-        wts=[0.20,0.35,0.25,0.20]
-        rows=[]
+        wts  = [0.20, 0.35, 0.25, 0.20]
+        rows = []
         for tk in bt_tickers:
-            if tk not in bt_close.columns: continue
-            r1d=rsr_at(tk,1); r1w=rsr_at(tk,5)
-            r1m=rsr_at(tk,21); r3m=rsr_at(tk,63); r6m=rsr_at(tk,126)
-            vr=[r1w,r1m,r3m,r6m]
-            mms6m_rsr = sum(v*w for v,w in zip(vr,wts)) if not any(np.isnan(v) for v in vr) else np.nan
-            va=[abs_at(tk,d) for d in [5,21,63,126]]
-            mms6m_abs = sum(v*w for v,w in zip(va,wts)) if not any(np.isnan(v) for v in va) else np.nan
-            breve = r1m*0.50+r1w*0.35+r1d*0.15 if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan
-            medio = r1m*0.35+r3m*0.25+r6m*0.20+r1w*0.20 if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan
-            tt  = (breve-medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
-            mr  = (breve/(abs(medio)+2)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
-            if not np.isnan(mms6m_rsr) and mms6m_rsr>0.03 and not np.isnan(r1w) and not np.isnan(r1m):
-                mbi = ((r1w+r1m)/2 - mms6m_rsr)/abs(mms6m_rsr)
-            else: mbi = np.nan
+            if tk not in bt_close.columns:
+                continue
+            r1d = rsr_at(tk, 1);  r1w = rsr_at(tk, 5)
+            r1m = rsr_at(tk, 21); r3m = rsr_at(tk, 63); r6m = rsr_at(tk, 126)
+            vr  = [r1w, r1m, r3m, r6m]
+            mms6m_rsr = (sum(v*w for v,w in zip(vr,wts))
+                         if not any(np.isnan(v) for v in vr) else np.nan)
 
-            
+            va = [abs_at(tk, d) for d in [5, 21, 63, 126]]
+            mms6m_abs = (sum(v*w for v,w in zip(va,wts))
+                         if not any(np.isnan(v) for v in va) else np.nan)
 
-            ret_fw1 = fw(tk, fwd1_d)
-            ret_fw2 = fw(tk, fwd2_d)
+            # MMS6M con regressione
+            mms_r_l, mms_r_v, mms_r_d = compute_mms6m_regression(r1w, r1m, r3m, r6m)
+            mms_a_l, mms_a_v, mms_a_d = (compute_mms6m_regression(*va)
+                if not any(np.isnan(v) for v in va) else (np.nan, np.nan, np.nan))
+
+            breve = (r1m*0.50 + r1w*0.35 + r1d*0.15
+                     if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan)
+            medio = (r1m*0.35 + r3m*0.25 + r6m*0.20 + r1w*0.20
+                     if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan)
+            tt = (breve - medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+            mr = (breve / (abs(medio) + 2)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
+
+            if (not np.isnan(mms6m_rsr) and mms6m_rsr > 0.03
+                    and not np.isnan(r1w) and not np.isnan(r1m)):
+                mbi = ((r1w + r1m) / 2 - mms6m_rsr) / abs(mms6m_rsr)
+            else:
+                mbi = np.nan
+
+            ret_fw1 = fw(tk, fwd1_d); ret_fw2 = fw(tk, fwd2_d)
             bm_fw1  = fw(bt_benchmark, fwd1_d)
             bm_fw2  = fw(bt_benchmark, fwd2_d)
-            d1 = (ret_fw1-bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
-            d2 = (ret_fw2-bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
-            # AMSR
-            maxdd_rsr = calcola_maxdd_rsr(tk, bt_benchmark, bt_close, actual_ref)
+            d1 = (ret_fw1 - bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
+            d2 = (ret_fw2 - bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
+
+            # AMSR Score
             maxdd_abs = calcola_maxdd_assoluto(tk, bt_close, actual_ref)
             try:
-                tk_s = bt_close[tk].dropna()
+                tk_s       = bt_close[tk].dropna()
                 ret_abs_1m = float(tk_s.iloc[-1] / tk_s.iloc[-22] - 1) if len(tk_s) > 21 else np.nan
                 ret_abs_3m = float(tk_s.iloc[-1] / tk_s.iloc[-64] - 1) if len(tk_s) > 63 else np.nan
-            except:
+            except Exception:
                 ret_abs_1m, ret_abs_3m = np.nan, np.nan
-            amsr_score = (ret_abs_1m + ret_abs_3m - abs(maxdd_abs)) if not np.isnan(maxdd_abs) else np.nan
+            amsr_score = ((ret_abs_1m + ret_abs_3m - abs(maxdd_abs))
+                          if not np.isnan(maxdd_abs) else np.nan)
+
             rows.append({
-                "Ticker":tk,
-                "MMS6M RSr":mms6m_rsr, "MMS6M Ass.":mms6m_abs,
-                "Tact. Thrust":tt, "Mr Index":mr, "MBI":mbi,
-                "AMSR Score":amsr_score,
-                f"Rend +{bt_fw1}":ret_fw1, f"Rend +{bt_fw2}":ret_fw2,
-                f"Delta BM +{bt_fw1}":d1,  f"Delta BM +{bt_fw2}":d2,
+                "Ticker":        tk,
+                "RSI BM":        rsi_bm_bt,
+                "MMS6M RSr":     mms6m_rsr,  "MMS6M Ass.":    mms6m_abs,
+                "MMS_R Lenta":   mms_r_l,    "MMS_R Veloce":  mms_r_v,  "MMS_R Δ": mms_r_d,
+                "MMS_A Lenta":   mms_a_l,    "MMS_A Veloce":  mms_a_v,  "MMS_A Δ": mms_a_d,
+                "Tact. Thrust":  tt,          "Mr Index":      mr,        "MBI":     mbi,
+                "AMSR Score":    amsr_score,
+                f"Rend +{bt_fw1}":    ret_fw1, f"Rend +{bt_fw2}":    ret_fw2,
+                f"Delta BM +{bt_fw1}": d1,     f"Delta BM +{bt_fw2}": d2,
             })
 
         if not rows:
             st.warning("Nessun dato calcolato.")
             st.stop()
 
-        res = pd.DataFrame(rows).set_index("Ticker").sort_values("MMS6M RSr", ascending=False)
-        # Ranking
+        res = (pd.DataFrame(rows).set_index("Ticker")
+               .sort_values("MMS6M RSr", ascending=False))
         res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
-        
+
         # MBI alert
         mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
         if not mbi_alert.empty:
-            lst = [f"{t} ({v:+.2f})" for t,v in mbi_alert["MBI"].items()]
+            lst = [f"{t} ({v:+.2f})" for t, v in mbi_alert["MBI"].items()]
             st.markdown(
                 f'<div style="background:#1a1000;border:1px solid #554400;border-radius:6px;'
                 f'padding:8px 16px;margin-bottom:10px;font-size:0.82em;color:#ffaa00;">'
                 f'MBI Alert (|MBI| > {bt_thr_mbi:.2f}): {" · ".join(lst)}</div>',
                 unsafe_allow_html=True)
 
-        fw1c=f"Rend +{bt_fw1}"; fw2c=f"Rend +{bt_fw2}"
-        d1c=f"Delta BM +{bt_fw1}"; d2c=f"Delta BM +{bt_fw2}"
+        fw1c = f"Rend +{bt_fw1}"; fw2c = f"Rend +{bt_fw2}"
+        d1c  = f"Delta BM +{bt_fw1}"; d2c  = f"Delta BM +{bt_fw2}"
 
-        def _c_fw(v):
+        def _c_rsi_bm(v):
             try:
-                v=float(v)
-                if np.isnan(v): return "color:#444"
-                if v>0.05:  return "color:#00ff55;font-weight:bold"
-                if v>0:     return "color:#88cc88"
-                if v<-0.05: return "color:#ff4422;font-weight:bold"
-                return "color:#cc6644"
-            except: return ""
-
-        def _c_dbm(v):
-            try:
-                v=float(v)
-                if np.isnan(v): return "color:#444"
-                if v>0.03:  return "color:#00ff55;font-weight:bold"
-                if v>0:     return "color:#88cc88"
-                if v<-0.03: return "color:#ff4422;font-weight:bold"
-                return "color:#cc6644"
-            except: return ""
-
-        def _c_seg2(v):
-            if "ATTIVO"    in str(v): return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if "FILTRATO"  in str(v): return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if "WATCHLIST" in str(v): return "background-color:#2b2200;color:#ffaa00;font-weight:bold"
-            return ""
+                v = float(v)
+                if v >= 70: return "color:#ff4422;font-weight:bold"
+                if v >= 55: return "color:#00ff55"
+                if v >= 45: return "color:#ffaa00"
+                if v >= 30: return "color:#ff4422"
+                return "color:#44aaff;font-weight:bold"
+            except Exception: return ""
 
         def _c_mms_rsr2(v):
             try:
-                v=float(v)
-                if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: pass
+                v = float(v)
+                if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
             return "color:#888"
 
         def _c_mms_abs2(v):
             try:
-                v=float(v)
-                if v>0.03:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v<-0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: pass
+                v = float(v)
+                if v >  0.03: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v < -0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
+            return "color:#888"
+
+        def _c_mms_reg2(v):
+            try:
+                v = float(v)
+                if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v >  0:    return "color:#88cc88"
+                if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+                if v <  0:    return "color:#cc6644"
+            except Exception: pass
+            return "color:#888"
+
+        def _c_mms_delta2(v):
+            try:
+                v = float(v)
+                if v >  0.005: return "color:#00ff55;font-weight:bold"
+                if v >  0:     return "color:#88cc88"
+                if v < -0.005: return "color:#ff4422;font-weight:bold"
+                if v <  0:     return "color:#cc6644"
+            except Exception: pass
             return "color:#888"
 
         def _c_tt2(v):
             try:
-                v=float(v)
-                if v>0.015:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v<-0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: pass
+                v = float(v)
+                if v >  0.015: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v < -0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
             return "color:#888"
 
         def _c_mr2(v):
             try:
-                v=float(v)
-                if v>0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v<-0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: pass
+                v = float(v)
+                if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
             return "color:#888"
 
         def _c_mbi2(v):
             try:
-                v=float(v)
-                if v<-1.00: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v>1.00:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-                if v>0.50:  return "color:#ffaa00"
-            except: pass
+                v = float(v)
+                if v < -1.00: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v >  1.00: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+                if v >  0.50: return "color:#ffaa00"
+            except Exception: pass
             return "color:#888"
-        def _c_amsr_score(v):
+
+        def _c_amsr(v):
             try:
                 v = float(v)
                 if np.isnan(v):  return "color:#444"
@@ -1970,102 +1993,89 @@ with tab6:
                 if v >= 0.02:    return "color:#88cc88"
                 if v >= 0:       return "color:#888"
                 return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: return ""
+            except Exception: return ""
 
-        def _c_amsr_sharpe(v):
+        def _c_fw(v):
             try:
                 v = float(v)
                 if np.isnan(v):  return "color:#444"
-                if v > 1.0:      return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v > 0.5:      return "color:#88cc88"
-                if v >= 0:       return "color:#888"
-                return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            except: return ""
+                if v >  0.05:    return "color:#00ff55;font-weight:bold"
+                if v >  0:       return "color:#88cc88"
+                if v < -0.05:    return "color:#ff4422;font-weight:bold"
+                return "color:#cc6644"
+            except Exception: return ""
 
-        def _c_delta_rank(v):
+        def _c_dbm(v):
             try:
-                v = int(v)
-                if v <= -3:  return "color:#00ff55;font-weight:bold"
-                if v <= -1:  return "color:#88cc88"
-                if v >= 3:   return "color:#ff4422;font-weight:bold"
-                if v >= 1:   return "color:#cc6644"
-                return "color:#888"
-            except: return ""
+                v = float(v)
+                if np.isnan(v):  return "color:#444"
+                if v >  0.03:    return "color:#00ff55;font-weight:bold"
+                if v >  0:       return "color:#88cc88"
+                if v < -0.03:    return "color:#ff4422;font-weight:bold"
+                return "color:#cc6644"
+            except Exception: return ""
 
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
         fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
-        def _c_gemini2(v):
-            try:
-                v=float(v)
-                if v>0.005:  return "color:#00ff55"
-                if v>0:      return "color:#88cc88"
-                if v<-0.005: return "color:#ff4422"
-                if v<0:      return "color:#cc6644"
-            except: pass
-            return "color:#888"
-
-        def _c_gte2(v):
-            try:
-                v=float(v)
-                if v>1.0:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-                if v>0.3:  return "color:#88cc88"
-                if v>0:    return "color:#aaaaaa"
-                if v<-1.0: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-                if v<0:    return "color:#cc6644"
-            except: pass
-            return "color:#888"
-
         st.dataframe(
             res.style
-            .map(_c_mms_abs2,  subset=["MMS6M Ass."])
-            .map(_c_mms_rsr2,  subset=["MMS6M RSr"])
-            .map(_c_tt2,       subset=["Tact. Thrust"])
-            .map(_c_mr2,       subset=["Mr Index"])
-            .map(_c_mbi2,      subset=["MBI"])
-            .map(_c_fw,        subset=[fw1c,fw2c])
-            .map(_c_dbm,       subset=[d1c,d2c])
-            .map(_c_amsr_score, subset=["AMSR Score"])
+            .map(_c_rsi_bm,     subset=["RSI BM"])
+            .map(_c_mms_rsr2,   subset=["MMS6M RSr"])
+            .map(_c_mms_abs2,   subset=["MMS6M Ass."])
+            .map(_c_mms_reg2,   subset=["MMS_R Lenta","MMS_R Veloce","MMS_A Lenta","MMS_A Veloce"])
+            .map(_c_mms_delta2, subset=["MMS_R Δ","MMS_A Δ"])
+            .map(_c_tt2,        subset=["Tact. Thrust"])
+            .map(_c_mr2,        subset=["Mr Index"])
+            .map(_c_mbi2,       subset=["MBI"])
+            .map(_c_amsr,       subset=["AMSR Score"])
+            .map(_c_fw,         subset=[fw1c, fw2c])
+            .map(_c_dbm,        subset=[d1c,  d2c])
             .format({
-                "MMS6M Ass.":   fp2, "MMS6M RSr":    fp2,
-                "Tact. Thrust": fp2, "Mr Index":      fp2,
-                "MBI":          fm2,
-                fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
+                "RSI BM":       lambda x: f"{x:.1f}" if not pd.isna(x) else "—",
+                "MMS6M RSr":    fp2, "MMS6M Ass.":   fp2,
+                "MMS_R Lenta":  fp2, "MMS_R Veloce":  fp2, "MMS_R Δ":  fp2,
+                "MMS_A Lenta":  fp2, "MMS_A Veloce":  fp2, "MMS_A Δ":  fp2,
+                "Tact. Thrust": fp2, "Mr Index":       fp2, "MBI":      fm2,
                 "AMSR Score":   fp2,
+                fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
                 "Rank MMS6M":   lambda x: f"{int(x)}" if not pd.isna(x) else "-",
-            })
+            }),
+            use_container_width=True,
         )
 
-        # Riepilogo
         st.markdown(
             f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;'
             f'padding:10px 20px;margin-top:8px;font-size:0.85em;color:#888;'
             f'display:flex;gap:28px;flex-wrap:wrap;">'
-            f'<span style="color:#555;">Data: {actual_ref.strftime("%d/%m/%Y")} · Bm: {bt_benchmark} · Settori: {len(res)}</span>'
+            f'<span style="color:#555;">Data: {actual_ref.strftime("%d/%m/%Y")} · '
+            f'Bm: {bt_benchmark} · Settori: {len(res)} · '
+            f'RSI BM: <b style="color:#ff9900">{rsi_bm_bt:.1f}</b></span>'
             f'</div>', unsafe_allow_html=True)
 
-        # Analisi forward sui soli ATTIVI
+        # Performance forward — settori con MMS6M RSr positivo
         attivi = res[res["MMS6M RSr"] > 0].dropna(subset=[fw1c])
         if not attivi.empty:
             st.markdown("---")
-            st.markdown("#### Performance forward — settori con GTE positivo")
-            avg1=attivi[fw1c].dropna().mean()
-            avg2=attivi[fw2c].dropna().mean()
-            d1m=attivi[d1c].dropna().mean()
-            hit=( attivi[fw1c].dropna()>0).sum()
-            n  =attivi[fw1c].dropna().count()
-            kk=st.columns(4)
-            for col,lbl,val,col_ in [
-                (kk[0],f"Rend medio +{bt_fw1}",
+            st.markdown("#### Performance forward — settori con MMS6M RSr positivo")
+            avg1 = attivi[fw1c].dropna().mean()
+            avg2 = attivi[fw2c].dropna().mean()
+            d1m  = attivi[d1c].dropna().mean()
+            hit  = (attivi[fw1c].dropna() > 0).sum()
+            n    = attivi[fw1c].dropna().count()
+            kk   = st.columns(4)
+            for col, lbl, val, col_ in [
+                (kk[0], f"Rend medio +{bt_fw1}",
                  f"{avg1*100:+.2f}%" if not np.isnan(avg1) else "N/D",
-                 "#00ff55" if not np.isnan(avg1) and avg1>0 else "#ff4422"),
-                (kk[1],f"Rend medio +{bt_fw2}",
+                 "#00ff55" if not np.isnan(avg1) and avg1 > 0 else "#ff4422"),
+                (kk[1], f"Rend medio +{bt_fw2}",
                  f"{avg2*100:+.2f}%" if not np.isnan(avg2) else "N/D",
-                 "#00ff55" if not np.isnan(avg2) and avg2>0 else "#ff4422"),
-                (kk[2],f"Hit rate +{bt_fw1}",f"{hit}/{n}" if n>0 else "N/D","#ff9900"),
-                (kk[3],f"Delta BM medio +{bt_fw1}",
+                 "#00ff55" if not np.isnan(avg2) and avg2 > 0 else "#ff4422"),
+                (kk[2], f"Hit rate +{bt_fw1}",
+                 f"{hit}/{n}" if n > 0 else "N/D", "#ff9900"),
+                (kk[3], f"Delta BM medio +{bt_fw1}",
                  f"{d1m*100:+.2f}%" if not np.isnan(d1m) else "N/D",
-                 "#00ff55" if not np.isnan(d1m) and d1m>0 else "#ff4422"),
+                 "#00ff55" if not np.isnan(d1m) and d1m > 0 else "#ff4422"),
             ]:
                 col.markdown(
                     f'<div style="background:#0d0d0d;border:1px solid #222;'
@@ -2080,13 +2090,10 @@ with tab6:
                     padding:24px;margin-top:8px;color:#555;font-size:0.88em;line-height:1.8;">
         <b style="color:#ff9900">Come usare:</b><br>
         1. Scegli una data storica di riferimento<br>
-        2. Modifica ticker/benchmark per altri universi (es. SPDR US)<br>
-        3. Calibra le soglie gate con gli slider<br>
+        2. Modifica ticker/benchmark per altri universi<br>
+        3. Calibra la soglia MBI con lo slider<br>
         4. Premi <b>Calcola Backtest</b><br>
-        5. La tabella mostra indicatori alla data e rendimenti forward effettivi<br><br>
-        <b style="color:#ff9900">Gate sequenziale:</b>
-        MMS6M Ass. &gt; soglia → MMS6M RSr &gt; soglia → TT &gt; soglia → Mr Index &gt; soglia
-        → <b style="color:#00ff55">🟢 ATTIVO</b>
+        5. La tabella mostra indicatori alla data e rendimenti forward effettivi
         </div>
         """, unsafe_allow_html=True)
 # ========================
@@ -2225,3 +2232,246 @@ with tab7:
                     f'📅 Dati aggiornati al: <b style="color:#ff9900">{bt["metadata"]["aggiornato"]}</b> · '
                     f'Per aggiornare: modifica <b>backtest_patterns.json</b> nel repo e fai commit</div>',
                     unsafe_allow_html=True)
+
+# ========================
+# TAB 8 — BACKTEST MULTI-DATA
+# ========================
+with tab8:
+    st.markdown(
+        '<h3 style="color:#ff9900;margin-bottom:2px;">📂 Backtest Multi-Data — Validazione empirica</h3>'
+        '<p style="color:#555;font-size:0.82em;margin-top:0;">'
+        'Loop su intervallo date · output CSV · confronto MMS6M attuale vs regressione · RSI benchmark</p>',
+        unsafe_allow_html=True)
+
+    col_mb1, col_mb2, col_mb3 = st.columns(3)
+    with col_mb1:
+        mb_start = st.date_input("Data inizio",
+            value=datetime(2018,1,1).date(),
+            min_value=datetime(2011,1,1).date(),
+            max_value=datetime.today().date() - timedelta(days=180),
+            key="mb_start")
+        mb_end = st.date_input("Data fine",
+            value=datetime(2024,1,1).date(),
+            min_value=datetime(2011,1,1).date(),
+            max_value=datetime.today().date() - timedelta(days=90),
+            key="mb_end")
+    with col_mb2:
+        mb_step = st.selectbox("Passo (giorni)", [21, 42, 63], index=1, key="mb_step")
+        mb_fw   = st.selectbox("Rendimento forward", ["1M","3M","6M"], index=1, key="mb_fw")
+    with col_mb3:
+        mb_bm = st.text_input("Benchmark", value=EURO_BENCHMARK, key="mb_bm2").strip().upper()
+        mb_tickers_raw = st.text_area("Ticker (uno per riga)",
+                                       value="\n".join(EURO_SECTORS),
+                                       height=120, key="mb_tickers")
+
+    if st.button("Avvia Backtest Multi-Data", type="primary", key="mb_run"):
+        mb_tickers = [t.strip().upper() for t in mb_tickers_raw.strip().splitlines() if t.strip()]
+        mb_all     = mb_tickers + [mb_bm]
+        fw_d       = {"1M":21,"3M":63,"6M":126}[mb_fw]
+
+        # Genera lista date
+        date_range = []
+        d      = pd.Timestamp(mb_start)
+        end_ts = pd.Timestamp(mb_end)
+        while d <= end_ts:
+            date_range.append(d)
+            d += pd.Timedelta(days=mb_step)
+
+        if len(date_range) > 60:
+            st.warning(f"Troppe date ({len(date_range)}). Aumenta il passo o riduci l'intervallo.")
+            st.stop()
+
+        with st.spinner(f"Download prezzi ({len(date_range)} date)..."):
+            try:
+                raw_mb = yf.download(mb_all,
+                    start=pd.Timestamp(mb_start) - timedelta(days=3*365),
+                    end=datetime.today(), auto_adjust=True, progress=False)
+                mb_close = raw_mb["Close"] if isinstance(raw_mb.columns, pd.MultiIndex) else raw_mb
+                mb_close = mb_close.dropna(how="all")
+            except Exception as e:
+                st.error(f"Errore download: {e}")
+                st.stop()
+
+        rows_mb      = []
+        progress_bar = st.progress(0)
+
+        for i_d, ref_ts in enumerate(date_range):
+            progress_bar.progress((i_d + 1) / len(date_range))
+
+            idx_pos = mb_close.index.searchsorted(ref_ts)
+            if idx_pos >= len(mb_close):
+                continue
+            actual = mb_close.index[idx_pos]
+            hist   = mb_close[mb_close.index <= actual]
+            bm_h   = hist[mb_bm].dropna() if mb_bm in hist.columns else pd.Series(dtype=float)
+
+            rsi_bm_mb = compute_rsi(bm_h)
+
+            def _rsr_mb(tk, days):
+                try:
+                    s = hist[tk].dropna(); b = bm_h
+                    if len(s) <= days or len(b) <= days: return np.nan
+                    return float((s.iloc[-1]/s.iloc[-days-1]-1) /
+                                 (b.iloc[-1]/b.iloc[-days-1]-1) - 1)
+                except Exception: return np.nan
+
+            def _abs_mb(tk, days):
+                try:
+                    s = hist[tk].dropna()
+                    if len(s) <= days: return np.nan
+                    return float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                except Exception: return np.nan
+
+            def _fw_mb(tk, days):
+                try:
+                    s  = mb_close[tk].dropna()
+                    ii = s.index.searchsorted(actual)
+                    if ii + days >= len(s): return np.nan
+                    p0, p1 = float(s.iloc[ii]), float(s.iloc[ii+days])
+                    return p1/p0 - 1 if p0 and not pd.isna(p0) else np.nan
+                except Exception: return np.nan
+
+            wts = [0.20, 0.35, 0.25, 0.20]
+
+            for tk in mb_tickers:
+                if tk not in mb_close.columns:
+                    continue
+                r1w = _rsr_mb(tk, 5);  r1m = _rsr_mb(tk, 21)
+                r3m = _rsr_mb(tk, 63); r6m = _rsr_mb(tk, 126)
+                vr  = [r1w, r1m, r3m, r6m]
+                mms_rsr = (sum(v*w for v,w in zip(vr,wts))
+                           if not any(np.isnan(v) for v in vr) else np.nan)
+
+                a1w = _abs_mb(tk, 5);  a1m = _abs_mb(tk, 21)
+                a3m = _abs_mb(tk, 63); a6m = _abs_mb(tk, 126)
+                va  = [a1w, a1m, a3m, a6m]
+                mms_abs = (sum(v*w for v,w in zip(va,wts))
+                           if not any(np.isnan(v) for v in va) else np.nan)
+
+                mms_r_l, mms_r_v, mms_r_d = compute_mms6m_regression(r1w, r1m, r3m, r6m)
+                mms_a_l, mms_a_v, mms_a_d = (compute_mms6m_regression(*va)
+                    if not any(np.isnan(v) for v in va) else (np.nan, np.nan, np.nan))
+
+                ret_fw   = _fw_mb(tk, fw_d)
+                bm_fw    = _fw_mb(mb_bm, fw_d)
+                delta_bm = ((ret_fw - bm_fw)
+                            if not (np.isnan(ret_fw) or np.isnan(bm_fw)) else np.nan)
+
+                rows_mb.append({
+                    "Data":         actual.strftime("%Y-%m-%d"),
+                    "Ticker":       tk,
+                    "RSI BM":       round(rsi_bm_mb, 1) if not np.isnan(rsi_bm_mb) else np.nan,
+                    "MMS6M RSr":    mms_rsr,
+                    "MMS_R Lenta":  mms_r_l,
+                    "MMS_R Veloce": mms_r_v,
+                    "MMS_R Δ":      mms_r_d,
+                    "MMS6M Abs":    mms_abs,
+                    "MMS_A Lenta":  mms_a_l,
+                    "MMS_A Veloce": mms_a_v,
+                    f"Rend +{mb_fw}":     ret_fw,
+                    f"Delta BM +{mb_fw}": delta_bm,
+                })
+
+        progress_bar.empty()
+
+        if not rows_mb:
+            st.warning("Nessun dato calcolato.")
+            st.stop()
+
+        mb_df = pd.DataFrame(rows_mb)
+        mb_df["Pct MMS6M RSr"] = mb_df.groupby("Data")["MMS6M RSr"].rank(pct=True) * 100
+        mb_df["Pct MMS_R L"]   = mb_df.groupby("Data")["MMS_R Lenta"].rank(pct=True) * 100
+
+        st.success(
+            f"Completato: {len(mb_df)} osservazioni · "
+            f"{mb_df['Data'].nunique()} date · "
+            f"{mb_df['Ticker'].nunique()} settori")
+
+        # Analisi per quintile
+        st.markdown("#### Analisi per quintile MMS6M RSr  ·  finding atteso: fascia 60–80°")
+        fw_col   = f"Rend +{mb_fw}"
+        db_col   = f"Delta BM +{mb_fw}"
+        mb_valid = mb_df.dropna(subset=["Pct MMS6M RSr", fw_col]).copy()
+        bins     = [0, 20, 40, 60, 80, 100]
+        labels   = ["0–20°","20–40°","40–60°","60–80°","80–100°"]
+        mb_valid["Quintile"] = pd.cut(mb_valid["Pct MMS6M RSr"], bins=bins, labels=labels)
+        quintile_stats = (
+            mb_valid.groupby("Quintile", observed=True)
+            .agg(
+                N         =(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM  =(db_col, "mean"),
+                Hit_rate  =(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        quintile_stats["Rend_medio"] = quintile_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        quintile_stats["Delta_BM"]   = quintile_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        quintile_stats["Hit_rate"]   = quintile_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        quintile_stats.columns       = ["Quintile","N","Rend medio","Delta BM medio","Hit rate"]
+
+        def _style_q(row):
+            if "60–80" in str(row["Quintile"]):
+                return ["background-color:#0d2b0d;color:#00ff55;font-weight:bold"] * len(row)
+            return ["color:#888"] * len(row)
+
+        st.dataframe(quintile_stats.style.apply(_style_q, axis=1),
+                     use_container_width=True, hide_index=True)
+
+        # Analisi RSI regime x quintile
+        st.markdown("#### Analisi incrociata RSI regime × Quintile MMS6M")
+
+        def _rsi_bucket(v):
+            if pd.isna(v): return "N/D"
+            if v >= 70:    return "Uptrend maturo (≥70)"
+            if v >= 55:    return "Uptrend fresco (55–69)"
+            if v >= 45:    return "Laterale (45–54)"
+            if v >= 30:    return "Ribasso attivo (30–44)"
+            return              "Bottom (≤29)"
+
+        mb_valid2 = mb_df.dropna(subset=["Pct MMS6M RSr","RSI BM", fw_col]).copy()
+        mb_valid2["Quintile"]   = pd.cut(mb_valid2["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid2["RSI Regime"] = mb_valid2["RSI BM"].apply(_rsi_bucket)
+        cross_stats = (
+            mb_valid2.groupby(["RSI Regime","Quintile"], observed=True)
+            .agg(N=(fw_col,"count"), Delta_BM=(db_col,"mean"))
+            .reset_index()
+        )
+        cross_stats["Delta_BM"] = cross_stats["Delta_BM"].map(
+            lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—")
+        st.dataframe(cross_stats, use_container_width=True, hide_index=True)
+
+        # Download CSV
+        st.markdown("---")
+        csv_out = mb_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Scarica CSV completo",
+            data=csv_out,
+            file_name=f"backtest_multdata_{mb_start}_{mb_end}_{mb_fw}.csv",
+            mime="text/csv",
+        )
+
+        st.markdown(
+            f'<div style="background:#0d0d0d;border:1px solid #222;border-radius:6px;'
+            f'padding:8px 16px;margin-top:6px;font-size:0.78em;color:#555;">'
+            f'Passo: {mb_step}gg · Forward: {mb_fw} · '
+            f'Date: {mb_df["Data"].nunique()} · '
+            f'Benchmark: {mb_bm} · '
+            f'Osservazioni: {len(mb_df)}</div>',
+            unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+        <div style="background:#080808;border:1px solid #1a1a1a;border-radius:10px;
+                    padding:24px;margin-top:8px;color:#555;font-size:0.88em;line-height:1.8;">
+        <b style="color:#ff9900">Come usare:</b><br>
+        1. Scegli intervallo date e passo (42gg consigliato)<br>
+        2. Seleziona il timeframe forward da validare<br>
+        3. Premi <b>Avvia Backtest Multi-Data</b><br>
+        4. La tabella quintili mostra l'alpha per fascia percentile<br>
+        5. La tabella RSI × Quintile mostra come il regime modula l'alpha<br>
+        6. Scarica il CSV per analisi esterne<br><br>
+        <b style="color:#ff9900">Limite:</b> max 60 date per sessione.
+        Per intervalli lunghi usa passo 63gg.
+        </div>
+        """, unsafe_allow_html=True)
