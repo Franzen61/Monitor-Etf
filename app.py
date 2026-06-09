@@ -1894,26 +1894,34 @@ with tab6:
             mme_bt = mms_a_l / (abs(maxdd_6m_bt) + 0.0001) if not np.isnan(maxdd_6m_bt) else np.nan
 
             # GTE — qualità impulso relativo normalizzata su rischio 3M
-        if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
-            gemini_3m_bt = (r1w + (r1m - r1w) / 3 + (r3m - r1m) / 8) / 3
-            gte_bt = gemini_3m_bt / (abs(maxdd_3m_bt) + 0.0001) if not np.isnan(maxdd_3m_bt) else np.nan
-        else:
-            gte_bt = np.nan
+            if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
+                gemini_3m_bt = (r1w + (r1m - r1w) / 3 + (r3m - r1m) / 8) / 3
+                gte_bt = gemini_3m_bt / (abs(maxdd_3m_bt) + 0.0001) if not np.isnan(maxdd_3m_bt) else np.nan
+            else:
+                gte_bt = np.nan
 
-        # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-        s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
+            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
+            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
 
-        # AMSR Score — riusa maxdd_3m_bt già calcolato
-        try:
-            tk_s       = bt_close[tk].dropna()
-            ret_abs_1m = float(tk_s.iloc[-1] / tk_s.iloc[-22] - 1) if len(tk_s) > 21 else np.nan
-            ret_abs_3m = float(tk_s.iloc[-1] / tk_s.iloc[-64] - 1) if len(tk_s) > 63 else np.nan
-        except Exception:
-            ret_abs_1m, ret_abs_3m = np.nan, np.nan
-        amsr_score = ((ret_abs_1m + ret_abs_3m - abs(maxdd_3m_bt))
-                      if not np.isnan(maxdd_3m_bt) else np.nan)
+            # AMSR Score — riusa maxdd_3m_bt già calcolato
+            try:
+                tk_s       = bt_close[tk].dropna()
+                ret_abs_1m = float(tk_s.iloc[-1] / tk_s.iloc[-22] - 1) if len(tk_s) > 21 else np.nan
+                ret_abs_3m = float(tk_s.iloc[-1] / tk_s.iloc[-64] - 1) if len(tk_s) > 63 else np.nan
+            except Exception:
+                ret_abs_1m, ret_abs_3m = np.nan, np.nan
+            amsr_score = ((ret_abs_1m + ret_abs_3m - abs(maxdd_3m_bt))
+                          if not np.isnan(maxdd_3m_bt) else np.nan)
 
-        rows.append({
+            # Rendimenti forward
+            ret_fw1 = fw(tk, fwd1_d)
+            ret_fw2 = fw(tk, fwd2_d)
+            bm_fw1  = fw(bt_benchmark, fwd1_d)
+            bm_fw2  = fw(bt_benchmark, fwd2_d)
+            d1 = (ret_fw1 - bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
+            d2 = (ret_fw2 - bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
+
+            rows.append({
                 "Ticker":        tk,
                 "RSI BM":        rsi_bm_bt,
                 "MMS6M RSr":     mms6m_rsr,
