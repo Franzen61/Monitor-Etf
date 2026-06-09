@@ -1776,10 +1776,7 @@ with tab6:
             max_value=datetime.today().date(),
             key="bt_date")
 
-    st.markdown("##### Parametri")
-    with st.columns([1,3])[0]:
-        bt_thr_mbi = st.slider("MBI alert", 0.50, 1.50, 1.00, 0.10,
-                                format="%.2f", key="bt_mbi")
+   
 
     st.markdown("##### Rendimenti forward")
     fw1, fw2 = st.columns(2)
