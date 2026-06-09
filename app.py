@@ -1879,7 +1879,7 @@ with tab6:
             mms_a_l, mms_a_v, mms_a_d = (compute_mms6m_regression(*va)
                 if not any(np.isnan(v) for v in va) else (np.nan, np.nan, np.nan))
 
-           breve = (r1m*0.50 + r1w*0.35 + r1d*0.15
+            breve = (r1m*0.50 + r1w*0.35 + r1d*0.15
                      if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan)
             medio = (r1m*0.35 + r3m*0.25 + r6m*0.20 + r1w*0.20
                      if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan)
