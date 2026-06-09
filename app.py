@@ -2081,7 +2081,7 @@ with tab6:
         fm2 = lambda x: f"{x:+.4f}" if not pd.isna(x) else "—"
 
         st.dataframe(
-            res.style
+            res.drop(columns=["_S_minus_M"], errors="ignore").style
             .map(_c_rsi_bm,       subset=["RSI BM"])
             .map(_c_mms_rsr2,     subset=["MMS6M RSr"])
             .map(_c_tt2,          subset=["Tact. Thrust"])
