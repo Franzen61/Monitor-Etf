@@ -674,15 +674,35 @@ def compute_euro_indicators(prices, today_prices, benchmark):
         else:
             mbi = np.nan
 
+        # MaxDD assoluto 3M e 6M (prices = storico lungo passato come parametro)
+        actual_ref_euro = prices.index[-1]
+        maxdd_3m = calcola_maxdd_assoluto(tk, prices, actual_ref_euro, periodo_giorni=63)
+        maxdd_6m = calcola_maxdd_assoluto_6m(tk, prices, actual_ref_euro, periodo_giorni=126)
+
+        # MME — efficienza assoluta strutturale
+        mme = mms_a_lenta / (abs(maxdd_6m) + 0.0001) if not np.isnan(maxdd_6m) else np.nan
+
+        # GTE — qualità impulso relativo normalizzata su rischio 3M
+        if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
+            gemini_3m = (r1w + (r1m - r1w) / 3 + (r3m - r1m) / 8) / 3
+            gte = gemini_3m / (abs(maxdd_3m) + 0.0001) if not np.isnan(maxdd_3m) else np.nan
+        else:
+            gte = np.nan
+
         results.append({
             "Ticker": tk, "Nome": EURO_NAMES.get(tk, tk),
-            "RSr 1D": r1d, "RSr 1W": r1w, "RSr 1M": r1m, "RSr 3M": r3m, "RSr 6M": r6m,
-            "MMS6M RSr":    mms6m_rsr,   "MMS6M Ass.":   mms6m_abs,
-            "MMS_R Lenta":  mms_r_lenta, "MMS_R Veloce": mms_r_veloce, "MMS_R Δ": mms_r_delta,
-            "MMS_A Lenta":  mms_a_lenta, "MMS_A Veloce": mms_a_veloce, "MMS_A Δ": mms_a_delta,
+            "RSr 1W": r1w, "RSr 1M": r1m, "RSr 3M": r3m, "RSr 6M": r6m,
+            "MMS6M RSr":    mms6m_rsr,
+            "RSI BM":       np.nan,       # placeholder — scalare, impostato in Tab 5
+            "MME":          mme,
+            "GTE":          gte,
+            "_S_minus_M":   mms_a_veloce - mms_a_lenta,  # intermedio per Δ Rank
+            # colonne interne mantenute per Tab 6 — non renderizzate in Tab 5
+            "MMS6M Ass.":   mms6m_abs,
+            "MMS_R Lenta":  mms_r_lenta,  "MMS_R Veloce": mms_r_veloce, "MMS_R Δ": mms_r_delta,
+            "MMS_A Lenta":  mms_a_lenta,  "MMS_A Veloce": mms_a_veloce, "MMS_A Δ": mms_a_delta,
             "Tact. Thrust": tt, "Mr Index": mr, "MBI": mbi,
         })
-
     return pd.DataFrame(results).set_index("Ticker")
 def calcola_maxdd_assoluto(ticker, bt_close, actual_ref, periodo_giorni=63):
     try:
@@ -1456,9 +1476,11 @@ with tab5:
     with st.spinner("Calcolo indicatori RSr..."):
         euro_ind = compute_euro_indicators(euro_prices_clean, euro_today_clean, EURO_BENCHMARK)
 
-    # ── RSI benchmark EXSA.DE
+    # ── RSI benchmark scalare + Δ Rank cross-settoriale
     _rsi_bm = (compute_rsi(euro_prices_clean[EURO_BENCHMARK])
                if EURO_BENCHMARK in euro_prices_clean.columns else np.nan)
+    euro_ind["RSI BM"] = round(_rsi_bm, 1) if not np.isnan(_rsi_bm) else np.nan
+    euro_ind["Δ Rank"] = euro_ind["_S_minus_M"].rank(ascending=True, method="min").astype(int)
     if not np.isnan(_rsi_bm):
         if   _rsi_bm >= 70: _rsi_regime, _rsi_color = "UPTREND MATURO", "#ff4422"
         elif _rsi_bm >= 55: _rsi_regime, _rsi_color = "UPTREND FRESCO",  "#00ff55"
@@ -1517,8 +1539,7 @@ with tab5:
             ["1D","1W","1M","3M","6M","YTD","1A"], index=4, key="euro_tf")
     with c2:
         euro_sort = st.selectbox("Ordina tabella per",
-            ["MMS6M RSr","MMS6M Ass.","MMS_R Lenta","MMS_R Veloce",
-             "Tact. Thrust","Mr Index","RSr 1M","RSr 3M"],
+            ["MMS6M RSr","MME","GTE","Δ Rank","RSr 1M","RSr 3M","RSr 6M"],
             key="euro_sort")
 
     # ── Bar chart RSr
@@ -1623,14 +1644,12 @@ with tab5:
 
     disp      = euro_ind.sort_values(euro_sort, ascending=False).copy()
     disp_show = disp[["Nome",
-                       "RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M",
-                       "MMS6M RSr","MMS6M Ass.",
-                       "MMS_R Lenta","MMS_R Veloce","MMS_R Δ",
-                       "MMS_A Lenta","MMS_A Veloce","MMS_A Δ",
-                       "Tact. Thrust","Mr Index","MBI"]].copy()
+                       "RSr 1W", "RSr 1M", "RSr 3M", "RSr 6M",
+                       "MMS6M RSr", "RSI BM",
+                       "MME", "GTE", "Δ Rank"]].copy()
 
     fp = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—"
-    fm = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
+    fm = lambda x: f"{x:+.4f}"      if not pd.isna(x) else "—"
 
     def _c_rsr(v):
         try:
@@ -1650,77 +1669,58 @@ with tab5:
         except Exception: pass
         return "color:#888"
 
-    def _c_mms_abs(v):
+    def _c_rsi_bm_tab5(v):
         try:
             v = float(v)
-            if v >  0.03: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v < -0.03: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v >= 70: return "color:#ff4422;font-weight:bold"
+            if v >= 55: return "color:#00ff55"
+            if v >= 45: return "color:#ffaa00"
+            if v >= 30: return "color:#ff4422"
+            return "color:#44aaff;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
-    def _c_mms_reg(v):
+    def _c_mme(v):
         try:
             v = float(v)
-            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v >  0:    return "color:#88cc88"
-            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v <  0:    return "color:#cc6644"
+            if v >  0.15: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >  0:    return "color:#888888"
+            if v <= 0:    return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
-    def _c_mms_delta(v):
+    def _c_gte(v):
         try:
             v = float(v)
-            if v >  0.005: return "color:#00ff55;font-weight:bold"
-            if v >  0:     return "color:#88cc88"
-            if v < -0.005: return "color:#ff4422;font-weight:bold"
-            if v <  0:     return "color:#cc6644"
+            if v >  0: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v <= 0: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
-    def _c_tt(v):
+    def _c_delta_rank(v):
         try:
-            v = float(v)
-            if v >  0.015: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v < -0.015: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-        except Exception: pass
-        return "color:#888"
-
-    def _c_mr(v):
-        try:
-            v = float(v)
-            if v >  0.01:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v >  0.005: return "color:#88cc88"
-            if v < -0.01:  return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v < -0.005: return "color:#cc6644"
-        except Exception: pass
-        return "color:#888"
-
-    def _c_mbi(v):
-        try:
-            v = float(v)
-            if v < -1.00: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v < -0.50: return "color:#aaff44"
-            if v >  1.00: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
-            if v >  0.50: return "color:#ffaa00"
+            v = int(v)
+            if v <= 5:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >= 16: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
     st.dataframe(
         disp_show.style
-        .map(_c_rsr,       subset=["RSr 1D","RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
-        .map(_c_mms_rsr,   subset=["MMS6M RSr"])
-        .map(_c_mms_abs,   subset=["MMS6M Ass."])
-        .map(_c_mms_reg,   subset=["MMS_R Lenta","MMS_R Veloce","MMS_A Lenta","MMS_A Veloce"])
-        .map(_c_mms_delta, subset=["MMS_R Δ","MMS_A Δ"])
-        .map(_c_tt,        subset=["Tact. Thrust"])
-        .map(_c_mr,        subset=["Mr Index"])
-        .map(_c_mbi,       subset=["MBI"])
-        .format({"RSr 1D":fp,"RSr 1W":fp,"RSr 1M":fp,"RSr 3M":fp,"RSr 6M":fp,
-                 "MMS6M RSr":fp,"MMS6M Ass.":fp,
-                 "MMS_R Lenta":fp,"MMS_R Veloce":fp,"MMS_R Δ":fp,
-                 "MMS_A Lenta":fp,"MMS_A Veloce":fp,"MMS_A Δ":fp,
-                 "Tact. Thrust":fp,"Mr Index":fp,"MBI":fm}),
+        .map(_c_rsr,          subset=["RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
+        .map(_c_mms_rsr,      subset=["MMS6M RSr"])
+        .map(_c_rsi_bm_tab5,  subset=["RSI BM"])
+        .map(_c_mme,          subset=["MME"])
+        .map(_c_gte,          subset=["GTE"])
+        .map(_c_delta_rank,   subset=["Δ Rank"])
+        .format({
+            "RSr 1W": fp, "RSr 1M": fp, "RSr 3M": fp, "RSr 6M": fp,
+            "MMS6M RSr": fp,
+            "RSI BM":  lambda x: f"{x:.1f}" if not pd.isna(x) else "—",
+            "MME":     fm,
+            "GTE":     fm,
+            "Δ Rank":  lambda x: f"{int(x)}" if not pd.isna(x) else "—",
+        }),
         use_container_width=True,
         column_config={"Nome": st.column_config.TextColumn("Settore", width="medium")}
     )
@@ -1729,15 +1729,28 @@ with tab5:
     <div style="background:#0d0d0d;border:1px solid #222;border-radius:8px;
                 padding:12px 20px;margin-top:8px;font-size:0.80em;color:#888;
                 display:flex;gap:20px;flex-wrap:wrap;">
-        <span><b style="color:#ff9900">MMS6M RSr/Ass.</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20%</span>
-        <span><b style="color:#ff9900">MMS_R/A Lenta</b>: MMS + slope regressione 3pt (coeff 0.05)</span>
-        <span><b style="color:#ff9900">MMS_R/A Veloce</b>: MMS + slope regressione 3pt (coeff 0.22)</span>
-        <span><b style="color:#ff9900">MMS_R/A Δ</b>: Veloce − Lenta = accelerazione rotazione</span>
-        <span><b style="color:#ff9900">Tact.Thrust</b>: breve − medio</span>
-        <span><b style="color:#ff9900">Mr Index</b>: breve / (|medio|+0.02)</span>
-        <span><b style="color:#ff9900">MBI</b>: attivo solo se MMS6M RSr &gt; 3%</span>
+        <span><b style="color:#ff9900">MMS6M RSr</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20% + slope coeff 0.05</span>
+        <span><b style="color:#ff9900">MME</b>: MMS6M Ass. Lento / (|MaxDD6M| + ε) — efficienza assoluta strutturale</span>
+        <span><b style="color:#ff9900">GTE</b>: Gemini RSr 3M / (|MaxDD3M| + ε) — qualità impulso relativo</span>
+        <span><b style="color:#ff9900">Δ Rank</b>: rank cross-settoriale (S−M) — 1→5 breve accelera · 16→19 breve decelera</span>
+        <span><b style="color:#ff9900">RSI BM</b>: RSI(14) EXSA.DE — discriminatore regime · 45–55 ottimale · ≥70 alpha ridotto</span>
     </div>
     """, unsafe_allow_html=True)
+
+    with st.expander("📐 Matrice operativa MME × GTE × Δ Rank", expanded=False):
+        st.markdown("""
+    | MME | GTE | Δ Rank | Condizione | Azione |
+    |-----|-----|--------|------------|--------|
+    | Verde | Positivo | 1→5 | Trend in Pieno Slancio | Mantenere |
+    | Verde | Negativo | 16→19 | Storno Tattico | Monitorare |
+    | Rosso | Positivo | 1→5 | Rimbalzo Tecnico | Ignorare |
+    | Rosso | Negativo | 16→19 | Sottoperformance Cronica | Evitare |
+
+    **Due indicatori su tre allineati** = lettura orientativa.
+    **Uno su tre** = rumore, non agire.
+
+    MME misura efficienza assoluta · GTE misura qualità relativa · sono ortogonali per costruzione.
+    """)
 # ========================
 # TAB 6 — ROTATION BACKTEST
 # ========================
