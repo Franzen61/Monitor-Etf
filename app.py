@@ -1879,46 +1879,42 @@ with tab6:
             mms_a_l, mms_a_v, mms_a_d = (compute_mms6m_regression(*va)
                 if not any(np.isnan(v) for v in va) else (np.nan, np.nan, np.nan))
 
-            breve = (r1m*0.50 + r1w*0.35 + r1d*0.15
+           breve = (r1m*0.50 + r1w*0.35 + r1d*0.15
                      if not any(np.isnan(v) for v in [r1m,r1w,r1d]) else np.nan)
             medio = (r1m*0.35 + r3m*0.25 + r6m*0.20 + r1w*0.20
                      if not any(np.isnan(v) for v in [r1m,r3m,r6m,r1w]) else np.nan)
             tt = (breve - medio) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
             mr = (breve / (abs(medio) + 2)) if not (np.isnan(breve) or np.isnan(medio)) else np.nan
 
-            if (not np.isnan(mms6m_rsr) and mms6m_rsr > 0.03
-                    and not np.isnan(r1w) and not np.isnan(r1m)):
-                mbi = ((r1w + r1m) / 2 - mms6m_rsr) / abs(mms6m_rsr)
+            # MaxDD 3M e 6M — su storico fino alla data di riferimento
+            maxdd_3m_bt = calcola_maxdd_assoluto(tk, bt_close, actual_ref, periodo_giorni=63)
+            maxdd_6m_bt = calcola_maxdd_assoluto_6m(tk, bt_close, actual_ref, periodo_giorni=126)
+
+            # MME — efficienza assoluta strutturale
+            mme_bt = mms_a_l / (abs(maxdd_6m_bt) + 0.0001) if not np.isnan(maxdd_6m_bt) else np.nan
+
+            # GTE — qualità impulso relativo normalizzata su rischio 3M
+            if not any(np.isnan(v) for v in [r1w, r1m, r3m]):
+                gemini_3m_bt = (r1w + (r1m - r1w) / 3 + (r3m - r1m) / 8) / 3
+                gte_bt = gemini_3m_bt / (abs(maxdd_3m_bt) + 0.0001) if not np.isnan(maxdd_3m_bt) else np.nan
             else:
-                mbi = np.nan
+                gte_bt = np.nan
 
-            ret_fw1 = fw(tk, fwd1_d); ret_fw2 = fw(tk, fwd2_d)
-            bm_fw1  = fw(bt_benchmark, fwd1_d)
-            bm_fw2  = fw(bt_benchmark, fwd2_d)
-            d1 = (ret_fw1 - bm_fw1) if not (np.isnan(ret_fw1) or np.isnan(bm_fw1)) else np.nan
-            d2 = (ret_fw2 - bm_fw2) if not (np.isnan(ret_fw2) or np.isnan(bm_fw2)) else np.nan
-
-            # AMSR Score
-            maxdd_abs = calcola_maxdd_assoluto(tk, bt_close, actual_ref)
-            try:
-                tk_s       = bt_close[tk].dropna()
-                ret_abs_1m = float(tk_s.iloc[-1] / tk_s.iloc[-22] - 1) if len(tk_s) > 21 else np.nan
-                ret_abs_3m = float(tk_s.iloc[-1] / tk_s.iloc[-64] - 1) if len(tk_s) > 63 else np.nan
-            except Exception:
-                ret_abs_1m, ret_abs_3m = np.nan, np.nan
-            amsr_score = ((ret_abs_1m + ret_abs_3m - abs(maxdd_abs))
-                          if not np.isnan(maxdd_abs) else np.nan)
+            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
+            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
 
             rows.append({
                 "Ticker":        tk,
                 "RSI BM":        rsi_bm_bt,
-                "MMS6M RSr":     mms6m_rsr,  "MMS6M Ass.":    mms6m_abs,
-                "MMS_R Lenta":   mms_r_l,    "MMS_R Veloce":  mms_r_v,  "MMS_R Δ": mms_r_d,
-                "MMS_A Lenta":   mms_a_l,    "MMS_A Veloce":  mms_a_v,  "MMS_A Δ": mms_a_d,
-                "Tact. Thrust":  tt,          "Mr Index":      mr,        "MBI":     mbi,
+                "MMS6M RSr":     mms6m_rsr,
+                "Tact. Thrust":  tt,
+                "Mr Index":      mr,
+                "MME":           mme_bt,
+                "GTE":           gte_bt,
+                "_S_minus_M":    s_minus_m_bt,
                 "AMSR Score":    amsr_score,
-                f"Rend +{bt_fw1}":    ret_fw1, f"Rend +{bt_fw2}":    ret_fw2,
-                f"Delta BM +{bt_fw1}": d1,     f"Delta BM +{bt_fw2}": d2,
+                f"Rend +{bt_fw1}":     ret_fw1, f"Rend +{bt_fw2}":     ret_fw2,
+                f"Delta BM +{bt_fw1}": d1,      f"Delta BM +{bt_fw2}": d2,
             })
 
         if not rows:
@@ -1928,16 +1924,9 @@ with tab6:
         res = (pd.DataFrame(rows).set_index("Ticker")
                .sort_values("MMS6M RSr", ascending=False))
         res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
+        res["Δ Rank"]     = res["_S_minus_M"].rank(ascending=True,  na_option="bottom", method="min").astype(int)
 
-        # MBI alert
-        mbi_alert = res[res["MBI"].abs() > bt_thr_mbi].dropna(subset=["MBI"])
-        if not mbi_alert.empty:
-            lst = [f"{t} ({v:+.2f})" for t, v in mbi_alert["MBI"].items()]
-            st.markdown(
-                f'<div style="background:#1a1000;border:1px solid #554400;border-radius:6px;'
-                f'padding:8px 16px;margin-bottom:10px;font-size:0.82em;color:#ffaa00;">'
-                f'MBI Alert (|MBI| > {bt_thr_mbi:.2f}): {" · ".join(lst)}</div>',
-                unsafe_allow_html=True)
+        
 
         fw1c = f"Rend +{bt_fw1}"; fw2c = f"Rend +{bt_fw2}"
         d1c  = f"Delta BM +{bt_fw1}"; d2c  = f"Delta BM +{bt_fw2}"
@@ -2046,28 +2035,54 @@ with tab6:
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
         fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
+        def _c_mme2(v):
+            try:
+                v = float(v)
+                if v >  0.15: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v >  0:    return "color:#888888"
+                if v <= 0:    return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
+            return "color:#888"
+
+        def _c_gte2(v):
+            try:
+                v = float(v)
+                if v >  0: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v <= 0: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
+            return "color:#888"
+
+        def _c_delta_rank2(v):
+            try:
+                v = int(v)
+                if v <= 5:  return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+                if v >= 16: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            except Exception: pass
+            return "color:#888"
+
+        fm2 = lambda x: f"{x:+.4f}" if not pd.isna(x) else "—"
+
         st.dataframe(
             res.style
-            .map(_c_rsi_bm,     subset=["RSI BM"])
-            .map(_c_mms_rsr2,   subset=["MMS6M RSr"])
-            .map(_c_mms_abs2,   subset=["MMS6M Ass."])
-            .map(_c_mms_reg2,   subset=["MMS_R Lenta","MMS_R Veloce","MMS_A Lenta","MMS_A Veloce"])
-            .map(_c_mms_delta2, subset=["MMS_R Δ","MMS_A Δ"])
-            .map(_c_tt2,        subset=["Tact. Thrust"])
-            .map(_c_mr2,        subset=["Mr Index"])
-            .map(_c_mbi2,       subset=["MBI"])
-            .map(_c_amsr,       subset=["AMSR Score"])
-            .map(_c_fw,         subset=[fw1c, fw2c])
-            .map(_c_dbm,        subset=[d1c,  d2c])
+            .map(_c_rsi_bm,       subset=["RSI BM"])
+            .map(_c_mms_rsr2,     subset=["MMS6M RSr"])
+            .map(_c_tt2,          subset=["Tact. Thrust"])
+            .map(_c_mr2,          subset=["Mr Index"])
+            .map(_c_mme2,         subset=["MME"])
+            .map(_c_gte2,         subset=["GTE"])
+            .map(_c_delta_rank2,  subset=["Δ Rank"])
+            .map(_c_amsr,         subset=["AMSR Score"])
+            .map(_c_fw,           subset=[fw1c, fw2c])
+            .map(_c_dbm,          subset=[d1c,  d2c])
             .format({
                 "RSI BM":       lambda x: f"{x:.1f}" if not pd.isna(x) else "—",
-                "MMS6M RSr":    fp2, "MMS6M Ass.":   fp2,
-                "MMS_R Lenta":  fp2, "MMS_R Veloce":  fp2, "MMS_R Δ":  fp2,
-                "MMS_A Lenta":  fp2, "MMS_A Veloce":  fp2, "MMS_A Δ":  fp2,
-                "Tact. Thrust": fp2, "Mr Index":       fp2, "MBI":      fm2,
+                "MMS6M RSr":    fp2,
+                "Tact. Thrust": fp2, "Mr Index": fp2,
+                "MME":          fm2, "GTE":      fm2,
                 "AMSR Score":   fp2,
                 fw1c: fp2, fw2c: fp2, d1c: fp2, d2c: fp2,
-                "Rank MMS6M":   lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Rank MMS6M":  lambda x: f"{int(x)}" if not pd.isna(x) else "-",
+                "Δ Rank":      lambda x: f"{int(x)}" if not pd.isna(x) else "-",
             }),
             use_container_width=True,
         )
@@ -2385,17 +2400,40 @@ with tab8:
                 delta_bm = ((ret_fw - bm_fw)
                             if not (np.isnan(ret_fw) or np.isnan(bm_fw)) else np.nan)
 
+                # MaxDD 3M e 6M alla data corrente del loop
+                maxdd_3m_mb = calcola_maxdd_assoluto(tk, mb_close, actual, periodo_giorni=63)
+                maxdd_6m_mb = calcola_maxdd_assoluto_6m(tk, mb_close, actual, periodo_giorni=126)
+
+                # MME
+                mme_mb = mms_a_l / (abs(maxdd_6m_mb) + 0.0001) if not np.isnan(maxdd_6m_mb) else np.nan
+
+                # GTE — usa RSr (già calcolati come r1w/r1m/r3m nel loop)
+                r1w_mb = _rsr_mb(tk, 5); r1m_mb = _rsr_mb(tk, 21); r3m_mb = _rsr_mb(tk, 63)
+                if not any(np.isnan(v) for v in [r1w_mb, r1m_mb, r3m_mb]):
+                    gemini_3m_mb = (r1w_mb + (r1m_mb - r1w_mb) / 3 + (r3m_mb - r1m_mb) / 8) / 3
+                    gte_mb = gemini_3m_mb / (abs(maxdd_3m_mb) + 0.0001) if not np.isnan(maxdd_3m_mb) else np.nan
+                else:
+                    gte_mb = np.nan
+
+                # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
+                r6m_mb = _rsr_mb(tk, 126)
+                breve_mb = (r1m_mb*0.60 + r1w_mb*0.40
+                            if not any(np.isnan(v) for v in [r1m_mb, r1w_mb]) else np.nan)
+                medio_mb = (r1m_mb*0.35 + r3m_mb*0.25 + r6m_mb*0.20 + r1w_mb*0.20
+                            if not any(np.isnan(v) for v in [r1m_mb, r3m_mb, r6m_mb, r1w_mb]) else np.nan)
+                tt_mb = (breve_mb - medio_mb) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
+                mr_mb = (breve_mb / (abs(medio_mb) + 2)) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
+
                 rows_mb.append({
-                    "Data":         actual.strftime("%Y-%m-%d"),
-                    "Ticker":       tk,
-                    "RSI BM":       round(rsi_bm_mb, 1) if not np.isnan(rsi_bm_mb) else np.nan,
-                    "MMS6M RSr":    mms_rsr,
-                    "MMS_R Lenta":  mms_r_l,
-                    "MMS_R Veloce": mms_r_v,
-                    "MMS_R Δ":      mms_r_d,
-                    "MMS6M Abs":    mms_abs,
-                    "MMS_A Lenta":  mms_a_l,
-                    "MMS_A Veloce": mms_a_v,
+                    "Data":          actual.strftime("%Y-%m-%d"),
+                    "Ticker":        tk,
+                    "RSI BM":        round(rsi_bm_mb, 1) if not np.isnan(rsi_bm_mb) else np.nan,
+                    "MMS6M RSr":     mms_rsr,
+                    "Tact. Thrust":  tt_mb,
+                    "Mr Index":      mr_mb,
+                    "MME":           mme_mb,
+                    "GTE":           gte_mb,
+                    "_S_minus_M":    mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan,
                     f"Rend +{mb_fw}":     ret_fw,
                     f"Delta BM +{mb_fw}": delta_bm,
                 })
@@ -2408,7 +2446,7 @@ with tab8:
 
         mb_df = pd.DataFrame(rows_mb)
         mb_df["Pct MMS6M RSr"] = mb_df.groupby("Data")["MMS6M RSr"].rank(pct=True) * 100
-        mb_df["Pct MMS_R L"]   = mb_df.groupby("Data")["MMS_R Lenta"].rank(pct=True) * 100
+        mb_df["Δ Rank"]        = mb_df.groupby("Data")["_S_minus_M"].rank(ascending=True, method="min")
 
         st.success(
             f"Completato: {len(mb_df)} osservazioni · "
@@ -2471,7 +2509,7 @@ with tab8:
 
         # Download CSV
         st.markdown("---")
-        csv_out = mb_df.to_csv(index=False).encode("utf-8")
+        csv_out = mb_df.drop(columns=["_S_minus_M"], errors="ignore").to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Scarica CSV completo",
             data=csv_out,
