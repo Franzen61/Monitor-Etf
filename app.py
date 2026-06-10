@@ -2524,7 +2524,32 @@ with tab8:
 
         # Download CSV
         st.markdown("---")
-        csv_out = mb_df.drop(columns=["_S_minus_M"], errors="ignore").to_csv(index=False).encode("utf-8")
+        # Arricchimento CSV per analisi esterna
+        csv_df = mb_df.copy()
+
+        # S_minus_M grezzo (valore continuo per stratificazione libera)
+        csv_df["S_minus_M"] = csv_df["_S_minus_M"]
+
+        # Booleani MME e GTE
+        csv_df["MME_pos"] = (csv_df["MME"] > 0).astype(int)
+        csv_df["GTE_pos"] = (csv_df["GTE"] > 0).astype(int)
+
+        # Δ Rank in fasce descrittive
+        def _delta_rank_fascia(v):
+            try:
+                v = int(v)
+                if v <= 5:  return "1-5"
+                if v <= 10: return "6-10"
+                if v <= 15: return "11-15"
+                return "16-19"
+            except Exception:
+                return "N/D"
+        csv_df["Delta_Rank_fascia"] = csv_df["Δ Rank"].apply(_delta_rank_fascia)
+
+        # Rimuovi colonna interna
+        csv_df = csv_df.drop(columns=["_S_minus_M"], errors="ignore")
+
+        csv_out = csv_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Scarica CSV completo",
             data=csv_out,
