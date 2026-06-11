@@ -2519,7 +2519,48 @@ with tab8:
         cross_stats["Delta_BM"] = cross_stats["Delta_BM"].map(
             lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—")
         st.dataframe(cross_stats, use_container_width=True, hide_index=True)
+        
+        # Analisi TT x Quintile
+        st.markdown("#### Analisi Tact. Thrust × Quintile MMS6M RSr")
+        mb_valid3 = mb_df.dropna(subset=["Pct MMS6M RSr", "Tact. Thrust", fw_col]).copy()
+        mb_valid3["Quintile"] = pd.cut(mb_valid3["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid3["TT sign"]  = mb_valid3["Tact. Thrust"].apply(lambda x: "TT+" if x > 0 else "TT-")
+        tt_stats = (
+            mb_valid3.groupby(["Quintile", "TT sign"], observed=True)
+            .agg(
+                N        =(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM =(db_col, "mean"),
+                Hit_rate =(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        tt_stats["Rend_medio"] = tt_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        tt_stats["Delta_BM"]   = tt_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        tt_stats["Hit_rate"]   = tt_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        tt_stats.columns       = ["Quintile","TT","N","Rend medio","Delta BM medio","Hit rate"]
+        st.dataframe(tt_stats, use_container_width=True, hide_index=True)
 
+        # Analisi Mr Index x Quintile
+        st.markdown("#### Analisi Mr Index × Quintile MMS6M RSr")
+        mb_valid4 = mb_df.dropna(subset=["Pct MMS6M RSr", "Mr Index", fw_col]).copy()
+        mb_valid4["Quintile"] = pd.cut(mb_valid4["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid4["Mr sign"]  = mb_valid4["Mr Index"].apply(lambda x: "Mr+" if x > 0 else "Mr-")
+        mr_stats = (
+            mb_valid4.groupby(["Quintile", "Mr sign"], observed=True)
+            .agg(
+                N        =(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM =(db_col, "mean"),
+                Hit_rate =(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        mr_stats["Rend_medio"] = mr_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        mr_stats["Delta_BM"]   = mr_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        mr_stats["Hit_rate"]   = mr_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        mr_stats.columns       = ["Quintile","Mr","N","Rend medio","Delta BM medio","Hit rate"]
+        st.dataframe(mr_stats, use_container_width=True, hide_index=True)
         # Download CSV
         st.markdown("---")
         # Arricchimento CSV per analisi esterna
