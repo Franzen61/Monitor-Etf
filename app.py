@@ -2389,15 +2389,53 @@ with tab8:
                 except Exception: return np.nan
 
             wts = [0.20, 0.35, 0.25, 0.20]
-            # Pendenza profilo RSr su 4 TF (regressione log-lineare)
-            _log_days = np.log(np.array([5., 21., 63., 126.]))
-            _log_days_c = _log_days - _log_days.mean()
-            _denom_slope = float(np.dot(_log_days_c, _log_days_c))
+
+        # Pendenza profilo RSr su 4 TF (regressione log-lineare)
+        _log_days   = np.log(np.array([5., 21., 63., 126.]))
+        _log_days_c = _log_days - _log_days.mean()
+        _denom_slope = float(np.dot(_log_days_c, _log_days_c))
 
         def _slope_mb(r1w, r1m, r3m, r6m):
             vals = np.array([r1w, r1m, r3m, r6m])
             if np.any(np.isnan(vals)): return np.nan
             return float(np.dot(_log_days_c, vals) / _denom_slope)
+
+        for i_d, ref_ts in enumerate(date_range):
+            progress_bar.progress((i_d + 1) / len(date_range))
+
+            idx_pos = mb_close.index.searchsorted(ref_ts)
+            if idx_pos >= len(mb_close):
+                continue
+            actual = mb_close.index[idx_pos]
+            hist   = mb_close[mb_close.index <= actual]
+            bm_h   = hist[mb_bm].dropna() if mb_bm in hist.columns else pd.Series(dtype=float)
+
+            rsi_bm_mb = compute_rsi(bm_h)
+
+            def _rsr_mb(tk, days):
+                try:
+                    s = hist[tk].dropna(); b = bm_h
+                    if len(s) <= days or len(b) <= days: return np.nan
+                    return float((s.iloc[-1]/s.iloc[-days-1]-1) /
+                                 (b.iloc[-1]/b.iloc[-days-1]-1) - 1)
+                except Exception: return np.nan
+
+            def _abs_mb(tk, days):
+                try:
+                    s = hist[tk].dropna()
+                    if len(s) <= days: return np.nan
+                    return float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                except Exception: return np.nan
+
+            def _fw_mb(tk, days):
+                try:
+                    s  = mb_close[tk].dropna()
+                    ii = s.index.searchsorted(actual)
+                    if ii + days >= len(s): return np.nan
+                    p0, p1 = float(s.iloc[ii]), float(s.iloc[ii+days])
+                    return p1/p0 - 1 if p0 and not pd.isna(p0) else np.nan
+                except Exception: return np.nan
+
             for tk in mb_tickers:
                 if tk not in mb_close.columns:
                     continue
@@ -2422,32 +2460,20 @@ with tab8:
                 delta_bm = ((ret_fw - bm_fw)
                             if not (np.isnan(ret_fw) or np.isnan(bm_fw)) else np.nan)
 
-                # MaxDD 3M e 6M alla data corrente del loop
                 maxdd_3m_mb = calcola_maxdd_assoluto(tk, mb_close, actual, periodo_giorni=63)
                 maxdd_6m_mb = calcola_maxdd_assoluto_6m(tk, mb_close, actual, periodo_giorni=126)
 
-                # MME
                 mme_mb = mms_a_l / (abs(maxdd_6m_mb) + 0.0001) if not np.isnan(maxdd_6m_mb) else np.nan
 
-                # GTE — usa RSr (già calcolati come r1w/r1m/r3m nel loop)
                 r1w_mb = _rsr_mb(tk, 5); r1m_mb = _rsr_mb(tk, 21); r3m_mb = _rsr_mb(tk, 63)
                 if not any(np.isnan(v) for v in [r1w_mb, r1m_mb, r3m_mb]):
                     gemini_3m_mb = (r1w_mb + (r1m_mb - r1w_mb) / 3 + (r3m_mb - r1m_mb) / 8) / 3
                     gte_mb = gemini_3m_mb / (abs(maxdd_3m_mb) + 0.0001) if not np.isnan(maxdd_3m_mb) else np.nan
                 else:
                     gte_mb = np.nan
+
                 # RSr Slope — pendenza profilo RSr su 4 TF
                 rsr_slope_mb = _slope_mb(r1w, r1m, r3m, r6m)
-
-                # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
-                r6m_mb = _rsr_mb(tk, 126)
-                breve_mb = (r1m_mb*0.60 + r1w_mb*0.40
-                            if not any(np.isnan(v) for v in [r1m_mb, r1w_mb]) else np.nan)
-                medio_mb = (r1m_mb*0.35 + r3m_mb*0.25 + r6m_mb*0.20 + r1w_mb*0.20
-                            if not any(np.isnan(v) for v in [r1m_mb, r3m_mb, r6m_mb, r1w_mb]) else np.nan)
-                tt_mb = (breve_mb - medio_mb) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
-                mr_mb = (breve_mb / (abs(medio_mb) + 2)) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
-
                 rows_mb.append({
                     "Data":          actual.strftime("%Y-%m-%d"),
                     "Ticker":        tk,
