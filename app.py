@@ -2473,7 +2473,11 @@ with tab8:
                     gte_mb = np.nan
 
                 # RSr Slope — pendenza profilo RSr su 4 TF
-                rsr_slope_mb = _slope_mb(r1w, r1m, r3m, r6m)
+                rsr_slope_mb = _slope_mb(
+                    np.clip(r1w, -0.5, 0.5),
+                    np.clip(r1m, -0.5, 0.5),
+                    np.clip(r3m, -0.5, 0.5),
+                    np.clip(r6m, -0.5, 0.5))
                 # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
                 r6m_mb = _rsr_mb(tk, 126)
                 breve_mb = (r1m_mb*0.60 + r1w_mb*0.40
