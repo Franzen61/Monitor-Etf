@@ -2474,6 +2474,14 @@ with tab8:
 
                 # RSr Slope — pendenza profilo RSr su 4 TF
                 rsr_slope_mb = _slope_mb(r1w, r1m, r3m, r6m)
+                # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
+                r6m_mb = _rsr_mb(tk, 126)
+                breve_mb = (r1m_mb*0.60 + r1w_mb*0.40
+                            if not any(np.isnan(v) for v in [r1m_mb, r1w_mb]) else np.nan)
+                medio_mb = (r1m_mb*0.35 + r3m_mb*0.25 + r6m_mb*0.20 + r1w_mb*0.20
+                            if not any(np.isnan(v) for v in [r1m_mb, r3m_mb, r6m_mb, r1w_mb]) else np.nan)
+                tt_mb = (breve_mb - medio_mb) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
+                mr_mb = (breve_mb / (abs(medio_mb) + 2)) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
                 rows_mb.append({
                     "Data":          actual.strftime("%Y-%m-%d"),
                     "Ticker":        tk,
