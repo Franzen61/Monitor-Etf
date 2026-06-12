@@ -2389,7 +2389,15 @@ with tab8:
                 except Exception: return np.nan
 
             wts = [0.20, 0.35, 0.25, 0.20]
+            # Pendenza profilo RSr su 4 TF (regressione log-lineare)
+            _log_days = np.log(np.array([5., 21., 63., 126.]))
+            _log_days_c = _log_days - _log_days.mean()
+            _denom_slope = float(np.dot(_log_days_c, _log_days_c))
 
+        def _slope_mb(r1w, r1m, r3m, r6m):
+            vals = np.array([r1w, r1m, r3m, r6m])
+            if np.any(np.isnan(vals)): return np.nan
+            return float(np.dot(_log_days_c, vals) / _denom_slope)
             for tk in mb_tickers:
                 if tk not in mb_close.columns:
                     continue
@@ -2428,6 +2436,8 @@ with tab8:
                     gte_mb = gemini_3m_mb / (abs(maxdd_3m_mb) + 0.0001) if not np.isnan(maxdd_3m_mb) else np.nan
                 else:
                     gte_mb = np.nan
+                # RSr Slope — pendenza profilo RSr su 4 TF
+                rsr_slope_mb = _slope_mb(r1w, r1m, r3m, r6m)
 
                 # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
                 r6m_mb = _rsr_mb(tk, 126)
@@ -2447,6 +2457,7 @@ with tab8:
                     "Mr Index":      mr_mb,
                     "MME":           mme_mb,
                     "GTE":           gte_mb,
+                    "RSr Slope":     rsr_slope_mb,
                     "_S_minus_M":    mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan,
                     f"Rend +{mb_fw}":     ret_fw,
                     f"Delta BM +{mb_fw}": delta_bm,
@@ -2561,6 +2572,27 @@ with tab8:
         mr_stats["Hit_rate"]   = mr_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
         mr_stats.columns       = ["Quintile","Mr","N","Rend medio","Delta BM medio","Hit rate"]
         st.dataframe(mr_stats, use_container_width=True, hide_index=True)
+        # Analisi RSr Slope x Quintile
+        st.markdown("#### Analisi RSr Slope × Quintile MMS6M RSr")
+        mb_valid5 = mb_df.dropna(subset=["Pct MMS6M RSr", "RSr Slope", fw_col]).copy()
+        mb_valid5["Quintile"]     = pd.cut(mb_valid5["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid5["Slope sign"]   = mb_valid5["RSr Slope"].apply(
+            lambda x: "Acc." if x > 0 else "Dec.")
+        slope_stats = (
+            mb_valid5.groupby(["Quintile", "Slope sign"], observed=True)
+            .agg(
+                N         =(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM  =(db_col, "mean"),
+                Hit_rate  =(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        slope_stats["Rend_medio"] = slope_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        slope_stats["Delta_BM"]   = slope_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        slope_stats["Hit_rate"]   = slope_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        slope_stats.columns       = ["Quintile","Slope","N","Rend medio","Delta BM medio","Hit rate"]
+        st.dataframe(slope_stats, use_container_width=True, hide_index=True)
         # Download CSV
         st.markdown("---")
         # Arricchimento CSV per analisi esterna
@@ -2572,6 +2604,13 @@ with tab8:
         # Booleani MME e GTE
         csv_df["MME_pos"] = (csv_df["MME"] > 0).astype(int)
         csv_df["GTE_pos"] = (csv_df["GTE"] > 0).astype(int)
+        # RSr Slope: segno e fascia
+        csv_df["Slope_pos"] = (csv_df["RSr Slope"] > 0).astype(int)
+        csv_df["Slope_fascia"] = csv_df["RSr Slope"].apply(
+            lambda v: "Acc.forte" if v > 0.03
+               else ("Acc.mod"   if v > 0
+               else ("Dec.mod"   if v > -0.03
+               else "Dec.forte")))
 
         # Δ Rank in fasce descrittive
         def _delta_rank_fascia(v):
