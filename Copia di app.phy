@@ -689,10 +689,28 @@ def compute_euro_indicators(prices, today_prices, benchmark):
         else:
             gte = np.nan
 
+        # MAC — Marginal Absolute Contribution.
+        # Scompone il rendimento nei contributi marginali per finestra (1W, 1M-1W,
+        # 3M-1M, 6M-3M), li pesa in ordine decrescente di recenza (40/30/20/10) e
+        # normalizza per il rischio a 3M (MaxDD3M). Misura quanto "pulito" e
+        # recente è il contributo di performance del settore.
+        if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m):
+            marg_1w = r1w
+            marg_1m = r1m - r1w
+            marg_3m = r3m - r1m
+            marg_6m = r6m - r3m
+            mac_num = marg_1w * 0.4 + marg_1m * 0.3 + marg_3m * 0.2 + marg_6m * 0.1
+            mac = mac_num / (abs(maxdd_3m) + 0.0001)
+        else:
+            mac = np.nan
+
         results.append({
             "Ticker": tk, "Nome": EURO_NAMES.get(tk, tk),
             "RSr 1W": r1w, "RSr 1M": r1m, "RSr 3M": r3m, "RSr 6M": r6m,
             "MMS6M RSr":    mms6m_rsr,
+            "MAC":          mac,
+            "MMS6M React.": mms_r_veloce,   # variante veloce, già calcolata sopra nel loop
+            "Δ React.":     mms_r_delta,    # Veloce - Lenta
             "RSI BM":       np.nan,       # placeholder — scalare, impostato in Tab 5
             "MME":          mme,
             "GTE":          gte,
@@ -1480,7 +1498,10 @@ with tab5:
     _rsi_bm = (compute_rsi(euro_prices_clean[EURO_BENCHMARK])
                if EURO_BENCHMARK in euro_prices_clean.columns else np.nan)
     euro_ind["RSI BM"] = round(_rsi_bm, 1) if not np.isnan(_rsi_bm) else np.nan
-    euro_ind["Δ Rank"] = euro_ind["_S_minus_M"].rank(ascending=False, method="min").astype(int)
+    # Δ Rank condizionato a MAC positivo: i settori con MAC ≤ 0 sono esclusi dal
+    # ranking (mostrano "—") per evitare che un settore complessivamente perdente
+    # risulti primo solo perché il breve termine è "meno peggio" del lungo termine.
+    euro_ind["Δ Rank"] = euro_ind["_S_minus_M"].where(euro_ind["MAC"] > 0).rank(ascending=False, method="min")
     if not np.isnan(_rsi_bm):
         if   _rsi_bm >= 70: _rsi_regime, _rsi_color = "UPTREND MATURO", "#ff4422"
         elif _rsi_bm >= 55: _rsi_regime, _rsi_color = "UPTREND FRESCO",  "#00ff55"
@@ -1645,11 +1666,52 @@ with tab5:
     disp      = euro_ind.sort_values(euro_sort, ascending=False).copy()
     disp_show = disp[["Nome",
                        "RSr 1W", "RSr 1M", "RSr 3M", "RSr 6M",
-                       "MMS6M RSr", "RSI BM",
-                       "MME", "GTE", "Δ Rank"]].copy()
+                       "MMS6M RSr", "MAC", "MMS6M React.", "Δ React.",
+                       "RSI BM", "MME", "GTE", "Δ Rank"]].copy()
 
     fp = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "—"
     fm = lambda x: f"{x:+.4f}"      if not pd.isna(x) else "—"
+
+    def _c_mms_rsr(v):
+        try:
+            v = float(v)
+            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_mac(v):
+        """MAC: verde/rosso intenso oltre ±0.15 (efficienza forte), tenue tra 0 e ±0.15."""
+        try:
+            v = float(v)
+            if v >  0.15: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >  0:    return "color:#88cc88"
+            if v < -0.15: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v <  0:    return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_react(v):
+        """MMS6M React. (variante veloce): soglie a ±1%."""
+        try:
+            v = float(v)
+            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
+            if v >  0:    return "color:#88cc88"
+            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v <  0:    return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
+
+    def _c_delta_react(v):
+        """Δ React. (Veloce - Lenta): soglie a ±0.5%. Positivo = breve termine accelera."""
+        try:
+            v = float(v)
+            if v >  0.005: return "color:#00ff55;font-weight:bold"
+            if v >  0:     return "color:#88cc88"
+            if v < -0.005: return "color:#ff4422;font-weight:bold"
+            if v <  0:     return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
 
     def _c_rsr(v):
         try:
@@ -1660,12 +1722,10 @@ with tab5:
             if v <  0:    return "color:#cc6644"
         except Exception: pass
         return "color:#888"
-
-    def _c_mms_rsr(v):
+    def _c_rsi_bm_tab5(v):
         try:
             v = float(v)
-            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v >= 70: return "color:#ff4422;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
@@ -1709,6 +1769,9 @@ with tab5:
         disp_show.style
         .map(_c_rsr,          subset=["RSr 1W","RSr 1M","RSr 3M","RSr 6M"])
         .map(_c_mms_rsr,      subset=["MMS6M RSr"])
+        .map(_c_mac,          subset=["MAC"])
+        .map(_c_react,        subset=["MMS6M React."])
+        .map(_c_delta_react,  subset=["Δ React."])
         .map(_c_rsi_bm_tab5,  subset=["RSI BM"])
         .map(_c_mme,          subset=["MME"])
         .map(_c_gte,          subset=["GTE"])
@@ -1716,6 +1779,9 @@ with tab5:
         .format({
             "RSr 1W": fp, "RSr 1M": fp, "RSr 3M": fp, "RSr 6M": fp,
             "MMS6M RSr": fp,
+            "MAC":          lambda x: f"{x:+.4f}" if not pd.isna(x) else "—",
+            "MMS6M React.": fp,
+            "Δ React.":     lambda x: f"{x*100:+.3f}%" if not pd.isna(x) else "—",
             "RSI BM":  lambda x: f"{x:.1f}" if not pd.isna(x) else "—",
             "MME":     fm,
             "GTE":     fm,
@@ -1730,6 +1796,9 @@ with tab5:
                 padding:12px 20px;margin-top:8px;font-size:0.80em;color:#888;
                 display:flex;gap:20px;flex-wrap:wrap;">
         <span><b style="color:#ff9900">MMS6M RSr</b>: pesi 1W×20% 1M×35% 3M×25% 6M×20% + slope coeff 0.05</span>
+        <span><b style="color:#ff9900">MAC</b>: (ΔRSr marginali × pesi 40/30/20/10) / |MaxDD3M| — efficienza dei contributi incrementali</span>
+        <span><b style="color:#ff9900">MMS6M React.</b>: variante veloce (pesi 30/40/25/05 + slope×0.22) — cattura rotazioni nascenti</span>
+        <span><b style="color:#ff9900">Δ React.</b>: Veloce − Lenta — accelerazione della RSr (positivo = breve termine &gt; strutturale)</span>
         <span><b style="color:#ff9900">MME</b>: MMS6M Ass. Lento / (|MaxDD6M| + ε) — efficienza assoluta strutturale</span>
         <span><b style="color:#ff9900">GTE</b>: Gemini RSr 3M / (|MaxDD3M| + ε) — qualità impulso relativo</span>
         <span><b style="color:#ff9900">Δ Rank</b>: rank cross-settoriale (S−M) — 1→5 breve accelera · 16→19 breve decelera</span>
@@ -1897,6 +1966,17 @@ with tab6:
             else:
                 gte_bt = np.nan
 
+            # MAC — Marginal Absolute Contribution (stessa logica di compute_euro_indicators)
+            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_bt):
+                marg_1w_bt = r1w
+                marg_1m_bt = r1m - r1w
+                marg_3m_bt = r3m - r1m
+                marg_6m_bt = r6m - r3m
+                mac_num_bt = marg_1w_bt * 0.4 + marg_1m_bt * 0.3 + marg_3m_bt * 0.2 + marg_6m_bt * 0.1
+                mac_bt = mac_num_bt / (abs(maxdd_3m_bt) + 0.0001)
+            else:
+                mac_bt = np.nan
+
             # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
             s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
 
@@ -1922,6 +2002,9 @@ with tab6:
                 "Ticker":        tk,
                 "RSI BM":        rsi_bm_bt,
                 "MMS6M RSr":     mms6m_rsr,
+                "MAC":           mac_bt,
+                "MMS6M React.":  mms_r_v,
+                "Δ React.":      mms_r_d,
                 "Tact. Thrust":  tt,
                 "Mr Index":      mr,
                 "MME":           mme_bt,
@@ -1939,7 +2022,8 @@ with tab6:
         res = (pd.DataFrame(rows).set_index("Ticker")
                .sort_values("MMS6M RSr", ascending=False))
         res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Δ Rank"] = res["_S_minus_M"].rank(ascending=False, na_option="bottom", method="min").astype(int)
+        # Δ Rank condizionato a MAC positivo (stessa logica di Tab 5)
+        res["Δ Rank"] = res["_S_minus_M"].where(res["MAC"] > 0).rank(ascending=False, na_option="keep", method="min")
         
 
         fw1c = f"Rend +{bt_fw1}"; fw2c = f"Rend +{bt_fw2}"
@@ -2047,7 +2131,6 @@ with tab6:
             except Exception: return ""
 
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
-        fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
         def _c_mme2(v):
             try:
@@ -2080,6 +2163,9 @@ with tab6:
             res.drop(columns=["_S_minus_M"], errors="ignore").style
             .map(_c_rsi_bm,       subset=["RSI BM"])
             .map(_c_mms_rsr2,     subset=["MMS6M RSr"])
+            .map(_c_mac,          subset=["MAC"])
+            .map(_c_react,        subset=["MMS6M React."])
+            .map(_c_delta_react,  subset=["Δ React."])
             .map(_c_tt2,          subset=["Tact. Thrust"])
             .map(_c_mr2,          subset=["Mr Index"])
             .map(_c_mme2,         subset=["MME"])
@@ -2091,6 +2177,9 @@ with tab6:
             .format({
                 "RSI BM":       lambda x: f"{x:.1f}" if not pd.isna(x) else "—",
                 "MMS6M RSr":    fp2,
+                "MAC":          fp2,
+                "MMS6M React.": fp2,
+                "Δ React.":     fp2,
                 "Tact. Thrust": fp2, "Mr Index": fp2,
                 "MME":          fm2, "GTE":      fm2,
                 "AMSR Score":   fp2,
@@ -2390,6 +2479,52 @@ with tab8:
 
             wts = [0.20, 0.35, 0.25, 0.20]
 
+        # Pendenza profilo RSr su 4 TF (regressione log-lineare)
+        _log_days   = np.log(np.array([5., 21., 63., 126.]))
+        _log_days_c = _log_days - _log_days.mean()
+        _denom_slope = float(np.dot(_log_days_c, _log_days_c))
+
+        def _slope_mb(r1w, r1m, r3m, r6m):
+            vals = np.array([r1w, r1m, r3m, r6m])
+            if np.any(np.isnan(vals)): return np.nan
+            return float(np.dot(_log_days_c, vals) / _denom_slope)
+
+        for i_d, ref_ts in enumerate(date_range):
+            progress_bar.progress((i_d + 1) / len(date_range))
+
+            idx_pos = mb_close.index.searchsorted(ref_ts)
+            if idx_pos >= len(mb_close):
+                continue
+            actual = mb_close.index[idx_pos]
+            hist   = mb_close[mb_close.index <= actual]
+            bm_h   = hist[mb_bm].dropna() if mb_bm in hist.columns else pd.Series(dtype=float)
+
+            rsi_bm_mb = compute_rsi(bm_h)
+
+            def _rsr_mb(tk, days):
+                try:
+                    s = hist[tk].dropna(); b = bm_h
+                    if len(s) <= days or len(b) <= days: return np.nan
+                    return float((s.iloc[-1]/s.iloc[-days-1]-1) /
+                                 (b.iloc[-1]/b.iloc[-days-1]-1) - 1)
+                except Exception: return np.nan
+
+            def _abs_mb(tk, days):
+                try:
+                    s = hist[tk].dropna()
+                    if len(s) <= days: return np.nan
+                    return float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                except Exception: return np.nan
+
+            def _fw_mb(tk, days):
+                try:
+                    s  = mb_close[tk].dropna()
+                    ii = s.index.searchsorted(actual)
+                    if ii + days >= len(s): return np.nan
+                    p0, p1 = float(s.iloc[ii]), float(s.iloc[ii+days])
+                    return p1/p0 - 1 if p0 and not pd.isna(p0) else np.nan
+                except Exception: return np.nan
+
             for tk in mb_tickers:
                 if tk not in mb_close.columns:
                     continue
@@ -2414,14 +2549,11 @@ with tab8:
                 delta_bm = ((ret_fw - bm_fw)
                             if not (np.isnan(ret_fw) or np.isnan(bm_fw)) else np.nan)
 
-                # MaxDD 3M e 6M alla data corrente del loop
                 maxdd_3m_mb = calcola_maxdd_assoluto(tk, mb_close, actual, periodo_giorni=63)
                 maxdd_6m_mb = calcola_maxdd_assoluto_6m(tk, mb_close, actual, periodo_giorni=126)
 
-                # MME
                 mme_mb = mms_a_l / (abs(maxdd_6m_mb) + 0.0001) if not np.isnan(maxdd_6m_mb) else np.nan
 
-                # GTE — usa RSr (già calcolati come r1w/r1m/r3m nel loop)
                 r1w_mb = _rsr_mb(tk, 5); r1m_mb = _rsr_mb(tk, 21); r3m_mb = _rsr_mb(tk, 63)
                 if not any(np.isnan(v) for v in [r1w_mb, r1m_mb, r3m_mb]):
                     gemini_3m_mb = (r1w_mb + (r1m_mb - r1w_mb) / 3 + (r3m_mb - r1m_mb) / 8) / 3
@@ -2429,6 +2561,23 @@ with tab8:
                 else:
                     gte_mb = np.nan
 
+                # MAC — Marginal Absolute Contribution (stessa logica delle altre sezioni)
+                if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_mb):
+                    marg_1w_mb = r1w
+                    marg_1m_mb = r1m - r1w
+                    marg_3m_mb = r3m - r1m
+                    marg_6m_mb = r6m - r3m
+                    mac_num_mb = marg_1w_mb * 0.4 + marg_1m_mb * 0.3 + marg_3m_mb * 0.2 + marg_6m_mb * 0.1
+                    mac_mb = mac_num_mb / (abs(maxdd_3m_mb) + 0.0001)
+                else:
+                    mac_mb = np.nan
+
+                # RSr Slope — pendenza profilo RSr su 4 TF
+                rsr_slope_mb = _slope_mb(
+                    np.clip(r1w, -0.5, 0.5),
+                    np.clip(r1m, -0.5, 0.5),
+                    np.clip(r3m, -0.5, 0.5),
+                    np.clip(r6m, -0.5, 0.5))
                 # Tact. Thrust e Mr Index (no r1d in Tab8 — approssimazione senza daily)
                 r6m_mb = _rsr_mb(tk, 126)
                 breve_mb = (r1m_mb*0.60 + r1w_mb*0.40
@@ -2437,16 +2586,19 @@ with tab8:
                             if not any(np.isnan(v) for v in [r1m_mb, r3m_mb, r6m_mb, r1w_mb]) else np.nan)
                 tt_mb = (breve_mb - medio_mb) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
                 mr_mb = (breve_mb / (abs(medio_mb) + 2)) if not (np.isnan(breve_mb) or np.isnan(medio_mb)) else np.nan
-
                 rows_mb.append({
                     "Data":          actual.strftime("%Y-%m-%d"),
                     "Ticker":        tk,
                     "RSI BM":        round(rsi_bm_mb, 1) if not np.isnan(rsi_bm_mb) else np.nan,
                     "MMS6M RSr":     mms_rsr,
+                    "MAC":           mac_mb,
+                    "MMS6M React.":  mms_r_v,
+                    "Δ React.":      mms_r_d,
                     "Tact. Thrust":  tt_mb,
                     "Mr Index":      mr_mb,
                     "MME":           mme_mb,
                     "GTE":           gte_mb,
+                    "RSr Slope":     rsr_slope_mb,
                     "_S_minus_M":    mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan,
                     f"Rend +{mb_fw}":     ret_fw,
                     f"Delta BM +{mb_fw}": delta_bm,
@@ -2460,7 +2612,9 @@ with tab8:
 
         mb_df = pd.DataFrame(rows_mb)
         mb_df["Pct MMS6M RSr"] = mb_df.groupby("Data")["MMS6M RSr"].rank(pct=True) * 100
-        mb_df["Δ Rank"] = mb_df.groupby("Data")["_S_minus_M"].rank(ascending=False, method="min")
+        # Δ Rank condizionato a MAC positivo, calcolato per singola data (stessa logica di Tab 5/6)
+        mb_df["Δ Rank"] = (mb_df["_S_minus_M"].where(mb_df["MAC"] > 0)
+                            .groupby(mb_df["Data"]).rank(ascending=False, method="min"))
         st.success(
             f"Completato: {len(mb_df)} osservazioni · "
             f"{mb_df['Data'].nunique()} date · "
@@ -2561,6 +2715,74 @@ with tab8:
         mr_stats["Hit_rate"]   = mr_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
         mr_stats.columns       = ["Quintile","Mr","N","Rend medio","Delta BM medio","Hit rate"]
         st.dataframe(mr_stats, use_container_width=True, hide_index=True)
+        # Analisi RSr Slope x Quintile
+        st.markdown("#### Analisi RSr Slope × Quintile MMS6M RSr")
+        mb_valid5 = mb_df.dropna(subset=["Pct MMS6M RSr", "RSr Slope", fw_col]).copy()
+        mb_valid5["Quintile"]     = pd.cut(mb_valid5["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid5["Slope sign"]   = mb_valid5["RSr Slope"].apply(
+            lambda x: "Acc." if x > 0 else "Dec.")
+        slope_stats = (
+            mb_valid5.groupby(["Quintile", "Slope sign"], observed=True)
+            .agg(
+                N         =(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM  =(db_col, "mean"),
+                Hit_rate  =(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        slope_stats["Rend_medio"] = slope_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        slope_stats["Delta_BM"]   = slope_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        slope_stats["Hit_rate"]   = slope_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        slope_stats.columns       = ["Quintile","Slope","N","Rend medio","Delta BM medio","Hit rate"]
+        st.dataframe(slope_stats, use_container_width=True, hide_index=True)
+
+        # Analisi MAC × Quintile
+        st.markdown("#### Analisi MAC × Quintile MMS6M RSr")
+        mb_valid_mac = mb_df.dropna(subset=["Pct MMS6M RSr", "MAC", fw_col]).copy()
+        mb_valid_mac["Quintile"] = pd.cut(mb_valid_mac["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid_mac["MAC fascia"] = mb_valid_mac["MAC"].apply(
+            lambda x: "MAC>0.15" if x > 0.15 else ("MAC 0-0.15" if x >= 0 else "MAC<0")
+        )
+        mac_stats = (
+            mb_valid_mac.groupby(["Quintile", "MAC fascia"], observed=True)
+            .agg(
+                N=(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM=(db_col, "mean"),
+                Hit_rate=(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        mac_stats["Rend_medio"] = mac_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        mac_stats["Delta_BM"]   = mac_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        mac_stats["Hit_rate"]   = mac_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        mac_stats.columns       = ["Quintile", "MAC", "N", "Rend medio", "Delta BM medio", "Hit rate"]
+        st.dataframe(mac_stats, use_container_width=True, hide_index=True)
+
+        # Analisi Δ React. × Quintile
+        st.markdown("#### Analisi Δ Reattiva × Quintile MMS6M RSr")
+        mb_valid_dr = mb_df.dropna(subset=["Pct MMS6M RSr", "Δ React.", fw_col]).copy()
+        mb_valid_dr["Quintile"] = pd.cut(mb_valid_dr["Pct MMS6M RSr"], bins=bins, labels=labels)
+        mb_valid_dr["Δ React. sign"] = mb_valid_dr["Δ React."].apply(
+            lambda x: "Δ+" if x > 0 else "Δ-"
+        )
+        dr_stats = (
+            mb_valid_dr.groupby(["Quintile", "Δ React. sign"], observed=True)
+            .agg(
+                N=(fw_col, "count"),
+                Rend_medio=(fw_col, "mean"),
+                Delta_BM=(db_col, "mean"),
+                Hit_rate=(fw_col, lambda x: (x > 0).mean()),
+            )
+            .reset_index()
+        )
+        dr_stats["Rend_medio"] = dr_stats["Rend_medio"].map(lambda x: f"{x*100:+.2f}%")
+        dr_stats["Delta_BM"]   = dr_stats["Delta_BM"].map(lambda x: f"{x*100:+.2f}%")
+        dr_stats["Hit_rate"]   = dr_stats["Hit_rate"].map(lambda x: f"{x*100:.1f}%")
+        dr_stats.columns       = ["Quintile", "Δ React.", "N", "Rend medio", "Delta BM medio", "Hit rate"]
+        st.dataframe(dr_stats, use_container_width=True, hide_index=True)
+
         # Download CSV
         st.markdown("---")
         # Arricchimento CSV per analisi esterna
@@ -2572,6 +2794,13 @@ with tab8:
         # Booleani MME e GTE
         csv_df["MME_pos"] = (csv_df["MME"] > 0).astype(int)
         csv_df["GTE_pos"] = (csv_df["GTE"] > 0).astype(int)
+        # RSr Slope: segno e fascia
+        csv_df["Slope_pos"] = (csv_df["RSr Slope"] > 0).astype(int)
+        csv_df["Slope_fascia"] = csv_df["RSr Slope"].apply(
+            lambda v: "Acc.forte" if v > 0.03
+               else ("Acc.mod"   if v > 0
+               else ("Dec.mod"   if v > -0.03
+               else "Dec.forte")))
 
         # Δ Rank in fasce descrittive
         def _delta_rank_fascia(v):
@@ -2585,9 +2814,15 @@ with tab8:
                 return "N/D"
         csv_df["Delta_Rank_fascia"] = csv_df["Δ Rank"].apply(_delta_rank_fascia)
 
+        # MAC e React./Delta: booleani e valori grezzi per analisi esterna
+        csv_df["MAC_pos"] = (csv_df["MAC"] > 0).astype(int)
+        csv_df["MAC_forte"] = (csv_df["MAC"] > 0.15).astype(int)
+        csv_df["MMS6M_React"] = csv_df["MMS6M React."]
+        csv_df["Delta_React"] = csv_df["Δ React."]
+        csv_df["Delta_React_pos"] = (csv_df["Δ React."] > 0).astype(int)
+
         # Rimuovi colonna interna
         csv_df = csv_df.drop(columns=["_S_minus_M"], errors="ignore")
-
         csv_out = csv_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Scarica CSV completo",
