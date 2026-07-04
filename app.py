@@ -1498,7 +1498,10 @@ with tab5:
     _rsi_bm = (compute_rsi(euro_prices_clean[EURO_BENCHMARK])
                if EURO_BENCHMARK in euro_prices_clean.columns else np.nan)
     euro_ind["RSI BM"] = round(_rsi_bm, 1) if not np.isnan(_rsi_bm) else np.nan
-    euro_ind["Δ Rank"] = euro_ind["_S_minus_M"].rank(ascending=False, method="min").astype(int)
+    # Δ Rank condizionato a MAC positivo: i settori con MAC ≤ 0 sono esclusi dal
+    # ranking (mostrano "—") per evitare che un settore complessivamente perdente
+    # risulti primo solo perché il breve termine è "meno peggio" del lungo termine.
+    euro_ind["Δ Rank"] = euro_ind["_S_minus_M"].where(euro_ind["MAC"] > 0).rank(ascending=False, method="min")
     if not np.isnan(_rsi_bm):
         if   _rsi_bm >= 70: _rsi_regime, _rsi_color = "UPTREND MATURO", "#ff4422"
         elif _rsi_bm >= 55: _rsi_regime, _rsi_color = "UPTREND FRESCO",  "#00ff55"
@@ -2019,7 +2022,8 @@ with tab6:
         res = (pd.DataFrame(rows).set_index("Ticker")
                .sort_values("MMS6M RSr", ascending=False))
         res["Rank MMS6M"] = res["MMS6M RSr"].rank(ascending=False, na_option="bottom").astype(int)
-        res["Δ Rank"] = res["_S_minus_M"].rank(ascending=False, na_option="bottom", method="min").astype(int)
+        # Δ Rank condizionato a MAC positivo (stessa logica di Tab 5)
+        res["Δ Rank"] = res["_S_minus_M"].where(res["MAC"] > 0).rank(ascending=False, na_option="keep", method="min")
         
 
         fw1c = f"Rend +{bt_fw1}"; fw2c = f"Rend +{bt_fw2}"
@@ -2608,7 +2612,9 @@ with tab8:
 
         mb_df = pd.DataFrame(rows_mb)
         mb_df["Pct MMS6M RSr"] = mb_df.groupby("Data")["MMS6M RSr"].rank(pct=True) * 100
-        mb_df["Δ Rank"] = mb_df.groupby("Data")["_S_minus_M"].rank(ascending=False, method="min")
+        # Δ Rank condizionato a MAC positivo, calcolato per singola data (stessa logica di Tab 5/6)
+        mb_df["Δ Rank"] = (mb_df["_S_minus_M"].where(mb_df["MAC"] > 0)
+                            .groupby(mb_df["Data"]).rank(ascending=False, method="min"))
         st.success(
             f"Completato: {len(mb_df)} osservazioni · "
             f"{mb_df['Data'].nunique()} date · "
