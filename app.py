@@ -1710,11 +1710,19 @@ with tab5:
         except Exception: pass
         return "color:#888"
 
+    def _c_rsr(v):
+        try:
+            v = float(v)
+            if v >  0.02: return "color:#00ff55"
+            if v >  0:    return "color:#88cc88"
+            if v < -0.02: return "color:#ff4422"
+            if v <  0:    return "color:#cc6644"
+        except Exception: pass
+        return "color:#888"
     def _c_rsi_bm_tab5(v):
         try:
             v = float(v)
-            if v >  0.01: return "background-color:#0d2b0d;color:#00ff55;font-weight:bold"
-            if v < -0.01: return "background-color:#2b0d0d;color:#ff4422;font-weight:bold"
+            if v >= 70: return "color:#ff4422;font-weight:bold"
         except Exception: pass
         return "color:#888"
 
