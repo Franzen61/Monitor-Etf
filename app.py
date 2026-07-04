@@ -1969,69 +1969,6 @@ with tab6:
             # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
             s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
 
-            # MAC — Marginal Absolute Contribution (stessa logica di compute_euro_indicators)
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_bt):
-                marg_1w_bt = r1w
-                marg_1m_bt = r1m - r1w
-                marg_3m_bt = r3m - r1m
-                marg_6m_bt = r6m - r3m
-                mac_num_bt = marg_1w_bt * 0.4 + marg_1m_bt * 0.3 + marg_3m_bt * 0.2 + marg_6m_bt * 0.1
-                mac_bt = mac_num_bt / (abs(maxdd_3m_bt) + 0.0001)
-            else:
-                mac_bt = np.nan
-
-            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
-
-            # MAC — Marginal Absolute Contribution (stessa logica di compute_euro_indicators)
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_bt):
-                marg_1w_bt = r1w
-                marg_1m_bt = r1m - r1w
-                marg_3m_bt = r3m - r1m
-                marg_6m_bt = r6m - r3m
-                mac_num_bt = marg_1w_bt * 0.4 + marg_1m_bt * 0.3 + marg_3m_bt * 0.2 + marg_6m_bt * 0.1
-                mac_bt = mac_num_bt / (abs(maxdd_3m_bt) + 0.0001)
-            else:
-                mac_bt = np.nan
-
-            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
-
-            # MAC — Marginal Absolute Contribution (stessa logica di compute_euro_indicators)
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_bt):
-                marg_1w_bt = r1w
-                marg_1m_bt = r1m - r1w
-                marg_3m_bt = r3m - r1m
-                marg_6m_bt = r6m - r3m
-                mac_num_bt = marg_1w_bt * 0.4 + marg_1m_bt * 0.3 + marg_3m_bt * 0.2 + marg_6m_bt * 0.1
-                mac_bt = mac_num_bt / (abs(maxdd_3m_bt) + 0.0001)
-            else:
-                mac_bt = np.nan
-
-            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
-            else:
-                gte_bt = np.nan
-
-            # MAC — Marginal Absolute Contribution (stessa logica di compute_euro_indicators)
-            if not any(np.isnan(v) for v in [r1w, r1m, r3m, r6m]) and not np.isnan(maxdd_3m_bt):
-                marg_1w_bt = r1w
-                marg_1m_bt = r1m - r1w
-                marg_3m_bt = r3m - r1m
-                marg_6m_bt = r6m - r3m
-                mac_num_bt = marg_1w_bt * 0.4 + marg_1m_bt * 0.3 + marg_3m_bt * 0.2 + marg_6m_bt * 0.1
-                mac_bt = mac_num_bt / (abs(maxdd_3m_bt) + 0.0001)
-            else:
-                mac_bt = np.nan
-
-            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
-            else:
-                gte_bt = np.nan
-
-            # _S_minus_M per Δ Rank cross-settoriale (calcolato dopo il loop)
-            s_minus_m_bt = mms_a_v - mms_a_l if not (np.isnan(mms_a_v) or np.isnan(mms_a_l)) else np.nan
-
             # AMSR Score — riusa maxdd_3m_bt già calcolato
             try:
                 tk_s       = bt_close[tk].dropna()
@@ -2182,7 +2119,6 @@ with tab6:
             except Exception: return ""
 
         fp2 = lambda x: f"{x*100:+.2f}%" if not pd.isna(x) else "N/D"
-        fm2 = lambda x: f"{x:+.2f}"      if not pd.isna(x) else "—"
 
         def _c_mme2(v):
             try:
