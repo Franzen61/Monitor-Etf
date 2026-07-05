@@ -2457,8 +2457,9 @@ with tab8:
                 try:
                     s = hist[tk].dropna(); b = bm_h
                     if len(s) <= days or len(b) <= days: return np.nan
-                    return float((s.iloc[-1]/s.iloc[-days-1]-1) /
-                                 (b.iloc[-1]/b.iloc[-days-1]-1) - 1)
+                    rs = float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                    rb = float(b.iloc[-1] / b.iloc[-days-1] - 1)
+                    return float((1 + rs) / (1 + rb) - 1)
                 except Exception: return np.nan
 
             def _abs_mb(tk, days):
@@ -2505,8 +2506,9 @@ with tab8:
                 try:
                     s = hist[tk].dropna(); b = bm_h
                     if len(s) <= days or len(b) <= days: return np.nan
-                    return float((s.iloc[-1]/s.iloc[-days-1]-1) /
-                                 (b.iloc[-1]/b.iloc[-days-1]-1) - 1)
+                    rs = float(s.iloc[-1] / s.iloc[-days-1] - 1)
+                    rb = float(b.iloc[-1] / b.iloc[-days-1] - 1)
+                    return float((1 + rs) / (1 + rb) - 1)
                 except Exception: return np.nan
 
             def _abs_mb(tk, days):
